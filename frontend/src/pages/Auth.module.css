@@ -62,14 +62,3 @@
   color: var(--accent);
   cursor: pointer;
 }
-
-.legal {
-  text-align: center;
-  margin: 18px 0 0;
-}
-
-.legalLink {
-  font: 500 11.5px var(--font-ui);
-  color: var(--muted-3);
-  text-decoration: none;
-}
