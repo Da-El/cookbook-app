@@ -195,7 +195,7 @@ export function Browse() {
               <span style={{ flex: 1, minWidth: 0 }}>
                 <span className={styles.ingName} style={{ display: 'block' }}>{i.name}</span>
                 <span className={styles.ingSub} style={{ display: 'block' }}>
-                  {i.foodb_subgroup ?? i.category}
+                  {i.food_group ?? i.category}
                 </span>
               </span>
               {i.rating > 0 && <span className={styles.ingRating}>★ {i.rating.toFixed(1)}</span>}

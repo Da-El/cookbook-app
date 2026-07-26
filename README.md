@@ -1,7 +1,7 @@
 # Cookbook
 
 A social recipe app: follow chefs, build a personal cookbook, cook from what's in your fridge,
-and browse community-editable ingredient pages with FooDB nutrition data.
+and browse community-editable ingredient pages with USDA nutrition data.
 
 Built from the `design_handoff_cookbook_v3` design spec.
 
@@ -50,7 +50,7 @@ the same service, so there is no cross-origin setup in production.
 ## Status
 
 Every screen in the design spec is built and wired to real data: accounts, the ingredient
-catalog (118 FooDB ingredients) with community-edit voting on description/category/photo/
+catalog (363 USDA Foundation Foods) with community-edit voting on description/category/photo/
 nutrition, meals (create/browse/cook/save/rate), the Home feed (following, activity, stories,
 chefs-to-follow), Browse (meals/ingredients/chefs), the full Cookbook (recipes + kitchen
 sub-tabs, fridge, shopping), Meal Detail, Cook Mode, chef profiles, Settings, and Customize
@@ -61,6 +61,9 @@ an LLM API key decision (Claude vs OpenAI) that hasn't been made yet.
 
 ## Data attribution
 
-Nutrition reference data is derived from [FooDB](https://foodb.ca/), licensed
-CC BY-NC 4.0 — attribution required, commercial use needs permission from the
-FooDB rights holders.
+Nutrition reference data is derived from the U.S. Department of Agriculture's
+[FoodData Central](https://fdc.nal.usda.gov/), Foundation Foods dataset. As a
+U.S. government work it's public domain — no attribution is legally required
+and there's no restriction on commercial use, unlike the FooDB data this
+replaced. See `backend/seed/README.md` for exactly how the raw USDA release
+was transformed into this app's seed data.

@@ -63,12 +63,18 @@ export function IngredientDetail() {
 
       <div className={styles.chips}>
         <span className={styles.tag}>{data.category}</span>
-        {data.foodb_group && <span className={styles.tag}>{data.foodb_group}</span>}
-        {data.foodb_subgroup && <span className={styles.tag}>{data.foodb_subgroup}</span>}
+        {data.food_group && <span className={styles.tag}>{data.food_group}</span>}
+        {data.food_subgroup && <span className={styles.tag}>{data.food_subgroup}</span>}
         {n && <span className={`${styles.tag} ${styles.source}`}>{n.source}</span>}
       </div>
 
-      <p className={styles.desc}>{data.description}</p>
+      {data.description ? (
+        <p className={styles.desc}>{data.description}</p>
+      ) : (
+        <p className={styles.desc} style={{ color: 'var(--muted-2)', fontStyle: 'italic' }}>
+          No description yet — be the first to suggest one below.
+        </p>
+      )}
 
       <div className={styles.card}>
         <p className={styles.sectionTitle}>Community</p>

@@ -10,8 +10,8 @@ pub struct IngredientSummary {
     pub id: i64,
     pub name: String,
     pub category: String,
-    pub foodb_group: Option<String>,
-    pub foodb_subgroup: Option<String>,
+    pub food_group: Option<String>,
+    pub food_subgroup: Option<String>,
     pub rating: f64,
     pub rating_count: i32,
 }
@@ -64,7 +64,7 @@ pub async fn list(
     let offset = params.offset.unwrap_or(0).max(0);
 
     let rows = sqlx::query_as::<_, IngredientSummary>(
-        "SELECT id, name, category, foodb_group, foodb_subgroup,
+        "SELECT id, name, category, food_group, food_subgroup,
                 rating::float8 AS rating, rating_count
          FROM ingredients
          WHERE ($1::text IS NULL OR name ILIKE '%' || $1 || '%')
@@ -497,7 +497,7 @@ pub async fn detail(
     Path(id): Path<i64>,
 ) -> Result<Json<IngredientDetail>, StatusCode> {
     let row = sqlx::query_as::<_, (i64, String, String, Option<String>, Option<String>, f64, i32, String, Option<String>)>(
-        "SELECT id, name, category, foodb_group, foodb_subgroup,
+        "SELECT id, name, category, food_group, food_subgroup,
                 rating::float8, rating_count, description, photo_url
          FROM ingredients WHERE id = $1",
     )
@@ -548,8 +548,8 @@ pub async fn detail(
             id: row.0,
             name: row.1,
             category: row.2,
-            foodb_group: row.3,
-            foodb_subgroup: row.4,
+            food_group: row.3,
+            food_subgroup: row.4,
             rating: row.5,
             rating_count: row.6,
         },

@@ -1,31 +1,39 @@
 use serde::Deserialize;
 use sqlx::PgPool;
 
+/// One row per USDA FoodData Central "Foundation Foods" entry (see
+/// backend/seed/README.md for how this file is generated). Nutrients are
+/// nullable since not every food reports every value (e.g. table salt has
+/// no Energy row; some bean-variety samples report only minerals).
 #[derive(Deserialize)]
-pub struct FoodbRow {
+pub struct UsdaRow {
     name: String,
     category: String,
-    group: String,
-    subgroup: String,
-    desc: String,
-    calories: f64,
-    protein: f64,
-    carbs: f64,
-    fat: f64,
-    fiber: f64,
-    sugar: f64,
+    #[serde(rename = "foodGroup")]
+    food_group: Option<String>,
+    #[serde(rename = "foodSubgroup")]
+    food_subgroup: Option<String>,
+    calories: Option<i32>,
+    protein: Option<f64>,
+    carbs: Option<f64>,
+    fat: Option<f64>,
+    fiber: Option<f64>,
+    sugar: Option<f64>,
     #[serde(rename = "vitC")]
-    vit_c: f64,
-    calcium: f64,
-    iron: f64,
-    potassium: f64,
-    magnesium: f64,
-    sodium: f64,
+    vit_c: Option<f64>,
+    calcium: Option<f64>,
+    iron: Option<f64>,
+    potassium: Option<f64>,
+    magnesium: Option<f64>,
+    sodium: Option<f64>,
 }
 
-const FOODB_JSON: &str = include_str!("../seed/foodb.json");
+const USDA_JSON: &str = include_str!("../seed/usda_foundation_foods.json");
 
-/// Idempotent: skips entirely once the catalog is populated.
+/// Idempotent: skips entirely once the catalog is populated. Ingredients start
+/// with an empty `description` (the schema default) - USDA's dataset carries no
+/// prose descriptions, so the community-edit feature is the intended way a
+/// description gets added, same as any other field.
 pub async fn seed_ingredients(db: &PgPool) -> anyhow::Result<()> {
     let existing: i64 = sqlx::query_scalar("SELECT count(*) FROM ingredients")
         .fetch_one(db)
@@ -35,20 +43,19 @@ pub async fn seed_ingredients(db: &PgPool) -> anyhow::Result<()> {
         return Ok(());
     }
 
-    let rows: Vec<FoodbRow> = serde_json::from_str(FOODB_JSON)?;
+    let rows: Vec<UsdaRow> = serde_json::from_str(USDA_JSON)?;
     let count = rows.len();
 
     let mut tx = db.begin().await?;
     for r in rows {
         let id: i64 = sqlx::query_scalar(
-            "INSERT INTO ingredients (name, category, foodb_group, foodb_subgroup, description)
-             VALUES ($1, $2, $3, $4, $5) RETURNING id",
+            "INSERT INTO ingredients (name, category, food_group, food_subgroup)
+             VALUES ($1, $2, $3, $4) RETURNING id",
         )
         .bind(&r.name)
         .bind(&r.category)
-        .bind(&r.group)
-        .bind(&r.subgroup)
-        .bind(&r.desc)
+        .bind(&r.food_group)
+        .bind(&r.food_subgroup)
         .fetch_one(&mut *tx)
         .await?;
 
@@ -56,10 +63,10 @@ pub async fn seed_ingredients(db: &PgPool) -> anyhow::Result<()> {
             "INSERT INTO ingredient_nutrition
              (ingredient_id, serving_size, calories, protein, carbs, fat, fiber, sugar, source,
               vit_c_mg, calcium_mg, iron_mg, potassium_mg, magnesium_mg, sodium_mg)
-             VALUES ($1, '100 g', $2, $3, $4, $5, $6, $7, 'FooDB', $8, $9, $10, $11, $12, $13)",
+             VALUES ($1, '100 g', $2, $3, $4, $5, $6, $7, 'USDA', $8, $9, $10, $11, $12, $13)",
         )
         .bind(id)
-        .bind(r.calories as i32)
+        .bind(r.calories)
         .bind(r.protein)
         .bind(r.carbs)
         .bind(r.fat)
@@ -76,6 +83,6 @@ pub async fn seed_ingredients(db: &PgPool) -> anyhow::Result<()> {
     }
     tx.commit().await?;
 
-    tracing::info!("seeded {count} ingredients");
+    tracing::info!("seeded {count} ingredients from USDA FoodData Central (Foundation Foods)");
     Ok(())
 }

@@ -9,8 +9,8 @@ export interface IngredientSummary {
   id: number;
   name: string;
   category: string;
-  foodb_group: string | null;
-  foodb_subgroup: string | null;
+  food_group: string | null;
+  food_subgroup: string | null;
   rating: number;
   rating_count: number;
 }
