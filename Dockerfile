@@ -5,7 +5,11 @@ RUN npm ci
 COPY frontend/ ./
 RUN npm run build
 
-FROM rust:1-slim AS backend
+# Pinned to bookworm to match the runtime stage below. The floating `rust:1-slim`
+# tag moved to a newer Debian, and the binary it produced linked GLIBC_2.38 -
+# which bookworm (2.36) doesn't have, so the container built fine and then died
+# on start. Both stages must track the same Debian release.
+FROM rust:1-slim-bookworm AS backend
 WORKDIR /app
 RUN apt-get update && apt-get install -y pkg-config libssl-dev && rm -rf /var/lib/apt/lists/*
 COPY backend/Cargo.toml backend/Cargo.lock ./
