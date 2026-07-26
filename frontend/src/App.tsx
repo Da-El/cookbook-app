@@ -17,6 +17,7 @@ import { MealDetail } from './pages/MealDetail';
 import { CookMode } from './pages/CookMode';
 import { ChefPage } from './pages/ChefPage';
 import { Settings } from './pages/Settings';
+import { Legal } from './pages/Legal';
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { refetchOnWindowFocus: false } },
@@ -50,6 +51,7 @@ function Routed() {
       <Route path="/meals/:id" element={<Bare><MealDetail /></Bare>} />
       <Route path="/chefs/:id" element={<Bare><ChefPage /></Bare>} />
       <Route path="/settings" element={<Bare><Settings /></Bare>} />
+      <Route path="/legal" element={<Bare><Legal /></Bare>} />
 
       {/* Full-screen, no chrome on either platform. */}
       <Route path="/meals/:id/cook" element={<CookMode />} />

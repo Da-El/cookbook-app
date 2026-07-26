@@ -93,8 +93,15 @@ export function Shell({ children, bare = false }: ShellProps) {
         <Link to="/cookbook" className={styles.menuItem} onClick={() => setMenuOpen(false)}>
           Your cookbook
         </Link>
+        <Link to="/cookbook/customize" className={styles.menuItem} onClick={() => setMenuOpen(false)}>
+          Customize
+        </Link>
         <Link to="/settings" className={styles.menuItem} onClick={() => setMenuOpen(false)}>
           Settings
+        </Link>
+        <div className={styles.menuDivider} />
+        <Link to="/legal" className={styles.menuItem} onClick={() => setMenuOpen(false)}>
+          Legal &amp; privacy
         </Link>
         <div className={styles.menuDivider} />
         <button
@@ -170,6 +177,15 @@ export function Shell({ children, bare = false }: ShellProps) {
               >
                 <BellGlyph />
                 {unseen > 0 && <span className={styles.bellBadge}>{unseen}</span>}
+              </button>
+              <button
+                className={styles.accountBtn}
+                onClick={() => setMenuOpen((v) => !v)}
+                aria-label="Your account"
+                aria-haspopup="menu"
+                aria-expanded={menuOpen}
+              >
+                {avatar('sm')}
               </button>
               <button className={styles.newMeal} onClick={() => navigate('/create/meal')}>
                 New meal

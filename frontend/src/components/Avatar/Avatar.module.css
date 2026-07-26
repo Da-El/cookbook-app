@@ -1,3 +1,8 @@
+/* Sizes are literal px to match the rest of the app's modules. An earlier
+   version referenced an avatar/radius/text custom-property set that was never
+   defined anywhere, so every avatar collapsed to its text box (~8x15px) with
+   square corners. */
+
 .avatar {
   display: inline-flex;
   align-items: center;
@@ -6,8 +11,11 @@
   overflow: hidden;
   font-family: var(--font-ui);
   font-weight: 600;
+  line-height: 1;
   color: #fff;
-  background: var(--positive-gradient);
+  /* Matches the users.cb_avatar_theme default ('green') for the brief moment
+     before the theme loads, and for callers that pass no theme at all. */
+  background: linear-gradient(145deg, #3F5D46, #2C4131);
 }
 
 .avatar img {
@@ -16,31 +24,32 @@
   object-fit: cover;
 }
 
-.rounded {
-  border-radius: var(--radius-md);
-}
-
-.circle {
-  border-radius: var(--radius-pill);
-}
-
 .sm {
-  width: var(--avatar-sm);
-  height: var(--avatar-sm);
-  font-size: var(--text-ui-md);
+  width: 36px;
+  height: 36px;
+  font-size: 13.5px;
 }
 
 .md {
-  width: var(--avatar-md);
-  height: var(--avatar-md);
-  font-size: var(--text-ui-lg);
+  width: 44px;
+  height: 44px;
+  font-size: 16px;
 }
 
 .lg {
-  width: var(--avatar-lg);
-  height: var(--avatar-lg);
-  font-size: var(--text-display-sm);
+  width: 76px;
+  height: 76px;
+  font-size: 28px;
 }
+
+/* Rounded-square radius tracks the size, the way the app's other tiles do
+   (42px bell -> 14px, 44px pencil -> 14px). */
+.rounded { border-radius: 12px; }
+.sm.rounded { border-radius: 12px; }
+.md.rounded { border-radius: 14px; }
+.lg.rounded { border-radius: 22px; }
+
+.circle { border-radius: 999px; }
 
 .theme-green { background: linear-gradient(145deg, #3F5D46, #2C4131); }
 .theme-terracotta { background: linear-gradient(145deg, #D9542B, #B8431F); }

@@ -149,9 +149,10 @@
   border-bottom: 1px solid var(--border-hairline);
 }
 
+/* Mirrors .topbarRight's width so the search stays optically centred. */
 .topbarSpacer {
   flex: none;
-  width: 200px;
+  width: 220px;
 }
 
 .search {
@@ -188,7 +189,7 @@
 
 .topbarRight {
   flex: none;
-  width: 200px;
+  width: 220px;
   display: flex;
   align-items: center;
   justify-content: flex-end;
@@ -197,6 +198,7 @@
 
 .bell {
   position: relative;
+  flex: none;
   width: 42px;
   height: 42px;
   border-radius: 14px;
@@ -224,6 +226,30 @@
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+/* Sits between the bell and "New meal": same 42px footprint as the bell, with
+   the avatar inset so the two read as a matched pair. */
+.accountBtn {
+  width: 42px;
+  height: 42px;
+  flex: none;
+  padding: 0;
+  border-radius: 14px;
+  border: 1.5px solid var(--border-sidebar);
+  background: var(--surface-card);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Inset the avatar so the tile reads like the bell rather than a raw photo.
+   Radius is left to Avatar's own .sm.rounded rule, which outranks this. */
+.accountBtn > * {
+  width: 32px;
+  height: 32px;
+  font-size: 12.5px;
 }
 
 .newMeal {

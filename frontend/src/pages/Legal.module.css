@@ -1,0 +1,91 @@
+.page {
+  max-width: 640px;
+  margin: 0 auto;
+  padding-top: 6px;
+  padding-bottom: 40px;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-top: 2px;
+}
+
+.backBtn {
+  width: 40px;
+  height: 40px;
+  flex: none;
+  border-radius: 13px;
+  border: 1.5px solid var(--border-card);
+  background: var(--surface-card);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--ink);
+}
+
+.title {
+  font-family: var(--font-display);
+  font-size: 26px;
+  color: var(--ink);
+}
+
+.notice {
+  margin-top: 20px;
+  padding: 14px 16px;
+  border-radius: 15px;
+  border: 1.5px solid var(--warn-border);
+  background: var(--bg-terracotta);
+  color: var(--warn);
+  font: 500 13.5px var(--font-ui);
+  line-height: 1.5;
+}
+
+.section {
+  margin-top: 28px;
+}
+
+.sectionTitle {
+  font-family: var(--font-display);
+  font-size: 19px;
+  color: var(--ink);
+  margin-bottom: 10px;
+}
+
+.text {
+  color: var(--secondary);
+  font: 400 14.5px var(--font-ui);
+  line-height: 1.6;
+  margin-bottom: 10px;
+}
+
+.text:last-child {
+  margin-bottom: 0;
+}
+
+.list {
+  margin: 0 0 10px;
+  padding-left: 20px;
+  color: var(--secondary);
+  font: 400 14.5px var(--font-ui);
+  line-height: 1.6;
+}
+
+.list li {
+  margin-bottom: 5px;
+}
+
+.code {
+  font-size: 13px;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: var(--chip-bg);
+  color: var(--ink);
+}
+
+.link {
+  color: var(--accent-dark);
+  font-weight: 600;
+}
