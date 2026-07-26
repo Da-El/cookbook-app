@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { ChevronLeft } from '../components/Icon/Icon';
 import styles from './Legal.module.css';
 
@@ -10,11 +10,17 @@ import styles from './Legal.module.css';
  */
 export function Legal() {
   const navigate = useNavigate();
+  const location = useLocation();
+
+  // This page is reachable signed-out and link-shareable, so it can be the very
+  // first entry in the history stack - key 'default' means there's nothing of
+  // ours to go back to, and navigate(-1) would leave the app entirely.
+  const goBack = () => (location.key === 'default' ? navigate('/') : navigate(-1));
 
   return (
     <div className={styles.page}>
       <div className={styles.header}>
-        <button className={styles.backBtn} onClick={() => navigate(-1)} aria-label="Back">
+        <button className={styles.backBtn} onClick={goBack} aria-label="Back">
           <ChevronLeft size={18} strokeWidth={2.2} />
         </button>
         <h1 className={styles.title}>Legal & privacy</h1>

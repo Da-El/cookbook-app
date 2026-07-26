@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react';
+import { Link } from 'react-router-dom';
 import { Card } from '../components/Card/Card';
 import { Button } from '../components/Button/Button';
 import { Input } from '../components/Input/Input';
@@ -92,6 +93,10 @@ export function Auth() {
           >
             {isSignup ? 'Sign in' : 'Sign up'}
           </button>
+        </p>
+
+        <p className={styles.legal}>
+          <Link to="/legal" className={styles.legalLink}>Legal &amp; privacy</Link>
         </p>
       </div>
     </div>

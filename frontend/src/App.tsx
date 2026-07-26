@@ -35,7 +35,18 @@ function Bare({ children }: { children: React.ReactNode }) {
 function Routed() {
   const { user, loading } = useAuth();
   if (loading) return null;
-  if (!user) return <Auth />;
+
+  // Legal is the one screen reachable signed-out: a privacy policy you need an
+  // account to read isn't much of a privacy policy. Everything else falls
+  // through to the sign-in screen.
+  if (!user) {
+    return (
+      <Routes>
+        <Route path="/legal" element={<Bare><Legal /></Bare>} />
+        <Route path="*" element={<Auth />} />
+      </Routes>
+    );
+  }
 
   return (
     <Routes>
