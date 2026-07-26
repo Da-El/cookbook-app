@@ -3,6 +3,12 @@ import { useQuery } from '@tanstack/react-query';
 import { api } from '../api/client';
 import type { IngredientDetail as Detail, Micros } from '../api/types';
 import { ChevronLeft } from '../components/Icon/Icon';
+import {
+  CategoryEditSection,
+  NutritionEditSection,
+  PhotoEditSection,
+  TextEditSection,
+} from '../components/EditVoting/EditVoting';
 import { ingredientBackground } from '../lib/imagery';
 import styles from './IngredientDetail.module.css';
 
@@ -63,6 +69,19 @@ export function IngredientDetail() {
       </div>
 
       <p className={styles.desc}>{data.description}</p>
+
+      <div className={styles.card}>
+        <p className={styles.sectionTitle}>Community</p>
+        <TextEditSection
+          ingredientId={data.id}
+          field="description"
+          label="Description"
+          placeholder="Rewrite the description…"
+        />
+        <CategoryEditSection ingredientId={data.id} />
+        <PhotoEditSection ingredientId={data.id} />
+        <NutritionEditSection ingredientId={data.id} />
+      </div>
 
       {n && (
         <div className={styles.card}>

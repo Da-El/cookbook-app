@@ -33,8 +33,11 @@ cd backend && cargo run
 cd frontend && npm install && npm run dev
 ```
 
-The app is at http://localhost:5173; Vite proxies `/api` to the backend on :8090.
+The app is at http://localhost:5180; Vite proxies `/api` to the backend on :8090.
 Migrations and the ingredient seed run automatically on backend startup.
+
+(Port 5180 is pinned rather than Vite's default 5173, which collides with another
+project on this machine.)
 
 ## Deployment
 
@@ -44,12 +47,15 @@ service, so there is no cross-origin setup in production.
 
 ## Status
 
-Working: accounts (register/login/logout with server-side sessions), ingredient catalog
-(118 FooDB ingredients) with search, category filters, and detail pages including
-macronutrients and micronutrient %DV.
+Every screen in the design spec is built and wired to real data: accounts, the ingredient
+catalog (118 FooDB ingredients) with community-edit voting on description/category/photo/
+nutrition, meals (create/browse/cook/save/rate), the Home feed (following, activity, stories,
+chefs-to-follow), Browse (meals/ingredients/chefs), the full Cookbook (recipes + kitchen
+sub-tabs, fridge, shopping), Meal Detail, Cook Mode, chef profiles, Settings, and Customize
+(live-applied themes).
 
-Next: meals CRUD, the Cookbook screens (cooked/saved/published, fridge, shopping),
-the social feed, community ingredient edits and voting, and Ask Chef.
+Not built: **Ask Chef** (the AI cooking assistant) — deliberately deferred, since it needs
+an LLM API key decision (Claude vs OpenAI) that hasn't been made yet.
 
 ## Data attribution
 

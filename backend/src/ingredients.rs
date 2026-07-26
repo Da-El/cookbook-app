@@ -231,6 +231,217 @@ pub async fn create(
     Ok((StatusCode::CREATED, Json(CreateIngredientResponse { id: Some(id), close_match: None })))
 }
 
+const EDIT_FIELDS: [&str; 4] = ["description", "category", "photo", "nutrition"];
+
+#[derive(Deserialize)]
+pub struct SubmitEdit {
+    pub field: String,
+    pub value: serde_json::Value,
+}
+
+/// A community edit proposal starts with the submitter's own vote already
+/// counted, exactly like the prototype (new edits start at votes:1).
+pub async fn submit_edit(
+    State(state): State<AppState>,
+    crate::auth::CurrentUser(user): crate::auth::CurrentUser,
+    Path(id): Path<i64>,
+    Json(body): Json<SubmitEdit>,
+) -> Result<StatusCode, (StatusCode, Json<serde_json::Value>)> {
+    if !EDIT_FIELDS.contains(&body.field.as_str()) {
+        return Err(bad("Not something you can edit."));
+    }
+
+    let mut tx = state.db.begin().await.map_err(|_| oops())?;
+
+    let edit_id: i64 = sqlx::query_scalar(
+        "INSERT INTO ingredient_edits (ingredient_id, field, value, author_id, votes)
+         VALUES ($1,$2,$3,$4,1) RETURNING id",
+    )
+    .bind(id)
+    .bind(&body.field)
+    .bind(&body.value)
+    .bind(user.id)
+    .fetch_one(&mut *tx)
+    .await
+    .map_err(|e| {
+        tracing::error!("submit edit failed: {e}");
+        oops()
+    })?;
+
+    sqlx::query("INSERT INTO edit_votes (user_id, edit_id) VALUES ($1,$2)")
+        .bind(user.id)
+        .bind(edit_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|_| oops())?;
+
+    apply_winner(&mut tx, id, &body.field).await.map_err(|_| oops())?;
+    tx.commit().await.map_err(|_| oops())?;
+    Ok(StatusCode::CREATED)
+}
+
+#[derive(Serialize, sqlx::FromRow)]
+pub struct EditRow {
+    pub id: i64,
+    pub value: serde_json::Value,
+    pub author_name: Option<String>,
+    pub votes: i32,
+    pub voted_by_me: bool,
+}
+
+pub async fn list_edits(
+    State(state): State<AppState>,
+    viewer: Option<crate::auth::CurrentUser>,
+    Path((id, field)): Path<(i64, String)>,
+) -> Result<Json<Vec<EditRow>>, StatusCode> {
+    if !EDIT_FIELDS.contains(&field.as_str()) {
+        return Err(StatusCode::NOT_FOUND);
+    }
+    let viewer_id = viewer.map(|u| u.0.id);
+    let rows = sqlx::query_as::<_, EditRow>(
+        "SELECT e.id, e.value, u.display_name AS author_name, e.votes,
+                EXISTS (SELECT 1 FROM edit_votes v WHERE v.user_id = $3 AND v.edit_id = e.id) AS voted_by_me
+         FROM ingredient_edits e LEFT JOIN users u ON u.id = e.author_id
+         WHERE e.ingredient_id = $1 AND e.field = $2
+         ORDER BY e.votes DESC, e.id ASC
+         LIMIT 20",
+    )
+    .bind(id)
+    .bind(&field)
+    .bind(viewer_id)
+    .fetch_all(&state.db)
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(Json(rows))
+}
+
+pub async fn vote_edit(
+    State(state): State<AppState>,
+    crate::auth::CurrentUser(user): crate::auth::CurrentUser,
+    Path((id, edit_id)): Path<(i64, i64)>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    let field: Option<String> =
+        sqlx::query_scalar("SELECT field FROM ingredient_edits WHERE id = $1 AND ingredient_id = $2")
+            .bind(edit_id)
+            .bind(id)
+            .fetch_optional(&state.db)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let Some(field) = field else { return Err(StatusCode::NOT_FOUND) };
+
+    let mut tx = state.db.begin().await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let removed = sqlx::query("DELETE FROM edit_votes WHERE user_id = $1 AND edit_id = $2")
+        .bind(user.id)
+        .bind(edit_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .rows_affected();
+
+    if removed == 0 {
+        sqlx::query("INSERT INTO edit_votes (user_id, edit_id) VALUES ($1,$2)")
+            .bind(user.id)
+            .bind(edit_id)
+            .execute(&mut *tx)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    }
+
+    sqlx::query(
+        "UPDATE ingredient_edits SET votes = (SELECT count(*) FROM edit_votes WHERE edit_id = $1) WHERE id = $1",
+    )
+    .bind(edit_id)
+    .execute(&mut *tx)
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    apply_winner(&mut tx, id, &field).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    tx.commit().await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    Ok(Json(serde_json::json!({ "voted": removed == 0 })))
+}
+
+/// Highest votes wins; ties go to the oldest edit (lowest id) since rows are
+/// already ordered that way - mirrors the prototype's pickWinner exactly.
+/// Applies the result onto the materialized ingredients/ingredient_nutrition
+/// columns that every other endpoint reads.
+async fn apply_winner(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    ingredient_id: i64,
+    field: &str,
+) -> Result<(), sqlx::Error> {
+    let winner: Option<serde_json::Value> = sqlx::query_scalar(
+        "SELECT value FROM ingredient_edits WHERE ingredient_id = $1 AND field = $2
+         ORDER BY votes DESC, id ASC LIMIT 1",
+    )
+    .bind(ingredient_id)
+    .bind(field)
+    .fetch_optional(&mut **tx)
+    .await?;
+
+    let Some(value) = winner else { return Ok(()) };
+
+    match field {
+        "description" => {
+            if let Some(s) = value.as_str() {
+                sqlx::query("UPDATE ingredients SET description = $1 WHERE id = $2")
+                    .bind(s)
+                    .bind(ingredient_id)
+                    .execute(&mut **tx)
+                    .await?;
+            }
+        }
+        "category" => {
+            if let Some(s) = value.as_str() {
+                sqlx::query("UPDATE ingredients SET category = $1 WHERE id = $2")
+                    .bind(s)
+                    .bind(ingredient_id)
+                    .execute(&mut **tx)
+                    .await?;
+            }
+        }
+        "photo" => {
+            let photo = value.as_str().filter(|s| !s.is_empty());
+            sqlx::query("UPDATE ingredients SET photo_url = $1 WHERE id = $2")
+                .bind(photo)
+                .bind(ingredient_id)
+                .execute(&mut **tx)
+                .await?;
+        }
+        "nutrition" => {
+            let get_f64 = |k: &str| value.get(k).and_then(|v| v.as_f64());
+            let get_i32 = |k: &str| value.get(k).and_then(|v| v.as_i64()).map(|v| v as i32);
+            let serving_size = value.get("serving_size").and_then(|v| v.as_str()).unwrap_or("1 serving");
+
+            sqlx::query(
+                "INSERT INTO ingredient_nutrition
+                   (ingredient_id, serving_size, calories, protein, carbs, fat, fiber, sugar, source)
+                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'Community')
+                 ON CONFLICT (ingredient_id) DO UPDATE SET
+                   serving_size = EXCLUDED.serving_size,
+                   calories = EXCLUDED.calories, protein = EXCLUDED.protein,
+                   carbs = EXCLUDED.carbs, fat = EXCLUDED.fat,
+                   fiber = COALESCE(EXCLUDED.fiber, ingredient_nutrition.fiber),
+                   sugar = COALESCE(EXCLUDED.sugar, ingredient_nutrition.sugar),
+                   source = 'Community'",
+            )
+            .bind(ingredient_id)
+            .bind(serving_size)
+            .bind(get_i32("calories"))
+            .bind(get_f64("protein"))
+            .bind(get_f64("carbs"))
+            .bind(get_f64("fat"))
+            .bind(get_f64("fiber"))
+            .bind(get_f64("sugar"))
+            .execute(&mut **tx)
+            .await?;
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
 #[derive(Serialize, sqlx::FromRow)]
 pub struct UsedInMeal {
     pub id: i64,

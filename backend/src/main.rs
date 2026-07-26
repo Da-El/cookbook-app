@@ -42,6 +42,9 @@ async fn main() -> anyhow::Result<()> {
         .route("/ingredients/categories", get(ingredients::categories))
         .route("/ingredients/{id}", get(ingredients::detail))
         .route("/ingredients/{id}/used-in", get(ingredients::used_in_meals))
+        .route("/ingredients/{id}/edits", post(ingredients::submit_edit))
+        .route("/ingredients/{id}/edits/{field}", get(ingredients::list_edits))
+        .route("/ingredients/{id}/edits/{edit_id}/vote", post(ingredients::vote_edit))
         // meals
         .route("/meals", get(meals::browse).post(meals::create))
         .route("/meals/filters", get(meals::filters))
