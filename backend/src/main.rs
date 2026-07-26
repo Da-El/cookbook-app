@@ -36,7 +36,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/auth/login", post(auth::login))
         .route("/auth/logout", post(auth::logout))
         .route("/auth/me", get(auth::me))
-        .route("/ingredients", get(ingredients::list))
+        .route("/ingredients", get(ingredients::list).post(ingredients::create))
         .route("/ingredients/categories", get(ingredients::categories))
         .route("/ingredients/{id}", get(ingredients::detail))
         // meals
@@ -61,6 +61,7 @@ async fn main() -> anyhow::Result<()> {
         // social
         .route("/feed", get(social::feed))
         .route("/activity", get(social::activity).post(social::mark_activity_seen))
+        .route("/chefs", get(social::search_chefs))
         .route("/chefs/suggested", get(social::suggested_chefs))
         .route("/chefs/following", get(social::following))
         .route("/chefs/{id}", get(social::profile))

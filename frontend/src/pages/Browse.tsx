@@ -1,11 +1,13 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api/client';
 import type { IngredientSummary } from '../api/types';
 import { useIsDesktop } from '../hooks/useMediaQuery';
+import { useToast } from '../components/Toast/ToastContext';
 import { Segmented } from '../components/Segmented/Segmented';
 import { MealCard, MealGrid, type MealCardData } from '../components/MealCard/MealCard';
+import { ChefList, ChefRow, type Chef } from '../components/ChefRow/ChefRow';
 import { EmptyLine } from '../components/Empty/Empty';
 import { SearchIcon } from '../components/Icon/Icon';
 import { ingredientBackground } from '../lib/imagery';
@@ -27,13 +29,21 @@ interface MealRow extends MealCardData {
 export function Browse() {
   const navigate = useNavigate();
   const isDesktop = useIsDesktop();
+  const qc = useQueryClient();
+  const toast = useToast();
   const [params] = useSearchParams();
   const [search, setSearch] = useState(params.get('q') ?? '');
-  const [tab, setTab] = useState<'meals' | 'ingredients'>('meals');
+  const [tab, setTab] = useState<'meals' | 'ingredients' | 'chefs'>('meals');
   // Each tab keeps its own filter so switching doesn't strand an invalid value.
   const [mealType, setMealType] = useState('All');
   const [category, setCategory] = useState('All');
   const [sort, setSort] = useState('top');
+
+  // The desktop topbar searches by pushing ?q=, so mirror it into local state.
+  const urlQuery = params.get('q');
+  useEffect(() => {
+    if (urlQuery !== null) setSearch(urlQuery);
+  }, [urlQuery]);
 
   const { data: meals = [], isLoading: mealsLoading } = useQuery({
     queryKey: ['meals', search, mealType, sort],
@@ -58,6 +68,27 @@ export function Browse() {
     enabled: tab === 'ingredients',
   });
 
+  const { data: chefs = [], isLoading: chefsLoading } = useQuery({
+    queryKey: ['chefs-search', search],
+    queryFn: () => {
+      const q = new URLSearchParams();
+      if (search) q.set('search', search);
+      return api.get<Chef[]>(`/chefs?${q}`);
+    },
+    enabled: tab === 'chefs',
+  });
+
+  const follow = useMutation({
+    mutationFn: (chef: Chef) => api.post<{ following: boolean }>(`/chefs/${chef.id}/follow`),
+    onSuccess: (res, chef) => {
+      toast(res.following ? `Following ${chef.display_name}` : `Unfollowed ${chef.display_name}`);
+      qc.invalidateQueries({ queryKey: ['chefs-search'] });
+      qc.invalidateQueries({ queryKey: ['chefs-suggested'] });
+      qc.invalidateQueries({ queryKey: ['chefs-following'] });
+      qc.invalidateQueries({ queryKey: ['feed'] });
+    },
+  });
+
   const toggle = (
     <div className={styles.toggleWrap}>
       <Segmented
@@ -69,6 +100,7 @@ export function Browse() {
         options={[
           { value: 'meals', label: 'Meals' },
           { value: 'ingredients', label: 'Ingredients' },
+          { value: 'chefs', label: 'Chefs' },
         ]}
       />
     </div>
@@ -77,6 +109,7 @@ export function Browse() {
   const chips = tab === 'meals' ? MEAL_TYPES : ING_CATEGORIES;
   const active = tab === 'meals' ? mealType : category;
   const setActive = tab === 'meals' ? setMealType : setCategory;
+  const showChips = tab !== 'chefs';
 
   return (
     <div className={styles.page}>
@@ -101,17 +134,19 @@ export function Browse() {
         </>
       )}
 
-      <div className={`${styles.chipRow} hscroll`}>
-        {chips.map((c) => (
-          <button
-            key={c}
-            className={`${styles.chip} ${active === c ? styles.chipActive : ''}`}
-            onClick={() => setActive(c)}
-          >
-            {c}
-          </button>
-        ))}
-      </div>
+      {showChips && (
+        <div className={`${styles.chipRow} hscroll`}>
+          {chips.map((c) => (
+            <button
+              key={c}
+              className={`${styles.chip} ${active === c ? styles.chipActive : ''}`}
+              onClick={() => setActive(c)}
+            >
+              {c}
+            </button>
+          ))}
+        </div>
+      )}
 
       {tab === 'meals' && (
         <div className={styles.sortRow}>
@@ -127,7 +162,21 @@ export function Browse() {
         </div>
       )}
 
-      {tab === 'meals' ? (
+      {tab === 'chefs' ? (
+        chefs.length > 0 ? (
+          <ChefList>
+            {chefs.map((c) => (
+              <ChefRow key={c.id} chef={c} onToggleFollow={(x) => follow.mutate(x)} />
+            ))}
+          </ChefList>
+        ) : (
+          !chefsLoading && (
+            <EmptyLine roomy>
+              {search ? 'No chefs match that search.' : 'No other chefs have joined yet.'}
+            </EmptyLine>
+          )
+        )
+      ) : tab === 'meals' ? (
         meals.length > 0 ? (
           <MealGrid>
             {meals.map((m) => <MealCard key={m.id} meal={m} />)}

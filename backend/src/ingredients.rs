@@ -100,6 +100,147 @@ pub async fn categories(
     Ok(Json(rows))
 }
 
+#[derive(Deserialize)]
+pub struct NewIngredient {
+    pub name: String,
+    pub category: String,
+    pub description: Option<String>,
+    pub photo_url: Option<String>,
+    pub serving_size: Option<String>,
+    pub calories: Option<i32>,
+    pub protein: Option<f64>,
+    pub carbs: Option<f64>,
+    pub fat: Option<f64>,
+    pub rating: Option<i16>,
+    /// Set once the user has seen and dismissed the "looks similar to…" warning.
+    pub confirmed_new: Option<bool>,
+}
+
+#[derive(Serialize)]
+pub struct CreateIngredientResponse {
+    pub id: Option<i64>,
+    /// Present when a near-duplicate blocked the create.
+    pub close_match: Option<CloseMatch>,
+}
+
+#[derive(Serialize)]
+pub struct CloseMatch {
+    pub id: i64,
+    pub name: String,
+    pub used_in_meals: i64,
+}
+
+pub async fn create(
+    State(state): State<AppState>,
+    crate::auth::CurrentUser(user): crate::auth::CurrentUser,
+    Json(body): Json<NewIngredient>,
+) -> Result<(StatusCode, Json<CreateIngredientResponse>), (StatusCode, Json<serde_json::Value>)> {
+    let name = body.name.trim();
+    if name.is_empty() {
+        return Err(bad("Please enter an ingredient name."));
+    }
+
+    // One page per ingredient: an exact name clash is always rejected.
+    let exact: Option<i64> = sqlx::query_scalar("SELECT id FROM ingredients WHERE lower(name) = lower($1)")
+        .bind(name)
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|_| oops())?;
+    if exact.is_some() {
+        return Err(bad(&format!(
+            "\u{201c}{name}\u{201d} already has a page — only one page per ingredient."
+        )));
+    }
+
+    // A fuzzy hit only warns: the user can confirm and create anyway.
+    if !body.confirmed_new.unwrap_or(false) {
+        let close = sqlx::query_as::<_, (i64, String, i64)>(
+            "SELECT i.id, i.name,
+                    (SELECT count(*) FROM meal_ingredients mi WHERE mi.ingredient_id = i.id)
+             FROM ingredients i
+             WHERE i.name ILIKE '%' || $1 || '%' OR $1 ILIKE '%' || i.name || '%'
+             ORDER BY length(i.name) LIMIT 1",
+        )
+        .bind(name)
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|_| oops())?;
+
+        if let Some((id, matched, used)) = close {
+            return Ok((
+                StatusCode::OK,
+                Json(CreateIngredientResponse {
+                    id: None,
+                    close_match: Some(CloseMatch { id, name: matched, used_in_meals: used }),
+                }),
+            ));
+        }
+    }
+
+    let mut tx = state.db.begin().await.map_err(|_| oops())?;
+
+    let id: i64 = sqlx::query_scalar(
+        "INSERT INTO ingredients (name, category, description, photo_url, author_id, rating, rating_count)
+         VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id",
+    )
+    .bind(name)
+    .bind(body.category.trim())
+    .bind(body.description.as_deref().unwrap_or("").trim())
+    .bind(body.photo_url.as_deref())
+    .bind(user.id)
+    .bind(body.rating.map(f64::from).unwrap_or(0.0))
+    .bind(i32::from(body.rating.is_some()))
+    .fetch_one(&mut *tx)
+    .await
+    .map_err(|e| {
+        tracing::error!("create ingredient failed: {e}");
+        oops()
+    })?;
+
+    let has_nutrition = body.calories.is_some()
+        || body.protein.is_some()
+        || body.carbs.is_some()
+        || body.fat.is_some()
+        || body.serving_size.is_some();
+
+    if has_nutrition {
+        sqlx::query(
+            "INSERT INTO ingredient_nutrition
+               (ingredient_id, serving_size, calories, protein, carbs, fat, source)
+             VALUES ($1,$2,$3,$4,$5,$6,'Community')",
+        )
+        .bind(id)
+        .bind(body.serving_size.as_deref().map(str::trim).filter(|s| !s.is_empty()).unwrap_or("1 serving"))
+        .bind(body.calories)
+        .bind(body.protein)
+        .bind(body.carbs)
+        .bind(body.fat)
+        .execute(&mut *tx)
+        .await
+        .map_err(|_| oops())?;
+    }
+
+    if let Some(v) = body.rating {
+        sqlx::query("INSERT INTO ratings (user_id, subject_type, subject_id, value) VALUES ($1,'ingredient',$2,$3)")
+            .bind(user.id).bind(id).bind(v)
+            .execute(&mut *tx).await.ok();
+    }
+
+    tx.commit().await.map_err(|_| oops())?;
+
+    Ok((StatusCode::CREATED, Json(CreateIngredientResponse { id: Some(id), close_match: None })))
+}
+
+fn bad(msg: &str) -> (StatusCode, Json<serde_json::Value>) {
+    (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "error": msg })))
+}
+fn oops() -> (StatusCode, Json<serde_json::Value>) {
+    (
+        StatusCode::INTERNAL_SERVER_ERROR,
+        Json(serde_json::json!({ "error": "Could not save that ingredient." })),
+    )
+}
+
 pub async fn detail(
     State(state): State<AppState>,
     Path(id): Path<i64>,

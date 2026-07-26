@@ -1,4 +1,4 @@
-use axum::extract::{Path, State};
+use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::Json;
 use serde::{Deserialize, Serialize};
@@ -44,6 +44,43 @@ pub async fn suggested_chefs(
     .await
     .map_err(|e| {
         tracing::error!("suggested chefs failed: {e}");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+    Ok(Json(rows))
+}
+
+#[derive(Deserialize)]
+pub struct ChefSearch {
+    pub search: Option<String>,
+}
+
+/// Browse > Chefs. Unlike suggestions this includes people you already follow
+/// and chefs who haven't published yet, so search can find anyone by name.
+pub async fn search_chefs(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Query(p): Query<ChefSearch>,
+) -> Result<Json<Vec<ChefCard>>, StatusCode> {
+    let rows = sqlx::query_as::<_, ChefCard>(
+        "SELECT u.id, u.display_name, u.cb_avatar_theme AS avatar_theme,
+                u.cb_avatar_photo_url AS avatar_photo_url,
+                (SELECT count(*) FROM meals m WHERE m.author_id=u.id AND m.visibility='public') AS meal_count,
+                (SELECT m.cuisine FROM meals m WHERE m.author_id=u.id AND m.visibility='public'
+                 GROUP BY m.cuisine ORDER BY count(*) DESC LIMIT 1) AS top_cuisine,
+                (SELECT max(m.rating)::float8 FROM meals m WHERE m.author_id=u.id AND m.visibility='public') AS best_rating,
+                EXISTS (SELECT 1 FROM follows f WHERE f.follower_id=$1 AND f.followee_id=u.id) AS is_following
+         FROM users u
+         WHERE u.id <> $1
+           AND ($2::text IS NULL OR u.display_name ILIKE '%' || $2 || '%')
+         ORDER BY meal_count DESC, best_rating DESC NULLS LAST, u.display_name
+         LIMIT 100",
+    )
+    .bind(user.id)
+    .bind(p.search.as_deref().map(str::trim).filter(|s| !s.is_empty()))
+    .fetch_all(&state.db)
+    .await
+    .map_err(|e| {
+        tracing::error!("chef search failed: {e}");
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
     Ok(Json(rows))
