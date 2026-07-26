@@ -20,6 +20,10 @@ import { CookMode } from './pages/CookMode';
 import { ChefPage } from './pages/ChefPage';
 import { Settings } from './pages/Settings';
 import { Legal } from './pages/Legal';
+import { Import } from './pages/Import';
+import { Plan } from './pages/Plan';
+import { Discover } from './pages/Discover';
+import { Guides, GuidePage } from './pages/Guides';
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { refetchOnWindowFocus: false } },
@@ -56,6 +60,8 @@ function Routed() {
       <Route path="/browse" element={<Tab><Browse /></Tab>} />
       <Route path="/create" element={<Tab><Create /></Tab>} />
       <Route path="/cookbook" element={<Tab><Cookbook /></Tab>} />
+      <Route path="/discover" element={<Tab><Discover /></Tab>} />
+      <Route path="/plan" element={<Tab><Plan /></Tab>} />
 
       <Route path="/create/meal" element={<Bare><CreateMeal /></Bare>} />
       <Route path="/create/ingredient" element={<Bare><CreateIngredient /></Bare>} />
@@ -65,6 +71,9 @@ function Routed() {
       <Route path="/chefs/:id" element={<Bare><ChefPage /></Bare>} />
       <Route path="/settings" element={<Bare><Settings /></Bare>} />
       <Route path="/legal" element={<Bare><Legal /></Bare>} />
+      <Route path="/import" element={<Bare><Import /></Bare>} />
+      <Route path="/guides" element={<Bare><Guides /></Bare>} />
+      <Route path="/guides/:slug" element={<Bare><GuidePage /></Bare>} />
 
       {/* Full-screen, no chrome on either platform. */}
       <Route path="/meals/:id/cook" element={<CookMode />} />

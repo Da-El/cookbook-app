@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { api } from '../api/client';
 import { CloseIcon } from '../components/Icon/Icon';
+import { Timers } from '../components/Timers/Timers';
 import styles from './CookMode.module.css';
 
 interface MealSteps {
@@ -15,6 +16,7 @@ export function CookMode() {
   const { id } = useParams();
   const navigate = useNavigate();
   const [step, setStep] = useState(0);
+  const [timersOpen, setTimersOpen] = useState(false);
 
   const { data: meal } = useQuery({
     queryKey: ['meal', id],
@@ -56,6 +58,12 @@ export function CookMode() {
         <span className={styles.counter}>
           Step {step + 1} of {total}
         </span>
+        <button
+          className={`${styles.timerBtn} ${timersOpen ? styles.timerBtnOn : ''}`}
+          onClick={() => setTimersOpen((v) => !v)}
+        >
+          Timers
+        </button>
       </div>
 
       <div className={styles.progress}>
@@ -79,6 +87,8 @@ export function CookMode() {
           {last ? 'Finish cooking' : 'Next step'}
         </button>
       </div>
+
+      {timersOpen && <Timers onClose={() => setTimersOpen(false)} />}
     </div>
   );
 }

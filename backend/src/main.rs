@@ -1,10 +1,14 @@
 mod auth;
+mod guides;
+mod import;
 mod ingredients;
 mod kitchen;
 mod meals;
+mod planner;
 mod seed;
 mod social;
 mod state;
+mod units;
 
 use axum::{
     routing::{delete, get, post},
@@ -29,6 +33,7 @@ async fn main() -> anyhow::Result<()> {
     let state = AppState::connect().await?;
     sqlx::migrate!().run(&state.db).await?;
     seed::seed_ingredients(&state.db).await?;
+    seed::seed_guides(&state.db).await?;
 
     let api = Router::new()
         .route("/health", get(health))
@@ -51,6 +56,7 @@ async fn main() -> anyhow::Result<()> {
         // meals
         .route("/meals", get(meals::browse).post(meals::create))
         .route("/meals/filters", get(meals::filters))
+        .route("/meals/discover", get(meals::discover))
         .route("/meals/{id}", get(meals::detail))
         .route("/meals/{id}/save", post(meals::toggle_save))
         .route("/meals/{id}/photo", post(meals::update_photo))
@@ -72,6 +78,19 @@ async fn main() -> anyhow::Result<()> {
         .route("/cookbook/published", get(kitchen::published))
         .route("/cookbook/reviews", get(kitchen::my_reviews))
         .route("/cookbook/edits", get(kitchen::my_edits))
+        // import
+        .route("/import/url", post(import::import_url))
+        .route("/import/text", post(import::import_text))
+        .route("/import/capabilities", get(import::capabilities))
+        // meal planning
+        .route("/plan", get(planner::list_plan).post(planner::add_plan_entry))
+        .route("/plan/{id}", delete(planner::remove_plan_entry))
+        .route("/plan/grocery", get(planner::grocery_list))
+        .route("/plan/grocery/push", post(planner::push_to_shopping))
+        .route("/plan/suggestions", get(planner::suggestions))
+        // guides
+        .route("/guides", get(guides::list))
+        .route("/guides/{slug}", get(guides::detail))
         // social
         .route("/feed", get(social::feed))
         .route("/activity", get(social::activity).post(social::mark_activity_seen))

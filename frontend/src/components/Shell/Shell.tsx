@@ -7,14 +7,19 @@ import { useProfileTheme } from '../../theme/ThemeContext';
 import { canOfferInstall, useInstall } from '../../pwa/InstallContext';
 import { api } from '../../api/client';
 import { Avatar } from '../Avatar/Avatar';
-import { BookIcon, HomeIcon, PlusIcon, SearchIcon } from '../Icon/Icon';
+import { BookIcon, CalendarIcon, CompassIcon, HomeIcon, PlusIcon, SearchIcon } from '../Icon/Icon';
 import styles from './Shell.module.css';
 
+// `mobile: false` keeps the bottom bar at five items - six is too cramped to
+// tap reliably. Discover stays one tap away via the sidebar on desktop and the
+// account menu or Browse on a phone.
 const NAV = [
-  { to: '/', mobileLabel: 'Home', desktopLabel: 'Feed', Icon: HomeIcon, end: true },
-  { to: '/browse', mobileLabel: 'Browse', desktopLabel: 'Browse', Icon: SearchIcon },
-  { to: '/create', mobileLabel: 'Create', desktopLabel: 'Create', Icon: PlusIcon },
-  { to: '/cookbook', mobileLabel: 'Cookbook', desktopLabel: 'My Cookbook', Icon: BookIcon },
+  { to: '/', mobileLabel: 'Home', desktopLabel: 'Feed', Icon: HomeIcon, end: true, mobile: true },
+  { to: '/browse', mobileLabel: 'Browse', desktopLabel: 'Browse', Icon: SearchIcon, mobile: true },
+  { to: '/discover', mobileLabel: 'Discover', desktopLabel: 'Discover', Icon: CompassIcon, mobile: false },
+  { to: '/plan', mobileLabel: 'Plan', desktopLabel: 'Meal plan', Icon: CalendarIcon, mobile: true },
+  { to: '/create', mobileLabel: 'Create', desktopLabel: 'Create', Icon: PlusIcon, mobile: true },
+  { to: '/cookbook', mobileLabel: 'Cookbook', desktopLabel: 'My Cookbook', Icon: BookIcon, mobile: true },
 ];
 
 function LogoGlyph({ size = 20 }: { size?: number }) {
@@ -91,6 +96,16 @@ export function Shell({ children, bare = false }: ShellProps) {
             </div>
           </div>
         </div>
+        <div className={styles.menuDivider} />
+        <Link to="/discover" className={styles.menuItem} onClick={() => setMenuOpen(false)}>
+          Discover
+        </Link>
+        <Link to="/import" className={styles.menuItem} onClick={() => setMenuOpen(false)}>
+          Import a recipe
+        </Link>
+        <Link to="/guides" className={styles.menuItem} onClick={() => setMenuOpen(false)}>
+          Guides
+        </Link>
         <div className={styles.menuDivider} />
         <Link to="/cookbook" className={styles.menuItem} onClick={() => setMenuOpen(false)}>
           Your cookbook
@@ -235,14 +250,14 @@ export function Shell({ children, bare = false }: ShellProps) {
 
       {!bare && (
         <nav className={styles.tabbar}>
-          {NAV.map(({ to, mobileLabel, Icon, end }) => (
+          {NAV.filter((n) => n.mobile).map(({ to, mobileLabel, Icon, end }) => (
             <NavLink
               key={to}
               to={to}
               end={end}
               className={({ isActive }) => `${styles.tabItem} ${isActive ? styles.tabItemActive : ''}`}
             >
-              <Icon size={23} strokeWidth={1.8} />
+              <Icon size={22} strokeWidth={1.8} />
               {mobileLabel}
             </NavLink>
           ))}

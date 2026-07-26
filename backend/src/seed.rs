@@ -29,6 +29,49 @@ pub struct UsdaRow {
 }
 
 const USDA_JSON: &str = include_str!("../seed/usda_foundation_foods.json");
+const GUIDES_JSON: &str = include_str!("../seed/guides.json");
+
+#[derive(Deserialize)]
+pub struct GuideRow {
+    slug: String,
+    title: String,
+    summary: String,
+    body: String,
+    topic: String,
+    minutes: Option<i32>,
+    position: i32,
+}
+
+/// Upserts by slug, so editing the JSON and redeploying updates the text
+/// rather than needing a migration or a duplicate row.
+pub async fn seed_guides(db: &PgPool) -> anyhow::Result<()> {
+    let rows: Vec<GuideRow> = serde_json::from_str(GUIDES_JSON)?;
+    let count = rows.len();
+
+    let mut tx = db.begin().await?;
+    for g in rows {
+        sqlx::query(
+            "INSERT INTO guides (slug, title, summary, body, topic, minutes, position)
+             VALUES ($1,$2,$3,$4,$5,$6,$7)
+             ON CONFLICT (slug) DO UPDATE SET
+               title = EXCLUDED.title, summary = EXCLUDED.summary, body = EXCLUDED.body,
+               topic = EXCLUDED.topic, minutes = EXCLUDED.minutes, position = EXCLUDED.position",
+        )
+        .bind(&g.slug)
+        .bind(&g.title)
+        .bind(&g.summary)
+        .bind(&g.body)
+        .bind(&g.topic)
+        .bind(g.minutes)
+        .bind(g.position)
+        .execute(&mut *tx)
+        .await?;
+    }
+    tx.commit().await?;
+
+    tracing::info!("seeded {count} guides");
+    Ok(())
+}
 
 /// Idempotent: skips entirely once the catalog is populated. Ingredients start
 /// with an empty `description` (the schema default) - USDA's dataset carries no

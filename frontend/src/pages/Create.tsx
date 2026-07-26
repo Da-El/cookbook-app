@@ -1,6 +1,17 @@
 import { useNavigate } from 'react-router-dom';
 import styles from './Create.module.css';
 
+function ImportGlyph() {
+  return (
+    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M12 3v11" />
+      <path d="M8 10.5 12 14.5l4-4" />
+      <path d="M4 15v3.5A2.5 2.5 0 0 0 6.5 21h11a2.5 2.5 0 0 0 2.5-2.5V15" />
+    </svg>
+  );
+}
+
 function MealGlyph() {
   return (
     <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -33,6 +44,19 @@ export function Create() {
       <p className={styles.subtitle}>What are you adding to the cookbook?</p>
 
       <div className={styles.entryCards}>
+        <button className={styles.entryCard} onClick={() => navigate('/import')}>
+          <span
+            className={styles.entryIcon}
+            style={{ background: 'linear-gradient(145deg,#3B5B7A,#28405A)' }}
+          >
+            <ImportGlyph />
+          </span>
+          <span className={styles.entryTitle} style={{ display: 'block' }}>Import a recipe</span>
+          <span className={styles.entrySub} style={{ display: 'block' }}>
+            From a link, or paste one in from anywhere.
+          </span>
+        </button>
+
         <button className={styles.entryCard} onClick={() => navigate('/create/meal')}>
           <span
             className={styles.entryIcon}

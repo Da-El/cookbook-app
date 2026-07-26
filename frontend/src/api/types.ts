@@ -41,3 +41,105 @@ export interface IngredientDetail extends IngredientSummary {
   photo_url: string | null;
   nutrition: Nutrition | null;
 }
+
+// ---------- import ----------
+
+export interface DraftIngredient {
+  raw_line: string;
+  amount: number | null;
+  unit: string | null;
+  name: string;
+  note: string | null;
+  matched_ingredient_id: number | null;
+  matched_name: string | null;
+}
+
+export interface RecipeDraft {
+  title: string;
+  description: string;
+  image_url: string | null;
+  servings: string | null;
+  total_minutes: number | null;
+  ingredients: DraftIngredient[];
+  steps: string[];
+  source_url: string | null;
+  source_name: string | null;
+}
+
+export interface ImportResponse {
+  import_id: number;
+  extractor: string;
+  draft: RecipeDraft;
+  matched_count: number;
+  total_count: number;
+}
+
+// ---------- planning ----------
+
+export type PlanSlot = 'breakfast' | 'lunch' | 'dinner' | 'snack';
+
+export interface PlanEntry {
+  id: number;
+  plan_date: string;
+  slot: PlanSlot;
+  meal_id: number;
+  meal_name: string;
+  cuisine: string;
+  time_minutes: number;
+  photo_url: string | null;
+  servings: number;
+}
+
+export interface GroceryItem {
+  key: string;
+  name: string;
+  ingredient_id: number | null;
+  category: string;
+  total_label: string | null;
+  in_fridge: boolean;
+  from_meals: string[];
+  unquantified: string[];
+  meal_count: number;
+}
+
+export interface GroceryList {
+  items: GroceryItem[];
+  meals_planned: number;
+  shared_count: number;
+}
+
+export interface PlanSuggestion {
+  id: number;
+  name: string;
+  cuisine: string;
+  time_minutes: number;
+  rating: number;
+  photo_url: string | null;
+  shared: number;
+  total: number;
+  shared_names: string[];
+}
+
+/** The subset of a cookbook meal the planner's picker needs. */
+export interface CookbookMealLite {
+  id: number;
+  name: string;
+  cuisine: string;
+  time_minutes: number;
+  photo_url: string | null;
+}
+
+// ---------- guides ----------
+
+export interface GuideSummary {
+  id: number;
+  slug: string;
+  title: string;
+  summary: string;
+  topic: string;
+  minutes: number | null;
+}
+
+export interface GuideDetail extends GuideSummary {
+  body: string;
+}

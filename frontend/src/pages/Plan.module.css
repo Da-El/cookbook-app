@@ -1,0 +1,476 @@
+.page {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding-bottom: 60px;
+}
+
+.head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.eyebrow {
+  font: 700 11px var(--font-ui);
+  color: var(--muted-2);
+  text-transform: uppercase;
+  letter-spacing: .07em;
+}
+
+.title {
+  font-family: var(--font-display);
+  font-size: 30px;
+  color: var(--ink);
+  line-height: 1.1;
+  margin-top: 3px;
+}
+
+.weekNav {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.navBtn {
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  border: 1.5px solid var(--border-card);
+  background: var(--surface-card);
+  color: var(--ink);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+}
+
+.navToday {
+  padding: 9px 15px;
+  border-radius: 999px;
+  border: 1.5px solid var(--border-card);
+  background: var(--surface-card);
+  color: var(--secondary);
+  font: 700 12.5px var(--font-ui);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.viewSwitch {
+  margin-top: 18px;
+}
+
+/* ---------- week grid ---------- */
+
+.days {
+  margin-top: 18px;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+
+@media (min-width: 900px) {
+  .days {
+    grid-template-columns: repeat(7, 1fr);
+    gap: 8px;
+    align-items: start;
+  }
+}
+
+.day {
+  border: 1px solid var(--border-hairline);
+  border-radius: 16px;
+  background: var(--surface-card);
+  padding: 11px 11px 8px;
+}
+
+.dayToday {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.dayHead {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border-hairline);
+}
+
+.dayName {
+  font: 700 12px var(--font-ui);
+  color: var(--secondary);
+  text-transform: uppercase;
+  letter-spacing: .05em;
+}
+
+.dayNum {
+  font-family: var(--font-display);
+  font-size: 19px;
+  color: var(--ink);
+}
+
+.slot {
+  margin-top: 9px;
+}
+
+.slotLabel {
+  font: 700 9.5px var(--font-ui);
+  color: var(--muted-3);
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  margin-bottom: 4px;
+}
+
+.planned {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 4px;
+}
+
+.plannedOpen {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px;
+  border-radius: 10px;
+  border: 1px solid var(--border-hairline);
+  background: var(--bg-page);
+  cursor: pointer;
+  text-align: left;
+}
+
+.plannedThumb {
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  flex: none;
+}
+
+.plannedName {
+  display: block;
+  font: 600 12px var(--font-ui);
+  color: var(--ink);
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.plannedMeta {
+  display: block;
+  font: 500 10.5px var(--font-ui);
+  color: var(--muted-2);
+  margin-top: 1px;
+}
+
+.plannedX {
+  width: 22px;
+  height: 22px;
+  flex: none;
+  border: none;
+  background: var(--chip-bg);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+}
+
+.addSlot {
+  width: 100%;
+  padding: 6px;
+  border-radius: 10px;
+  border: 1px dashed var(--border-card);
+  background: none;
+  color: var(--muted-3);
+  font: 600 11.5px var(--font-ui);
+  cursor: pointer;
+}
+
+/* ---------- suggestions ---------- */
+
+.sectionTitle {
+  margin-top: 30px;
+  font-family: var(--font-display);
+  font-size: 21px;
+  color: var(--ink);
+}
+
+.sectionSub {
+  margin-top: 4px;
+  color: var(--secondary);
+  font: 400 14px var(--font-ui);
+}
+
+.suggestions {
+  margin-top: 14px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 10px;
+}
+
+.suggestion {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 11px;
+  border-radius: 15px;
+  border: 1px solid var(--border-hairline);
+  background: var(--surface-card);
+  cursor: pointer;
+  text-align: left;
+}
+
+.suggestionThumb {
+  width: 100%;
+  height: 74px;
+  border-radius: 11px;
+  margin-bottom: 9px;
+}
+
+.suggestionName {
+  font-family: var(--font-display);
+  font-size: 17px;
+  color: var(--ink);
+  line-height: 1.15;
+}
+
+.suggestionShare {
+  margin-top: 4px;
+  font: 700 11px var(--font-ui);
+  color: var(--green-dark);
+  background: var(--green-tint);
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+
+.suggestionWhy {
+  margin-top: 6px;
+  font: 400 11.5px var(--font-ui);
+  color: var(--muted-2);
+  line-height: 1.35;
+}
+
+/* ---------- grocery ---------- */
+
+.groceryHead {
+  margin-top: 18px;
+  color: var(--secondary);
+  font: 400 14px var(--font-ui);
+}
+
+.groceryHead strong {
+  color: var(--green-dark);
+  font-weight: 700;
+}
+
+.groceryList {
+  margin-top: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.groceryRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  padding: 11px 13px;
+  border-radius: 15px;
+  border: 1px solid var(--border-hairline);
+  background: var(--surface-card);
+  cursor: pointer;
+}
+
+.check {
+  width: 19px;
+  height: 19px;
+  margin-top: 3px;
+  flex: none;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.groceryThumb {
+  width: 36px;
+  height: 36px;
+  border-radius: 11px;
+  flex: none;
+}
+
+.groceryName {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+  font: 600 14.5px var(--font-ui);
+  color: var(--ink);
+}
+
+.haveChip {
+  font: 700 10px var(--font-ui);
+  color: var(--green-dark);
+  background: var(--green-tint);
+  padding: 2px 7px;
+  border-radius: 999px;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+
+.sharedChip {
+  font: 700 10px var(--font-ui);
+  color: var(--accent-dark);
+  background: var(--bg-terracotta);
+  padding: 2px 7px;
+  border-radius: 999px;
+}
+
+.groceryMeta {
+  display: block;
+  margin-top: 2px;
+  font: 500 13px var(--font-ui);
+  color: var(--secondary);
+}
+
+.groceryFrom {
+  display: block;
+  margin-top: 3px;
+  font: 400 11.5px var(--font-ui);
+  color: var(--muted-3);
+}
+
+.pushBtn {
+  margin-top: 18px;
+  width: 100%;
+  padding: 15px 20px;
+  border: none;
+  border-radius: 15px;
+  background: var(--accent);
+  color: #fff;
+  font: 700 15px var(--font-ui);
+  cursor: pointer;
+  box-shadow: 0 14px 26px -16px rgba(217, 84, 43, .9);
+}
+
+.pushBtn:disabled {
+  opacity: .45;
+  cursor: default;
+  box-shadow: none;
+}
+
+/* ---------- picker sheet ---------- */
+
+.scrim {
+  position: fixed;
+  inset: 0;
+  background: rgba(30, 20, 10, .32);
+  z-index: 48;
+}
+
+.sheet {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 0;
+  width: min(560px, 100%);
+  max-height: 76vh;
+  overflow-y: auto;
+  z-index: 49;
+  background: var(--surface-card);
+  border-radius: 22px 22px 0 0;
+  border: 1px solid var(--border-hairline);
+  padding: 16px 16px calc(18px + env(safe-area-inset-bottom, 0px));
+  box-shadow: 0 -18px 44px -20px rgba(30, 20, 10, .5);
+}
+
+@media (min-width: 900px) {
+  .sheet {
+    bottom: 40px;
+    border-radius: 22px;
+    max-height: 70vh;
+  }
+}
+
+.sheetHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.sheetTitle {
+  font-family: var(--font-display);
+  font-size: 20px;
+  color: var(--ink);
+}
+
+.sheetClose {
+  width: 30px;
+  height: 30px;
+  border: none;
+  background: var(--chip-bg);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+}
+
+.pickList {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.pickRow {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 9px 10px;
+  border-radius: 14px;
+  border: 1px solid var(--border-hairline);
+  background: var(--bg-page);
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+}
+
+.pickThumb {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  flex: none;
+}
+
+.pickName {
+  display: block;
+  font: 600 14.5px var(--font-ui);
+  color: var(--ink);
+}
+
+.pickMeta {
+  display: block;
+  margin-top: 2px;
+  font: 500 12px var(--font-ui);
+  color: var(--muted-2);
+}
+
+.browseBtn {
+  margin-top: 12px;
+  width: 100%;
+  padding: 13px;
+  border-radius: 14px;
+  border: 1.5px solid var(--border-card);
+  background: var(--surface-card);
+  color: var(--secondary);
+  font: 700 13.5px var(--font-ui);
+  cursor: pointer;
+}

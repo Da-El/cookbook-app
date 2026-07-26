@@ -29,6 +29,28 @@ export const HomeIcon = (p: IconProps) =>
 export const SearchIcon = (p: IconProps) =>
   svg(<><circle cx="11" cy="11" r="7" /><path d="M21 21l-3.5-3.5" /></>, p);
 
+/** Calendar with a marked day - the meal planner. */
+export const CalendarIcon = (p: IconProps) =>
+  svg(
+    <>
+      <rect x="3.5" y="5" width="17" height="15.5" rx="3" />
+      <path d="M3.5 9.5h17" />
+      <path d="M8 3v3.5M16 3v3.5" />
+      <circle cx="12" cy="14.5" r="1.4" fill="currentColor" stroke="none" />
+    </>,
+    p,
+  );
+
+/** Compass - discovery rather than directed search. */
+export const CompassIcon = (p: IconProps) =>
+  svg(
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M15.6 8.4 13.9 14 8.4 15.6 10.1 10z" />
+    </>,
+    p,
+  );
+
 export const PlusIcon = (p: IconProps) =>
   svg(<><path d="M12 5v14" /><path d="M5 12h14" /></>, p);
 
