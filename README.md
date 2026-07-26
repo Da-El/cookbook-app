@@ -11,7 +11,7 @@ Built from the `design_handoff_cookbook_v3` design spec.
 |---|---|
 | Frontend | React + Vite + TypeScript, plain CSS Modules, installable PWA |
 | Backend | Rust (Axum) + sqlx |
-| Database | PostgreSQL |
+| Database | PostgreSQL, hosted on [Neon](https://neon.tech) |
 | Hosting | Render (Docker) |
 
 ## Local development
@@ -41,9 +41,11 @@ project on this machine.)
 
 ## Deployment
 
-`render.yaml` provisions a web service plus a Postgres instance. The Dockerfile builds the
-frontend, compiles the backend, and serves the built frontend as static files from the same
-service, so there is no cross-origin setup in production.
+The database is Neon, not Render's own Postgres — Render allows only one free-tier Postgres
+per account, and that slot was already used by an unrelated project. `render.yaml` provisions
+just the web service; `DATABASE_URL` is set directly on it, pointing at Neon. The Dockerfile
+builds the frontend, compiles the backend, and serves the built frontend as static files from
+the same service, so there is no cross-origin setup in production.
 
 ## Status
 
