@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useIsDesktop } from '../../hooks/useMediaQuery';
 import { useAuth } from '../../auth/AuthContext';
 import { useProfileTheme } from '../../theme/ThemeContext';
+import { canOfferInstall, useInstall } from '../../pwa/InstallContext';
 import { api } from '../../api/client';
 import { Avatar } from '../Avatar/Avatar';
 import { BookIcon, HomeIcon, PlusIcon, SearchIcon } from '../Icon/Icon';
@@ -50,6 +51,7 @@ export function Shell({ children, bare = false }: ShellProps) {
   const location = useLocation();
   const { user, logout } = useAuth();
   const theme = useProfileTheme();
+  const install = useInstall();
   const [menuOpen, setMenuOpen] = useState(false);
   const [search, setSearch] = useState('');
 
@@ -100,6 +102,19 @@ export function Shell({ children, bare = false }: ShellProps) {
           Settings
         </Link>
         <div className={styles.menuDivider} />
+        {/* Stays available after the banner is dismissed, so "Not now" is never
+            a one-way door out of installing. */}
+        {canOfferInstall(install) && (
+          <button
+            className={styles.menuItem}
+            onClick={() => {
+              setMenuOpen(false);
+              install.resurface();
+            }}
+          >
+            Install app
+          </button>
+        )}
         <Link to="/legal" className={styles.menuItem} onClick={() => setMenuOpen(false)}>
           Legal &amp; privacy
         </Link>

@@ -3,6 +3,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider, useAuth } from './auth/AuthContext';
 import { ThemeProvider } from './theme/ThemeContext';
 import { ToastProvider } from './components/Toast/ToastContext';
+import { InstallProvider } from './pwa/InstallContext';
+import { InstallPrompt } from './components/InstallPrompt/InstallPrompt';
 import { Shell } from './components/Shell/Shell';
 import { Auth } from './pages/Auth';
 import { Home } from './pages/Home';
@@ -77,7 +79,10 @@ export default function App() {
         <ToastProvider>
           <AuthProvider>
             <ThemeProvider>
-              <Routed />
+              <InstallProvider>
+                <Routed />
+                <InstallPrompt />
+              </InstallProvider>
             </ThemeProvider>
           </AuthProvider>
         </ToastProvider>

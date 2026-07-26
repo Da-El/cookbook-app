@@ -228,28 +228,26 @@
   justify-content: center;
 }
 
-/* Sits between the bell and "New meal": same 42px footprint as the bell, with
-   the avatar inset so the two read as a matched pair. */
+/* Sits between the bell and "New meal". Deliberately chrome-less - the avatar
+   is already a solid shape, so a card background and border around it just read
+   as a white box. Sized a touch under the bell's 42px because a filled shape
+   optically outweighs an outlined one. */
 .accountBtn {
-  width: 42px;
-  height: 42px;
   flex: none;
   padding: 0;
-  border-radius: 14px;
-  border: 1.5px solid var(--border-sidebar);
-  background: var(--surface-card);
+  border: none;
+  background: none;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
-/* Inset the avatar so the tile reads like the bell rather than a raw photo.
-   Radius is left to Avatar's own .sm.rounded rule, which outranks this. */
+/* Radius is left to Avatar's own .sm.rounded rule, which outranks this. */
 .accountBtn > * {
-  width: 32px;
-  height: 32px;
-  font-size: 12.5px;
+  width: 40px;
+  height: 40px;
+  font-size: 15px;
 }
 
 .newMeal {
