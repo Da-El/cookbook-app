@@ -291,6 +291,49 @@
   letter-spacing: .04em;
 }
 
+/* ---------- reviews & edits ---------- */
+
+.reviewScore {
+  color: var(--amber);
+  font: 700 13px var(--font-ui);
+  flex: none;
+}
+
+.reviewNote {
+  color: var(--secondary);
+  font: 400 13px var(--font-ui);
+  margin-top: 3px;
+  line-height: 1.4;
+}
+
+.reviewTime {
+  color: var(--muted-4);
+  font: 600 11px var(--font-ui);
+  margin-top: 4px;
+}
+
+.editFieldRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.editField {
+  color: var(--accent-dark);
+  font: 700 11px var(--font-ui);
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+
+.editWinning {
+  color: var(--green-dark);
+  background: var(--green-tint);
+  font: 700 10px var(--font-ui);
+  padding: 2px 7px;
+  border-radius: 999px;
+}
+
 /* ---------- kitchen ---------- */
 
 .kitchen {

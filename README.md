@@ -52,9 +52,14 @@ the same service, so there is no cross-origin setup in production.
 Every screen in the design spec is built and wired to real data: accounts, the ingredient
 catalog (363 USDA Foundation Foods) with community-edit voting on description/category/photo/
 nutrition, meals (create/browse/cook/save/rate), the Home feed (following, activity, stories,
-chefs-to-follow), Browse (meals/ingredients/chefs), the full Cookbook (recipes + kitchen
-sub-tabs, fridge, shopping), Meal Detail, Cook Mode, chef profiles, Settings, and Customize
-(live-applied themes).
+chefs-to-follow), Browse (meals/ingredients/chefs), the full Cookbook (recipes + kitchen +
+contributions sub-tabs, fridge, shopping), Meal Detail, Cook Mode, chef profiles, Settings,
+and Customize (live-applied themes).
+
+Beyond the spec: a **Contributions** group on the Cookbook page listing the reviews you've
+written and the ingredient edits you've submitted (with vote counts and which are currently
+winning), and the ability to withdraw your own edit — deleting one recomputes that field's
+winner, reverting the ingredient to no-photo / blank description if it was the only edit.
 
 Not built: **Ask Chef** (the AI cooking assistant) — deliberately deferred, since it needs
 an LLM API key decision (Claude vs OpenAI) that hasn't been made yet.

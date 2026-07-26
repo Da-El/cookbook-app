@@ -125,6 +125,20 @@
   border-color: var(--green);
 }
 
+.deleteBtn {
+  width: 24px;
+  height: 24px;
+  flex: none;
+  border: none;
+  background: var(--chip-bg);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+}
+
 .photoGrid {
   margin-top: 10px;
   display: grid;
@@ -132,11 +146,24 @@
   gap: 8px;
 }
 
+.photoTileWrap {
+  position: relative;
+}
+
+.photoTileWrap .deleteBtn {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  background: rgba(20, 10, 4, .65);
+  color: #fff;
+}
+
 .photoTile {
   position: relative;
   border-radius: 12px;
   overflow: hidden;
   aspect-ratio: 1;
+  width: 100%;
   background-size: cover;
   background-position: center;
   border: 2px solid transparent;

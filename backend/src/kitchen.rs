@@ -250,12 +250,14 @@ pub async fn counts(
     State(state): State<AppState>,
     CurrentUser(user): CurrentUser,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
-    let row = sqlx::query_as::<_, (i64, i64, i64, i64, i64)>(
+    let row = sqlx::query_as::<_, (i64, i64, i64, i64, i64, i64, i64)>(
         "SELECT (SELECT count(*) FROM cooked_meals WHERE user_id=$1),
                 (SELECT count(*) FROM saved_meals WHERE user_id=$1),
                 (SELECT count(*) FROM meals WHERE author_id=$1),
                 (SELECT count(*) FROM fridge_items WHERE user_id=$1),
-                (SELECT count(*) FROM shopping_items WHERE user_id=$1)",
+                (SELECT count(*) FROM shopping_items WHERE user_id=$1),
+                (SELECT count(*) FROM reviews WHERE user_id=$1),
+                (SELECT count(*) FROM ingredient_edits WHERE author_id=$1)",
     )
     .bind(user.id)
     .fetch_one(&state.db)
@@ -264,6 +266,76 @@ pub async fn counts(
 
     Ok(Json(serde_json::json!({
         "cooked": row.0, "saved": row.1, "published": row.2,
-        "fridge": row.3, "shopping": row.4
+        "fridge": row.3, "shopping": row.4,
+        "reviews": row.5, "edits": row.6
     })))
+}
+
+// ---------- the user's own contributions: reviews written, edits submitted ----------
+
+#[derive(Serialize, sqlx::FromRow)]
+pub struct MyReview {
+    pub id: i64,
+    pub meal_id: i64,
+    pub meal_name: String,
+    pub photo_url: Option<String>,
+    pub score: Option<i16>,
+    pub note: Option<String>,
+    pub is_public: bool,
+    pub cooked_at: chrono::DateTime<chrono::Utc>,
+}
+
+pub async fn my_reviews(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+) -> Result<Json<Vec<MyReview>>, StatusCode> {
+    let rows = sqlx::query_as::<_, MyReview>(
+        "SELECT r.id, r.meal_id, m.name AS meal_name, m.photo_url, r.score, r.note,
+                r.is_public, r.cooked_at
+         FROM reviews r JOIN meals m ON m.id = r.meal_id
+         WHERE r.user_id = $1
+         ORDER BY r.cooked_at DESC",
+    )
+    .bind(user.id)
+    .fetch_all(&state.db)
+    .await
+    .map_err(db_err)?;
+    Ok(Json(rows))
+}
+
+#[derive(Serialize, sqlx::FromRow)]
+pub struct MyEdit {
+    pub id: i64,
+    pub ingredient_id: i64,
+    pub ingredient_name: String,
+    pub ingredient_category: String,
+    pub field: String,
+    pub value: serde_json::Value,
+    pub votes: i32,
+    /// Whether this is the currently-winning edit for its field - same
+    /// highest-votes-then-oldest rule as `apply_winner` in ingredients.rs.
+    pub is_winning: bool,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+}
+
+pub async fn my_edits(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+) -> Result<Json<Vec<MyEdit>>, StatusCode> {
+    let rows = sqlx::query_as::<_, MyEdit>(
+        "SELECT e.id, e.ingredient_id, ing.name AS ingredient_name, ing.category AS ingredient_category,
+                e.field, e.value, e.votes,
+                e.id = (SELECT id FROM ingredient_edits e2
+                        WHERE e2.ingredient_id = e.ingredient_id AND e2.field = e.field
+                        ORDER BY e2.votes DESC, e2.id ASC LIMIT 1) AS is_winning,
+                e.created_at
+         FROM ingredient_edits e JOIN ingredients ing ON ing.id = e.ingredient_id
+         WHERE e.author_id = $1
+         ORDER BY e.created_at DESC",
+    )
+    .bind(user.id)
+    .fetch_all(&state.db)
+    .await
+    .map_err(db_err)?;
+    Ok(Json(rows))
 }

@@ -43,7 +43,10 @@ async fn main() -> anyhow::Result<()> {
         .route("/ingredients/{id}", get(ingredients::detail))
         .route("/ingredients/{id}/used-in", get(ingredients::used_in_meals))
         .route("/ingredients/{id}/edits", post(ingredients::submit_edit))
-        .route("/ingredients/{id}/edits/{field}", get(ingredients::list_edits))
+        .route(
+            "/ingredients/{id}/edits/{field}",
+            get(ingredients::list_edits).delete(ingredients::delete_edit),
+        )
         .route("/ingredients/{id}/edits/{edit_id}/vote", post(ingredients::vote_edit))
         // meals
         .route("/meals", get(meals::browse).post(meals::create))
@@ -67,6 +70,8 @@ async fn main() -> anyhow::Result<()> {
         .route("/cookbook/cooked", get(kitchen::cooked))
         .route("/cookbook/saved", get(kitchen::saved))
         .route("/cookbook/published", get(kitchen::published))
+        .route("/cookbook/reviews", get(kitchen::my_reviews))
+        .route("/cookbook/edits", get(kitchen::my_edits))
         // social
         .route("/feed", get(social::feed))
         .route("/activity", get(social::activity).post(social::mark_activity_seen))

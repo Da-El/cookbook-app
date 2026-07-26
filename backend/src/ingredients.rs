@@ -287,6 +287,7 @@ pub struct EditRow {
     pub author_name: Option<String>,
     pub votes: i32,
     pub voted_by_me: bool,
+    pub is_mine: bool,
 }
 
 pub async fn list_edits(
@@ -300,7 +301,8 @@ pub async fn list_edits(
     let viewer_id = viewer.map(|u| u.0.id);
     let rows = sqlx::query_as::<_, EditRow>(
         "SELECT e.id, e.value, u.display_name AS author_name, e.votes,
-                EXISTS (SELECT 1 FROM edit_votes v WHERE v.user_id = $3 AND v.edit_id = e.id) AS voted_by_me
+                EXISTS (SELECT 1 FROM edit_votes v WHERE v.user_id = $3 AND v.edit_id = e.id) AS voted_by_me,
+                COALESCE(e.author_id = $3, false) AS is_mine
          FROM ingredient_edits e LEFT JOIN users u ON u.id = e.author_id
          WHERE e.ingredient_id = $1 AND e.field = $2
          ORDER BY e.votes DESC, e.id ASC
@@ -313,6 +315,46 @@ pub async fn list_edits(
     .await
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(Json(rows))
+}
+
+/// Author-only: withdraw your own edit submission, then recompute the winner
+/// for that field (which may revert to no-photo / blank description if that
+/// was the only edit).
+pub async fn delete_edit(
+    State(state): State<AppState>,
+    crate::auth::CurrentUser(user): crate::auth::CurrentUser,
+    Path((id, edit_id)): Path<(i64, i64)>,
+) -> Result<StatusCode, (StatusCode, Json<serde_json::Value>)> {
+    let mut tx = state.db.begin().await.map_err(|_| oops())?;
+
+    let row: Option<(Option<i64>, String)> = sqlx::query_as(
+        "SELECT author_id, field FROM ingredient_edits WHERE id = $1 AND ingredient_id = $2",
+    )
+    .bind(edit_id)
+    .bind(id)
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(|_| oops())?;
+
+    let Some((author_id, field)) = row else {
+        return Err((StatusCode::NOT_FOUND, Json(serde_json::json!({ "error": "Not found." }))));
+    };
+    if author_id != Some(user.id) {
+        return Err((
+            StatusCode::FORBIDDEN,
+            Json(serde_json::json!({ "error": "You can only delete your own submission." })),
+        ));
+    }
+
+    sqlx::query("DELETE FROM ingredient_edits WHERE id = $1")
+        .bind(edit_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|_| oops())?;
+
+    apply_winner(&mut tx, id, &field).await.map_err(|_| oops())?;
+    tx.commit().await.map_err(|_| oops())?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 pub async fn vote_edit(
@@ -380,7 +422,28 @@ async fn apply_winner(
     .fetch_optional(&mut **tx)
     .await?;
 
-    let Some(value) = winner else { return Ok(()) };
+    // No edits left for this field (e.g. the last one was just deleted): the
+    // materialized column has no "original" to fall back to for category/
+    // nutrition (a winning edit overwrites it with nothing kept in reserve),
+    // so those are left as-is. description/photo do have a clean default.
+    let Some(value) = winner else {
+        match field {
+            "description" => {
+                sqlx::query("UPDATE ingredients SET description = '' WHERE id = $1")
+                    .bind(ingredient_id)
+                    .execute(&mut **tx)
+                    .await?;
+            }
+            "photo" => {
+                sqlx::query("UPDATE ingredients SET photo_url = NULL WHERE id = $1")
+                    .bind(ingredient_id)
+                    .execute(&mut **tx)
+                    .await?;
+            }
+            _ => {}
+        }
+        return Ok(());
+    };
 
     match field {
         "description" => {

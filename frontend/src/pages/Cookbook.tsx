@@ -16,8 +16,8 @@ import { ingredientBackground, mealBackground } from '../lib/imagery';
 import { PAGE_THEMES, heroTextColors } from '../lib/themes';
 import styles from './Cookbook.module.css';
 
-type Group = 'recipes' | 'kitchen';
-type SubTab = 'cooked' | 'saved' | 'published' | 'fridge' | 'shopping';
+type Group = 'recipes' | 'kitchen' | 'contributions';
+type SubTab = 'cooked' | 'saved' | 'published' | 'fridge' | 'shopping' | 'reviews' | 'edits';
 
 interface CookbookMeal {
   id: number;
@@ -36,15 +36,68 @@ interface KitchenItem {
   category: string;
 }
 
+interface MyReview {
+  id: number;
+  meal_id: number;
+  meal_name: string;
+  photo_url: string | null;
+  score: number | null;
+  note: string | null;
+  is_public: boolean;
+  cooked_at: string;
+}
+
+interface MyEdit {
+  id: number;
+  ingredient_id: number;
+  ingredient_name: string;
+  ingredient_category: string;
+  field: string;
+  value: unknown;
+  votes: number;
+  is_winning: boolean;
+  created_at: string;
+}
+
+function relativeTime(iso: string) {
+  const days = Math.round((Date.now() - new Date(iso).getTime()) / 86400000);
+  if (days < 1) return 'today';
+  if (days === 1) return '1 day ago';
+  if (days < 30) return `${days} days ago`;
+  return new Date(iso).toLocaleDateString(undefined, { month: 'short', year: 'numeric' });
+}
+
+const FIELD_LABEL: Record<string, string> = {
+  description: 'Description',
+  category: 'Category',
+  photo: 'Photo',
+  nutrition: 'Nutrition',
+};
+
+function formatEditValue(field: string, value: unknown): string {
+  if (field === 'nutrition' && value && typeof value === 'object') {
+    const v = value as { calories?: number; protein?: number; serving_size?: string };
+    const parts = [
+      v.calories != null ? `${v.calories} cal` : null,
+      v.protein != null ? `${v.protein}g protein` : null,
+      v.serving_size ?? null,
+    ].filter(Boolean);
+    return parts.join(' · ') || 'Updated values';
+  }
+  return String(value);
+}
+
 const SECTION: Record<SubTab, { title: string; sub: string }> = {
   cooked: { title: 'Meals you’ve cooked', sub: 'Your running record of everything you’ve made.' },
   saved: { title: 'Saved to cook', sub: 'Your wishlist — ready when you are.' },
   published: { title: 'Meals you’ve published', sub: 'Others see you as the author of these.' },
   fridge: { title: 'What’s in your fridge', sub: 'What you have on hand — your feed uses it.' },
   shopping: { title: 'Shopping list', sub: 'What you still need to pick up.' },
+  reviews: { title: 'Reviews you’ve left', sub: 'Every note and score you’ve left after cooking.' },
+  edits: { title: 'Edits you’ve suggested', sub: 'Your community contributions to the ingredient catalog.' },
 };
 
-const EMPTY: Record<'cooked' | 'saved' | 'published', { title: string; text: string; to: string }> = {
+const EMPTY: Record<'cooked' | 'saved' | 'published' | 'reviews' | 'edits', { title: string; text: string; to: string }> = {
   cooked: {
     title: 'Nothing cooked yet',
     text: 'Open a meal and mark it as cooked — it lands here with your notes.',
@@ -59,6 +112,16 @@ const EMPTY: Record<'cooked' | 'saved' | 'published', { title: string; text: str
     title: 'Publish your first meal',
     text: 'Create a meal page and it’ll appear here with your name on it.',
     to: '/create/meal',
+  },
+  reviews: {
+    title: 'No reviews yet',
+    text: 'Cook a meal and leave a note — it shows up here.',
+    to: '/browse',
+  },
+  edits: {
+    title: 'No edits yet',
+    text: 'Suggest a description, category, photo, or nutrition change on any ingredient page.',
+    to: '/browse',
   },
 };
 
@@ -88,6 +151,8 @@ export function Cookbook() {
   });
 
   const isMealTab = tab === 'cooked' || tab === 'saved' || tab === 'published';
+  const isKitchenTab = tab === 'fridge' || tab === 'shopping';
+  const isContributionTab = tab === 'reviews' || tab === 'edits';
 
   const { data: meals = [] } = useQuery({
     queryKey: ['cookbook', tab],
@@ -99,13 +164,25 @@ export function Cookbook() {
   const { data: items = [] } = useQuery({
     queryKey: [kitchenKey],
     queryFn: () => api.get<KitchenItem[]>(`/${kitchenKey}`),
-    enabled: !isMealTab,
+    enabled: isKitchenTab,
   });
 
   const { data: matches = [] } = useQuery({
     queryKey: ['ingredients', query],
     queryFn: () => api.get<IngredientSummary[]>(`/ingredients?search=${encodeURIComponent(query)}`),
-    enabled: !isMealTab && query.trim().length > 0,
+    enabled: isKitchenTab && query.trim().length > 0,
+  });
+
+  const { data: reviews = [] } = useQuery({
+    queryKey: ['cookbook-reviews'],
+    queryFn: () => api.get<MyReview[]>('/cookbook/reviews'),
+    enabled: tab === 'reviews',
+  });
+
+  const { data: myEdits = [] } = useQuery({
+    queryKey: ['cookbook-edits'],
+    queryFn: () => api.get<MyEdit[]>('/cookbook/edits'),
+    enabled: tab === 'edits',
   });
 
   const invalidateKitchen = () => {
@@ -170,9 +247,22 @@ export function Cookbook() {
       label: `Fridge ${counts?.fridge ?? 0}`,
       go: () => setTab('fridge'),
     },
+    reviews: {
+      text: 'You’ve also contributed ingredient edits.',
+      label: `Edits ${counts?.edits ?? 0}`,
+      go: () => setTab('edits'),
+    },
+    edits: {
+      text: 'You’ve also left reviews on meals you’ve cooked.',
+      label: `Reviews ${counts?.reviews ?? 0}`,
+      go: () => setTab('reviews'),
+    },
   };
 
-  const subTabs: SubTab[] = group === 'recipes' ? ['cooked', 'saved', 'published'] : ['fridge', 'shopping'];
+  const subTabs: SubTab[] =
+    group === 'recipes' ? ['cooked', 'saved', 'published']
+    : group === 'kitchen' ? ['fridge', 'shopping']
+    : ['reviews', 'edits'];
 
   const hasHeroPhoto = Boolean(theme?.cb_hero_photo_url);
   const heroTheme = theme?.cb_hero_theme ?? 'cream';
@@ -227,12 +317,13 @@ export function Cookbook() {
           fill={!isDesktop}
           onChange={(g) => {
             setGroup(g);
-            setTab(g === 'recipes' ? 'cooked' : 'fridge');
+            setTab(g === 'recipes' ? 'cooked' : g === 'kitchen' ? 'fridge' : 'reviews');
             setQuery('');
           }}
           options={[
             { value: 'recipes', label: 'Recipes' },
             { value: 'kitchen', label: 'Kitchen' },
+            { value: 'contributions', label: 'Contributions' },
           ]}
         />
       </div>
@@ -311,6 +402,61 @@ export function Cookbook() {
             text={EMPTY[tab as 'cooked' | 'saved' | 'published'].text}
             onClick={() => navigate(EMPTY[tab as 'cooked' | 'saved' | 'published'].to)}
           />
+        )
+      ) : isContributionTab ? (
+        tab === 'reviews' ? (
+          reviews.length > 0 ? (
+            <div className={styles.mealList}>
+              {reviews.map((r) => (
+                <button key={r.id} className={styles.mealRow} onClick={() => navigate(`/meals/${r.meal_id}`)}>
+                  <span className={styles.mealThumb} style={{ background: mealBackground(r.photo_url, null) }} />
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    <span className={styles.mealName} style={{ display: 'block' }}>{r.meal_name}</span>
+                    {r.score != null && <span className={styles.reviewScore}>★ {r.score}/10</span>}
+                    {r.note && <span className={styles.reviewNote} style={{ display: 'block' }}>{r.note}</span>}
+                    <span className={styles.reviewTime} style={{ display: 'block' }}>
+                      {relativeTime(r.cooked_at)}{!r.is_public && ' · Private'}
+                    </span>
+                  </span>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <EmptyCard
+              title={EMPTY.reviews.title}
+              text={EMPTY.reviews.text}
+              onClick={() => navigate(EMPTY.reviews.to)}
+            />
+          )
+        ) : myEdits.length > 0 ? (
+          <div className={styles.mealList}>
+            {myEdits.map((e) => (
+              <button key={e.id} className={styles.mealRow} onClick={() => navigate(`/ingredients/${e.ingredient_id}`)}>
+                {e.field === 'photo' ? (
+                  <span className={styles.mealThumb} style={{ background: `center/cover no-repeat url("${String(e.value)}")` }} />
+                ) : (
+                  <span className={styles.mealThumb} style={{ background: ingredientBackground(null, e.ingredient_category) }} />
+                )}
+                <span style={{ flex: 1, minWidth: 0 }}>
+                  <span className={styles.mealName} style={{ display: 'block' }}>{e.ingredient_name}</span>
+                  <span className={styles.editFieldRow}>
+                    <span className={styles.editField}>{FIELD_LABEL[e.field] ?? e.field}</span>
+                    {e.is_winning && <span className={styles.editWinning}>Winning</span>}
+                  </span>
+                  {e.field !== 'photo' && (
+                    <span className={styles.reviewNote} style={{ display: 'block' }}>
+                      {formatEditValue(e.field, e.value)}
+                    </span>
+                  )}
+                  <span className={styles.reviewTime} style={{ display: 'block' }}>
+                    {relativeTime(e.created_at)} · {e.votes} vote{e.votes === 1 ? '' : 's'}
+                  </span>
+                </span>
+              </button>
+            ))}
+          </div>
+        ) : (
+          <EmptyCard title={EMPTY.edits.title} text={EMPTY.edits.text} onClick={() => navigate(EMPTY.edits.to)} />
         )
       ) : (
         <div className={styles.kitchen}>

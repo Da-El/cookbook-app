@@ -10,6 +10,7 @@ interface EditRow {
   author_name: string | null;
   votes: number;
   voted_by_me: boolean;
+  is_mine: boolean;
 }
 
 const CATEGORIES = ['Vegetable', 'Fruit', 'Herb', 'Aromatic', 'Protein', 'Dairy', 'Grain', 'Pantry'];
@@ -38,13 +39,35 @@ function useEdits(ingredientId: number, field: string) {
     onSuccess: invalidate,
   });
 
-  return { edits, submit, vote };
+  const del = useMutation({
+    mutationFn: (editId: number) => api.del(`/ingredients/${ingredientId}/edits/${editId}`),
+    onSuccess: invalidate,
+  });
+
+  return { edits, submit, vote, del };
 }
 
 function VoteButton({ row, onVote }: { row: EditRow; onVote: () => void }) {
   return (
     <button className={`${styles.voteBtn} ${row.voted_by_me ? styles.voteBtnOn : ''}`} onClick={onVote}>
       {row.voted_by_me ? '✓' : '△'} {row.votes}
+    </button>
+  );
+}
+
+/** Author-only "withdraw your own submission" control. */
+function DeleteButton({ onDelete }: { onDelete: () => void }) {
+  return (
+    <button
+      className={styles.deleteBtn}
+      title="Delete your submission"
+      aria-label="Delete your submission"
+      onClick={(e) => {
+        e.stopPropagation();
+        onDelete();
+      }}
+    >
+      ×
     </button>
   );
 }
@@ -61,7 +84,7 @@ export function TextEditSection({
   label: string;
   placeholder: string;
 }) {
-  const { edits, submit, vote } = useEdits(ingredientId, field);
+  const { edits, submit, vote, del } = useEdits(ingredientId, field);
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState('');
 
@@ -105,6 +128,7 @@ export function TextEditSection({
                 {row.author_name && <span className={styles.rowMeta}> — {row.author_name}</span>}
               </span>
               <VoteButton row={row} onVote={() => vote.mutate(row.id)} />
+              {row.is_mine && <DeleteButton onDelete={() => del.mutate(row.id)} />}
             </div>
           ))}
         </div>
@@ -115,7 +139,7 @@ export function TextEditSection({
 
 /** Suggest-and-vote for category, as a chip picker instead of free text. */
 export function CategoryEditSection({ ingredientId }: { ingredientId: number }) {
-  const { edits, submit, vote } = useEdits(ingredientId, 'category');
+  const { edits, submit, vote, del } = useEdits(ingredientId, 'category');
   const [open, setOpen] = useState(false);
 
   return (
@@ -150,6 +174,7 @@ export function CategoryEditSection({ ingredientId }: { ingredientId: number }) 
             <div key={row.id} className={`${styles.row} ${i === 0 ? styles.rowWinner : ''}`}>
               <span className={styles.rowValue}>{String(row.value)}</span>
               <VoteButton row={row} onVote={() => vote.mutate(row.id)} />
+              {row.is_mine && <DeleteButton onDelete={() => del.mutate(row.id)} />}
             </div>
           ))}
         </div>
@@ -177,7 +202,7 @@ function describeNutrition(v: NutritionValue): string {
 
 /** Suggest-and-vote for the macro nutrition facts. */
 export function NutritionEditSection({ ingredientId }: { ingredientId: number }) {
-  const { edits, submit, vote } = useEdits(ingredientId, 'nutrition');
+  const { edits, submit, vote, del } = useEdits(ingredientId, 'nutrition');
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState({ serving_size: '', calories: '', protein: '', carbs: '', fat: '' });
 
@@ -259,6 +284,7 @@ export function NutritionEditSection({ ingredientId }: { ingredientId: number })
             <div key={row.id} className={`${styles.row} ${i === 0 ? styles.rowWinner : ''}`}>
               <span className={styles.rowValue}>{describeNutrition(row.value as NutritionValue)}</span>
               <VoteButton row={row} onVote={() => vote.mutate(row.id)} />
+              {row.is_mine && <DeleteButton onDelete={() => del.mutate(row.id)} />}
             </div>
           ))}
         </div>
@@ -269,7 +295,7 @@ export function NutritionEditSection({ ingredientId }: { ingredientId: number })
 
 /** Community photo submissions + voting. Winning photo becomes the ingredient's photo. */
 export function PhotoEditSection({ ingredientId }: { ingredientId: number }) {
-  const { edits, submit, vote } = useEdits(ingredientId, 'photo');
+  const { edits, submit, vote, del } = useEdits(ingredientId, 'photo');
 
   return (
     <div className={styles.section}>
@@ -283,15 +309,17 @@ export function PhotoEditSection({ ingredientId }: { ingredientId: number }) {
       {edits.length > 0 && (
         <div className={styles.photoGrid}>
           {edits.map((row, i) => (
-            <button
-              key={row.id}
-              className={`${styles.photoTile} ${i === 0 ? styles.photoTileWinner : ''}`}
-              style={{ backgroundImage: `url("${String(row.value)}")` }}
-              onClick={() => vote.mutate(row.id)}
-              title={row.voted_by_me ? 'Remove your vote' : 'Vote for this photo'}
-            >
-              <span className={styles.photoVotes}>{row.voted_by_me ? '✓ ' : ''}{row.votes}</span>
-            </button>
+            <div key={row.id} className={styles.photoTileWrap}>
+              <button
+                className={`${styles.photoTile} ${i === 0 ? styles.photoTileWinner : ''}`}
+                style={{ backgroundImage: `url("${String(row.value)}")` }}
+                onClick={() => vote.mutate(row.id)}
+                title={row.voted_by_me ? 'Remove your vote' : 'Vote for this photo'}
+              >
+                <span className={styles.photoVotes}>{row.voted_by_me ? '✓ ' : ''}{row.votes}</span>
+              </button>
+              {row.is_mine && <DeleteButton onDelete={() => del.mutate(row.id)} />}
+            </div>
           ))}
         </div>
       )}

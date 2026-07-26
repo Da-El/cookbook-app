@@ -20,7 +20,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     throw new ApiError(res.status, body?.error ?? `Request failed (${res.status})`);
   }
 
-  return res.status === 204 ? (undefined as T) : res.json();
+  // Any empty body, not just 204: some endpoints answer 201 with no content,
+  // and res.json() on an empty body throws - which would reject the mutation
+  // and silently skip its onSuccess cache invalidation.
+  const text = await res.text();
+  return text ? JSON.parse(text) : (undefined as T);
 }
 
 export const api = {
