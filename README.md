@@ -56,13 +56,28 @@ chefs-to-follow), Browse (meals/ingredients/chefs), the full Cookbook (recipes +
 contributions sub-tabs, fridge, shopping), Meal Detail, Cook Mode, chef profiles, Settings,
 and Customize (live-applied themes).
 
-Beyond the spec: a **Contributions** group on the Cookbook page listing the reviews you've
-written and the ingredient edits you've submitted (with vote counts and which are currently
-winning), and the ability to withdraw your own edit — deleting one recomputes that field's
-winner, reverting the ingredient to no-photo / blank description if it was the only edit.
+Beyond the spec:
+
+- A **Contributions** group on the Cookbook page listing the reviews you've written and the
+  ingredient edits you've submitted (with vote counts and which are currently winning), and
+  the ability to withdraw your own edit — deleting one recomputes that field's winner,
+  reverting the ingredient to no-photo / blank description if it was the only edit.
+- An **account menu** on the topbar avatar (cookbook, customize, settings, legal, log out).
+- A **Legal & privacy** page at `/legal`, written against the real schema and auth code
+  rather than boilerplate. It's the one route that resolves signed-out, but nothing links
+  to it from the sign-in screen. It is *not* lawyer-reviewed and says so.
+- An **install prompt** for the PWA (`src/pwa/InstallContext.tsx`). Chrome fires the real
+  `beforeinstallprompt`; iOS Safari has no such API, so that branch shows Share → Add to
+  Home Screen steps instead. Dismissal persists, and an "Install app" entry stays in the
+  account menu so declining isn't a one-way door.
 
 Not built: **Ask Chef** (the AI cooking assistant) — deliberately deferred, since it needs
 an LLM API key decision (Claude vs OpenAI) that hasn't been made yet.
+
+Also missing, and worth adding before this is shared widely: `screenshots` in the web app
+manifest, which is what makes desktop Chrome/Edge show a rich install dialog instead of a
+bare one. It needs real captures of the app, so drop them in `frontend/public/` and add
+them to the `manifest.icons` sibling `screenshots` array in `vite.config.ts`.
 
 ## Data attribution
 
