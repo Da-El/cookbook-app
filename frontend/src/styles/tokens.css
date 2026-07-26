@@ -1,0 +1,86 @@
+/* Design tokens - see design_handoff_cookbook_v3/README.md for source spec. */
+:root {
+  /* Page background themes (user-selectable via Customize your Cookbook) */
+  --bg-cream: #F8F7F5;
+  --bg-sage: #F1F6F2;
+  --bg-terracotta: #FBF2E9;
+  --bg-slate: #EFF2F5;
+  --bg-blush: #FBF0F2;
+  --bg-page: var(--bg-cream);
+
+  /* Surfaces */
+  --surface-card: #FFFFFF;
+  --border-card: #EFE7DA;
+  --border-card-strong: #E3D9C9;
+
+  /* Text */
+  --ink: #241F1B;
+  --muted-1: #8A8074;
+  --muted-2: #948A7D;
+  --muted-3: #A79C8D;
+  --muted-4: #B4A996;
+
+  /* Accent (terracotta) - primary actions/links */
+  --accent-start: #D9542B;
+  --accent-end: #B8431F;
+  --accent-gradient: linear-gradient(145deg, var(--accent-start), var(--accent-end));
+
+  /* Secondary accent (green) - positive/fridge/cooked */
+  --positive-start: #3F5D46;
+  --positive-end: #2C4131;
+  --positive-gradient: linear-gradient(145deg, var(--positive-start), var(--positive-end));
+
+  --rating-amber: #E8A33D;
+
+  /* Dark chrome - Ask Chef, cook mode, chat */
+  --chrome-start: #241F1B;
+  --chrome-end: #3B302A;
+  --chrome-gradient: linear-gradient(135deg, var(--chrome-start), var(--chrome-end));
+
+  /* Chips/pills */
+  --chip-idle-bg: #F0E9DD;
+  --chip-idle-bg-alt: #EFE7DA;
+
+  /* Typography */
+  --font-display: 'Instrument Serif', serif;
+  --font-ui: 'Hanken Grotesk', sans-serif;
+
+  --text-display-sm: 17px;
+  --text-display-md: 24px;
+  --text-display-lg: 32px;
+  --text-display-xl: 46px;
+
+  --text-ui-xs: 10.5px;
+  --text-ui-sm: 12px;
+  --text-ui-md: 14px;
+  --text-ui-lg: 16px;
+  --text-ui-xl: 18px;
+
+  --text-eyebrow-size: 10px;
+  --text-eyebrow-weight: 700;
+  --text-eyebrow-tracking: 0.06em;
+
+  /* Radius scale */
+  --radius-sm: 11px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+  --radius-pill: 999px;
+
+  /* Shadows */
+  --shadow-card: 0 12px 28px -20px rgba(60, 40, 20, .5);
+  --shadow-chrome: 0 14px 30px -18px rgba(30, 20, 10, .8);
+
+  /* Avatar sizes */
+  --avatar-sm: 38px;
+  --avatar-md: 48px;
+  --avatar-lg: 60px;
+
+  /* Spacing scale */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+}

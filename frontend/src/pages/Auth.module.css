@@ -1,0 +1,63 @@
+.screen {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: var(--space-5);
+}
+
+.panel {
+  width: 100%;
+  max-width: 400px;
+  display: grid;
+  gap: var(--space-5);
+}
+
+.brand {
+  text-align: center;
+  display: grid;
+  gap: var(--space-2);
+}
+
+.title {
+  font-family: var(--font-display);
+  font-size: var(--text-display-xl);
+  line-height: 1.05;
+}
+
+.tagline {
+  color: var(--muted-1);
+  font-size: var(--text-ui-md);
+  margin: 0;
+}
+
+.form {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.error {
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  background: #FDEDE8;
+  border: 1px solid #F3C6B8;
+  border-radius: var(--radius-sm);
+  color: var(--accent-end);
+  font-size: var(--text-ui-sm);
+}
+
+.switch {
+  text-align: center;
+  font-size: var(--text-ui-sm);
+  color: var(--muted-1);
+  margin: 0;
+}
+
+.switchLink {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: inherit;
+  font-weight: 600;
+  color: var(--accent-start);
+  cursor: pointer;
+}

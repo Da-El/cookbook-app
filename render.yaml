@@ -1,0 +1,19 @@
+databases:
+  - name: cookbook-db
+    databaseName: cookbook
+    plan: free
+
+services:
+  - type: web
+    name: cookbook
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/health
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: cookbook-db
+          property: connectionString
+      - key: SECURE_COOKIES
+        value: "true"
