@@ -231,6 +231,46 @@ pub async fn create(
     Ok((StatusCode::CREATED, Json(CreateIngredientResponse { id: Some(id), close_match: None })))
 }
 
+#[derive(Serialize, sqlx::FromRow)]
+pub struct UsedInMeal {
+    pub id: i64,
+    pub name: String,
+    pub cuisine: String,
+    /// Whether the viewer's fridge already covers every ingredient this meal needs.
+    pub can_make: bool,
+}
+
+pub async fn used_in_meals(
+    State(state): State<AppState>,
+    user: Option<crate::auth::CurrentUser>,
+    Path(id): Path<i64>,
+) -> Result<Json<Vec<UsedInMeal>>, StatusCode> {
+    let viewer = user.map(|u| u.0.id);
+    let rows = sqlx::query_as::<_, UsedInMeal>(
+        "SELECT m.id, m.name, m.cuisine,
+                NOT EXISTS (
+                  SELECT 1 FROM meal_ingredients mi2
+                  WHERE mi2.meal_id = m.id
+                    AND NOT EXISTS (SELECT 1 FROM fridge_items f
+                                    WHERE f.user_id = $2 AND f.ingredient_id = mi2.ingredient_id)
+                ) AS can_make
+         FROM meals m
+         JOIN meal_ingredients mi ON mi.meal_id = m.id
+         WHERE mi.ingredient_id = $1 AND m.visibility = 'public'
+         ORDER BY m.rating DESC
+         LIMIT 30",
+    )
+    .bind(id)
+    .bind(viewer)
+    .fetch_all(&state.db)
+    .await
+    .map_err(|e| {
+        tracing::error!("used_in_meals failed: {e}");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+    Ok(Json(rows))
+}
+
 fn bad(msg: &str) -> (StatusCode, Json<serde_json::Value>) {
     (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "error": msg })))
 }

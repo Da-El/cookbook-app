@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider, useAuth } from './auth/AuthContext';
+import { ThemeProvider } from './theme/ThemeContext';
 import { ToastProvider } from './components/Toast/ToastContext';
 import { Shell } from './components/Shell/Shell';
 import { Auth } from './pages/Auth';
@@ -10,15 +11,24 @@ import { Create } from './pages/Create';
 import { CreateMeal } from './pages/CreateMeal';
 import { CreateIngredient } from './pages/CreateIngredient';
 import { Cookbook } from './pages/Cookbook';
+import { Customize } from './pages/Customize';
 import { IngredientDetail } from './pages/IngredientDetail';
-import { Placeholder } from './pages/Placeholder';
+import { MealDetail } from './pages/MealDetail';
+import { CookMode } from './pages/CookMode';
+import { ChefPage } from './pages/ChefPage';
+import { Settings } from './pages/Settings';
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { refetchOnWindowFocus: false } },
 });
 
-function Shelled({ children }: { children: React.ReactNode }) {
+function Tab({ children }: { children: React.ReactNode }) {
   return <Shell>{children}</Shell>;
+}
+
+/** Detail/overlay screens: sidebar persists on desktop, tab bar hides on mobile. */
+function Bare({ children }: { children: React.ReactNode }) {
+  return <Shell bare>{children}</Shell>;
 }
 
 function Routed() {
@@ -28,16 +38,21 @@ function Routed() {
 
   return (
     <Routes>
-      <Route path="/" element={<Shelled><Home /></Shelled>} />
-      <Route path="/browse" element={<Shelled><Browse /></Shelled>} />
-      <Route path="/create" element={<Shelled><Create /></Shelled>} />
-      <Route path="/create/meal" element={<Shelled><CreateMeal /></Shelled>} />
-      <Route path="/create/ingredient" element={<Shelled><CreateIngredient /></Shelled>} />
-      <Route path="/cookbook" element={<Shelled><Cookbook /></Shelled>} />
-      <Route path="/ingredients/:id" element={<IngredientDetail />} />
-      <Route path="/meals/:id" element={<Placeholder title="Meal" />} />
-      <Route path="/chefs/:id" element={<Placeholder title="Chef" />} />
-      <Route path="/settings" element={<Placeholder title="Settings" />} />
+      <Route path="/" element={<Tab><Home /></Tab>} />
+      <Route path="/browse" element={<Tab><Browse /></Tab>} />
+      <Route path="/create" element={<Tab><Create /></Tab>} />
+      <Route path="/cookbook" element={<Tab><Cookbook /></Tab>} />
+
+      <Route path="/create/meal" element={<Bare><CreateMeal /></Bare>} />
+      <Route path="/create/ingredient" element={<Bare><CreateIngredient /></Bare>} />
+      <Route path="/cookbook/customize" element={<Bare><Customize /></Bare>} />
+      <Route path="/ingredients/:id" element={<Bare><IngredientDetail /></Bare>} />
+      <Route path="/meals/:id" element={<Bare><MealDetail /></Bare>} />
+      <Route path="/chefs/:id" element={<Bare><ChefPage /></Bare>} />
+      <Route path="/settings" element={<Bare><Settings /></Bare>} />
+
+      {/* Full-screen, no chrome on either platform. */}
+      <Route path="/meals/:id/cook" element={<CookMode />} />
     </Routes>
   );
 }
@@ -48,7 +63,9 @@ export default function App() {
       <BrowserRouter>
         <ToastProvider>
           <AuthProvider>
-            <Routed />
+            <ThemeProvider>
+              <Routed />
+            </ThemeProvider>
           </AuthProvider>
         </ToastProvider>
       </BrowserRouter>

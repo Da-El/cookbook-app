@@ -1,0 +1,174 @@
+.page {
+  max-width: 860px;
+  margin: 0 auto;
+  padding-top: 6px;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-top: 2px;
+}
+
+.backBtn {
+  width: 40px;
+  height: 40px;
+  flex: none;
+  border-radius: 13px;
+  border: 1.5px solid var(--border-card);
+  background: var(--surface-card);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--ink);
+}
+
+.profileRow {
+  margin-top: 20px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.name {
+  font-family: var(--font-display);
+  font-size: 28px;
+  color: var(--ink);
+  line-height: 1.05;
+}
+
+.bio {
+  color: var(--muted);
+  font: 400 13.5px var(--font-ui);
+  margin-top: 4px;
+  max-width: 420px;
+}
+
+.followerCount {
+  color: var(--muted-2);
+  font: 500 12.5px var(--font-ui);
+  margin-top: 6px;
+}
+
+.followBtn {
+  margin-top: 20px;
+  width: 100%;
+  padding: 13px;
+  border-radius: 14px;
+  border: 1.5px solid var(--accent);
+  background: var(--accent);
+  color: #fff;
+  font: 700 14px var(--font-ui);
+  cursor: pointer;
+}
+
+.followBtnOn {
+  background: var(--surface-card);
+  color: var(--ink);
+  border-color: var(--border-card);
+}
+
+.tabs {
+  margin-top: 22px;
+  display: flex;
+  gap: 8px;
+}
+
+.tab {
+  flex: 1;
+  padding: 10px 6px;
+  border-radius: 999px;
+  border: 1.5px solid var(--border-card);
+  background: var(--surface-card);
+  color: var(--secondary);
+  font: 700 12.5px var(--font-ui);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+}
+
+.tabActive {
+  background: var(--ink);
+  color: #fff;
+  border-color: var(--ink);
+}
+
+.tabCount {
+  opacity: .55;
+}
+
+.mealList {
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.mealRow {
+  display: flex;
+  gap: 13px;
+  align-items: center;
+  cursor: pointer;
+  padding: 10px;
+  border-radius: 16px;
+  border: 1px solid var(--border-hairline);
+  background: var(--surface-card);
+  text-align: left;
+  width: 100%;
+}
+
+.mealThumb {
+  width: 54px;
+  height: 54px;
+  border-radius: 13px;
+  flex: none;
+}
+
+.mealName {
+  font-family: var(--font-display);
+  font-size: 18px;
+  color: var(--ink);
+  line-height: 1.05;
+}
+
+.mealSub {
+  color: var(--muted-2);
+  font: 500 12.5px var(--font-ui);
+  margin-top: 3px;
+}
+
+.reviewRow {
+  display: flex;
+  gap: 13px;
+  align-items: center;
+  cursor: pointer;
+  padding: 10px;
+  border-radius: 16px;
+  border: 1px solid var(--border-hairline);
+  background: var(--surface-card);
+  text-align: left;
+  width: 100%;
+}
+
+.reviewScore {
+  color: var(--amber);
+  font: 700 13px var(--font-ui);
+  flex: none;
+}
+
+.reviewNote {
+  color: var(--secondary);
+  font: 400 13px var(--font-ui);
+  margin-top: 3px;
+  line-height: 1.4;
+}
+
+.reviewTime {
+  color: var(--muted-4);
+  font: 600 11px var(--font-ui);
+  margin-top: 4px;
+}

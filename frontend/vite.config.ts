@@ -25,6 +25,11 @@ export default defineConfig({
     }),
   ],
   server: {
+    // Pinned rather than left to Vite's default (5173): another project on
+    // this machine (C:\Users\bjenn\CookBook\apps\web) also defaults to 5173,
+    // and whichever dev server starts last silently steals the port.
+    port: 5180,
+    strictPort: true,
     proxy: {
       '/api': {
         target: 'http://localhost:8090',

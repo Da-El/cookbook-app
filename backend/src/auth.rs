@@ -273,6 +273,144 @@ pub async fn me(CurrentUser(user): CurrentUser) -> Json<UserProfile> {
     Json(user)
 }
 
+#[derive(Serialize)]
+pub struct SettingsProfile {
+    pub display_name: String,
+    pub email: String,
+    pub bio: Option<String>,
+    pub diet_prefs: Vec<String>,
+    pub vis_mine: String,
+    pub vis_made: String,
+    pub vis_want: String,
+    pub vis_fridge: String,
+}
+
+pub async fn settings(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+) -> Result<Json<SettingsProfile>, StatusCode> {
+    let row = sqlx::query_as::<_, (String, Option<String>, Option<String>, Vec<String>, String, String, String, String)>(
+        "SELECT display_name, email, bio, diet_prefs, vis_mine, vis_made, vis_want, vis_fridge
+         FROM users WHERE id = $1",
+    )
+    .bind(user.id)
+    .fetch_one(&state.db)
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    Ok(Json(SettingsProfile {
+        display_name: row.0,
+        email: row.1.unwrap_or_default(),
+        bio: row.2,
+        diet_prefs: row.3,
+        vis_mine: row.4,
+        vis_made: row.5,
+        vis_want: row.6,
+        vis_fridge: row.7,
+    }))
+}
+
+#[derive(Deserialize)]
+pub struct AccountUpdate {
+    pub email: Option<String>,
+    pub current_password: Option<String>,
+    pub new_password: Option<String>,
+}
+
+/// Email and password changes both require the current password, since either
+/// one is enough to take over the account if a session cookie ever leaks.
+pub async fn update_account(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Json(body): Json<AccountUpdate>,
+) -> Result<StatusCode, (StatusCode, Json<serde_json::Value>)> {
+    let wants_email = body.email.as_deref().map(str::trim).filter(|e| !e.is_empty());
+    let wants_password = body.new_password.as_deref().filter(|p| !p.is_empty());
+
+    if wants_email.is_none() && wants_password.is_none() {
+        return Ok(StatusCode::NO_CONTENT);
+    }
+
+    let stored_hash: Option<String> =
+        sqlx::query_scalar("SELECT password_hash FROM users WHERE id = $1")
+            .bind(user.id)
+            .fetch_one(&state.db)
+            .await
+            .map_err(|_| oops())?;
+
+    if let Some(hash) = &stored_hash {
+        let current = body.current_password.as_deref().unwrap_or("");
+        let parsed = PasswordHash::new(hash).map_err(|_| oops())?;
+        if Argon2::default().verify_password(current.as_bytes(), &parsed).is_err() {
+            return Err(err(StatusCode::UNAUTHORIZED, "That password isn't right."));
+        }
+    }
+
+    if let Some(email) = wants_email {
+        if !email.contains('@') {
+            return Err(err(StatusCode::BAD_REQUEST, "Enter a valid email address."));
+        }
+        sqlx::query("UPDATE users SET email = $1, updated_at = now() WHERE id = $2")
+            .bind(email.to_lowercase())
+            .bind(user.id)
+            .execute(&state.db)
+            .await
+            .map_err(|e| {
+                if let sqlx::Error::Database(db) = &e {
+                    if db.is_unique_violation() {
+                        return err(StatusCode::CONFLICT, "That email is already in use.");
+                    }
+                }
+                oops()
+            })?;
+    }
+
+    if let Some(new_password) = wants_password {
+        if new_password.chars().count() < 8 {
+            return Err(err(StatusCode::BAD_REQUEST, "New password must be at least 8 characters."));
+        }
+        let mut salt_bytes = [0u8; 16];
+        rand::rng().fill_bytes(&mut salt_bytes);
+        let salt = SaltString::encode_b64(&salt_bytes).map_err(|_| oops())?;
+        let hash = Argon2::default()
+            .hash_password(new_password.as_bytes(), &salt)
+            .map_err(|_| oops())?
+            .to_string();
+        sqlx::query("UPDATE users SET password_hash = $1, updated_at = now() WHERE id = $2")
+            .bind(hash)
+            .bind(user.id)
+            .execute(&state.db)
+            .await
+            .map_err(|_| oops())?;
+        // Changing the password invalidates every other session.
+        sqlx::query("DELETE FROM sessions WHERE user_id = $1").bind(user.id).execute(&state.db).await.ok();
+    }
+
+    Ok(StatusCode::NO_CONTENT)
+}
+
+pub async fn delete_account(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    jar: CookieJar,
+) -> Result<(CookieJar, StatusCode), StatusCode> {
+    sqlx::query("DELETE FROM users WHERE id = $1")
+        .bind(user.id)
+        .execute(&state.db)
+        .await
+        .map_err(|e| {
+            tracing::error!("delete account failed: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+    let mut removal = Cookie::from(SESSION_COOKIE);
+    removal.set_path("/");
+    Ok((jar.remove(removal), StatusCode::NO_CONTENT))
+}
+
+fn oops() -> (StatusCode, Json<serde_json::Value>) {
+    err(StatusCode::INTERNAL_SERVER_ERROR, "Something went wrong.")
+}
+
 fn err(status: StatusCode, msg: &str) -> (StatusCode, Json<serde_json::Value>) {
     (status, Json(serde_json::json!({ "error": msg })))
 }

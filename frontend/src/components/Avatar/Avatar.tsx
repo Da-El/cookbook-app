@@ -2,7 +2,7 @@ import styles from './Avatar.module.css';
 
 type Size = 'sm' | 'md' | 'lg';
 type Shape = 'rounded' | 'circle';
-type Theme = 'green' | 'terracotta' | 'slate' | 'blush';
+type Theme = 'green' | 'terracotta' | 'navy' | 'plum';
 
 interface AvatarProps {
   name: string;

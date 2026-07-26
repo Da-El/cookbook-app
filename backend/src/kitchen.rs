@@ -120,6 +120,32 @@ pub async fn shopping_add(
     Ok(StatusCode::NO_CONTENT)
 }
 
+#[derive(Deserialize)]
+pub struct AddMany {
+    pub ingredient_ids: Vec<i64>,
+}
+
+/// Meal Detail's "add N missing to shopping list" - one round trip instead of N.
+pub async fn shopping_add_many(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Json(b): Json<AddMany>,
+) -> Result<StatusCode, StatusCode> {
+    let mut tx = state.db.begin().await.map_err(db_err)?;
+    for id in b.ingredient_ids {
+        sqlx::query(
+            "INSERT INTO shopping_items (user_id, ingredient_id) VALUES ($1,$2) ON CONFLICT DO NOTHING",
+        )
+        .bind(user.id)
+        .bind(id)
+        .execute(&mut *tx)
+        .await
+        .map_err(db_err)?;
+    }
+    tx.commit().await.map_err(db_err)?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
 pub async fn shopping_remove(
     State(state): State<AppState>,
     CurrentUser(user): CurrentUser,

@@ -36,21 +36,27 @@ async fn main() -> anyhow::Result<()> {
         .route("/auth/login", post(auth::login))
         .route("/auth/logout", post(auth::logout))
         .route("/auth/me", get(auth::me))
+        .route("/auth/account", post(auth::update_account).delete(auth::delete_account))
+        .route("/settings", get(auth::settings))
         .route("/ingredients", get(ingredients::list).post(ingredients::create))
         .route("/ingredients/categories", get(ingredients::categories))
         .route("/ingredients/{id}", get(ingredients::detail))
+        .route("/ingredients/{id}/used-in", get(ingredients::used_in_meals))
         // meals
         .route("/meals", get(meals::browse).post(meals::create))
         .route("/meals/filters", get(meals::filters))
         .route("/meals/{id}", get(meals::detail))
         .route("/meals/{id}/save", post(meals::toggle_save))
+        .route("/meals/{id}/photo", post(meals::update_photo))
         .route("/meals/{id}/cook", post(meals::cook))
         .route("/meals/{id}/rate", post(meals::rate))
+        .route("/meals/{id}/journal", get(meals::my_journal))
         .route("/meals/{id}/like", post(social::toggle_like))
         // kitchen
         .route("/fridge", get(kitchen::fridge_list).post(kitchen::fridge_add))
         .route("/fridge/{id}", delete(kitchen::fridge_remove))
         .route("/shopping", get(kitchen::shopping_list).post(kitchen::shopping_add))
+        .route("/shopping/many", post(kitchen::shopping_add_many))
         .route("/shopping/{id}", delete(kitchen::shopping_remove))
         .route("/shopping/{id}/got-it", post(kitchen::shopping_got_it))
         // cookbook lists
@@ -66,7 +72,12 @@ async fn main() -> anyhow::Result<()> {
         .route("/chefs/following", get(social::following))
         .route("/chefs/{id}", get(social::profile))
         .route("/chefs/{id}/follow", post(social::toggle_follow))
+        .route("/chefs/{id}/published", get(social::chef_published))
+        .route("/chefs/{id}/cooked", get(social::chef_cooked))
+        .route("/chefs/{id}/reviews", get(social::chef_reviews))
         .route("/profile", post(social::update_profile))
+        .route("/profile/theme", get(social::my_theme))
+        .route("/profile/customize", post(social::update_customize))
         .with_state(state);
 
     let mut app = Router::new().nest("/api", api);

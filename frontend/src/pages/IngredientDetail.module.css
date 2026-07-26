@@ -1,66 +1,93 @@
 .page {
-  padding: var(--space-4);
-  display: grid;
-  gap: var(--space-4);
+  max-width: 860px;
+  margin: 0 auto;
+  padding-top: 6px;
 }
 
-.back {
-  justify-self: start;
-  background: none;
-  border: none;
-  padding: 0;
-  font-size: var(--text-ui-sm);
-  font-weight: 600;
-  color: var(--accent-start);
+.header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-top: 2px;
+}
+
+.backBtn {
+  width: 40px;
+  height: 40px;
+  flex: none;
+  border-radius: 13px;
+  border: 1.5px solid var(--border-card);
+  background: var(--surface-card);
+  display: flex;
+  align-items: center;
+  justify-content: center;
   cursor: pointer;
+  color: var(--ink);
+}
+
+.photo {
+  margin-top: 16px;
+  height: 200px;
+  border-radius: 22px;
+  box-shadow: var(--shadow-card);
 }
 
 .name {
   font-family: var(--font-display);
-  font-size: var(--text-display-lg);
+  font-size: 32px;
+  color: var(--ink);
+  margin-top: 18px;
 }
 
 .chips {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-2);
+  gap: 8px;
+  margin-top: 10px;
 }
 
 .tag {
-  padding: var(--space-1) var(--space-3);
-  background: var(--chip-idle-bg);
-  border-radius: var(--radius-pill);
-  font-size: var(--text-ui-sm);
-  color: var(--muted-1);
+  padding: 4px 12px;
+  background: var(--chip-bg);
+  border-radius: 999px;
+  font: 500 12px var(--font-ui);
+  color: var(--secondary);
 }
 
 .source {
-  background: var(--positive-gradient);
+  background: var(--green);
   color: #fff;
-  font-weight: 600;
+  font-weight: 700;
 }
 
 .desc {
-  margin: 0;
-  color: var(--muted-1);
+  margin-top: 14px;
+  color: var(--secondary);
   line-height: 1.5;
+  font: 400 15px var(--font-ui);
+}
+
+.card {
+  margin-top: 16px;
+  padding: 18px;
+  border-radius: 18px;
+  background: var(--surface-card);
+  border: 1px solid var(--border-hairline);
 }
 
 .sectionTitle {
-  font-family: var(--font-ui);
-  font-size: var(--text-eyebrow-size);
-  font-weight: var(--text-eyebrow-weight);
-  letter-spacing: var(--text-eyebrow-tracking);
+  font: 700 10px var(--font-ui);
+  letter-spacing: .06em;
   text-transform: uppercase;
   color: var(--muted-2);
-  margin: 0 0 var(--space-3);
+  margin: 0 0 12px;
 }
 
 .macros {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(72px, 1fr));
-  gap: var(--space-3);
-  margin-bottom: var(--space-5);
+  gap: 12px;
+  margin-bottom: 20px;
 }
 
 .macro {
@@ -69,12 +96,13 @@
 
 .macroValue {
   font-family: var(--font-display);
-  font-size: var(--text-display-md);
+  font-size: 24px;
   line-height: 1.1;
+  color: var(--ink);
 }
 
 .macroLabel {
-  font-size: var(--text-ui-xs);
+  font-size: 10.5px;
   color: var(--muted-2);
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -83,14 +111,14 @@
 
 .micro {
   display: grid;
-  gap: var(--space-1);
-  margin-bottom: var(--space-3);
+  gap: 4px;
+  margin-bottom: 12px;
 }
 
 .microHead {
   display: flex;
   justify-content: space-between;
-  font-size: var(--text-ui-sm);
+  font-size: 12px;
 }
 
 .microName {
@@ -103,19 +131,68 @@
 
 .track {
   height: 6px;
-  background: var(--chip-idle-bg);
-  border-radius: var(--radius-pill);
+  background: var(--chip-bg);
+  border-radius: 999px;
   overflow: hidden;
 }
 
 .fill {
   height: 100%;
-  background: var(--positive-gradient);
-  border-radius: var(--radius-pill);
+  background: var(--green);
+  border-radius: 999px;
 }
 
 .serving {
-  font-size: var(--text-ui-sm);
+  font-size: 12px;
   color: var(--muted-2);
-  margin: 0 0 var(--space-4);
+  margin: 0 0 16px;
+}
+
+.usedTitle {
+  font-family: var(--font-display);
+  font-size: 22px;
+  color: var(--ink);
+  margin-top: 28px;
+}
+
+.usedList {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.usedRow {
+  display: flex;
+  gap: 13px;
+  align-items: center;
+  cursor: pointer;
+  padding: 10px;
+  border-radius: 16px;
+  border: 1px solid var(--border-hairline);
+  background: var(--surface-card);
+  text-align: left;
+  width: 100%;
+}
+
+.usedThumb {
+  width: 48px;
+  height: 48px;
+  border-radius: 13px;
+  flex: none;
+}
+
+.usedName {
+  font-family: var(--font-display);
+  font-size: 17px;
+  color: var(--ink);
+  line-height: 1.05;
+}
+
+.usedDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--green);
+  flex: none;
 }

@@ -42,7 +42,7 @@
   font-size: var(--text-display-sm);
 }
 
-.theme-green { background: var(--positive-gradient); }
-.theme-terracotta { background: var(--accent-gradient); }
-.theme-slate { background: linear-gradient(145deg, #7C8A99, #55626F); }
-.theme-blush { background: linear-gradient(145deg, #D98FA0, #B8637A); }
+.theme-green { background: linear-gradient(145deg, #3F5D46, #2C4131); }
+.theme-terracotta { background: linear-gradient(145deg, #D9542B, #B8431F); }
+.theme-navy { background: linear-gradient(145deg, #3B5B7A, #28405A); }
+.theme-plum { background: linear-gradient(145deg, #7A4B6E, #54314C); }

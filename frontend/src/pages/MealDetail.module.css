@@ -1,0 +1,507 @@
+.page {
+  max-width: 860px;
+  margin: 0 auto;
+  padding-top: 6px;
+}
+
+.photoHeader {
+  height: 250px;
+  border-radius: 26px;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 18px 40px -22px rgba(60, 40, 20, .7);
+}
+
+.scrim {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(20, 10, 4, .28) 0%, rgba(0, 0, 0, 0) 30%, rgba(20, 10, 4, .68));
+}
+
+.actionBtn {
+  position: absolute;
+  width: 40px;
+  height: 40px;
+  border-radius: 13px;
+  border: none;
+  background: rgba(255, 255, 255, .94);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.back {
+  top: 14px;
+  left: 14px;
+}
+
+.rightCluster {
+  top: 14px;
+  right: 14px;
+  display: flex;
+  gap: 8px;
+  position: absolute;
+}
+
+.rightCluster .actionBtn {
+  position: static;
+}
+
+.headerCaption {
+  position: absolute;
+  left: 18px;
+  right: 18px;
+  bottom: 18px;
+  color: #fff;
+}
+
+.eyebrow {
+  display: flex;
+  gap: 8px;
+  font: 600 11px var(--font-ui);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  opacity: .95;
+}
+
+.title {
+  font-family: var(--font-display);
+  font-size: 34px;
+  line-height: 1;
+  margin-top: 6px;
+}
+
+.metaLine {
+  display: flex;
+  gap: 16px;
+  margin-top: 16px;
+  color: var(--secondary);
+  font: 600 13.5px var(--font-ui);
+  flex-wrap: wrap;
+}
+
+.metaRating {
+  color: var(--amber);
+}
+
+.authorChip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 14px;
+  padding: 10px 14px 10px 10px;
+  background: var(--surface-card);
+  border: 1px solid var(--border-hairline);
+  border-radius: 14px;
+  width: fit-content;
+  cursor: pointer;
+}
+
+.authorMeta {
+  display: flex;
+  flex-direction: column;
+}
+
+.authorLabel {
+  color: var(--muted-2);
+  font: 600 10.5px var(--font-ui);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+}
+
+.authorName {
+  color: var(--ink);
+  font: 700 14px var(--font-ui);
+}
+
+.description {
+  color: var(--secondary);
+  font: 400 15px var(--font-ui);
+  line-height: 1.5;
+  margin-top: 14px;
+}
+
+/* ---------- rating card ---------- */
+
+.ratingCard {
+  margin-top: 16px;
+  padding: 18px;
+  border-radius: 18px;
+  background: var(--surface-card);
+  border: 1px solid var(--border-hairline);
+}
+
+.ratingScoreRow {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+}
+
+.ratingScore {
+  font-family: var(--font-display);
+  font-size: 28px;
+  color: var(--ink);
+}
+
+.ratingOf {
+  color: var(--muted-2);
+  font: 500 12.5px var(--font-ui);
+}
+
+.yourRatingPill {
+  margin-top: 8px;
+  display: inline-block;
+  padding: 6px 13px;
+  border-radius: 999px;
+  background: var(--chip-bg);
+  color: var(--green);
+  font: 700 12.5px var(--font-ui);
+}
+
+.rateLabel {
+  font: 700 11.5px var(--font-ui);
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  margin-top: 14px;
+}
+
+.rateRow {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+  margin-top: 9px;
+}
+
+.rateBtn {
+  width: 29px;
+  height: 36px;
+  border-radius: 10px;
+  border: none;
+  background: var(--chip-bg);
+  color: var(--secondary);
+  font: 700 13px var(--font-ui);
+  cursor: pointer;
+}
+
+.rateBtnOn {
+  background: var(--amber);
+  color: #fff;
+}
+
+/* ---------- cook / save toggles ---------- */
+
+.toggleRow {
+  display: flex;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.toggleBtn {
+  flex: 1;
+  padding: 14px;
+  border-radius: 14px;
+  border: 1.5px solid var(--border-card);
+  background: var(--surface-card);
+  color: var(--ink);
+  font: 700 14px var(--font-ui);
+  cursor: pointer;
+}
+
+.cookedOn {
+  background: var(--green);
+  color: #fff;
+  border-color: var(--green);
+}
+
+.savedOn {
+  background: var(--ink);
+  color: #fff;
+  border-color: var(--ink);
+}
+
+/* ---------- cooked-note prompt ---------- */
+
+.notePrompt {
+  margin-top: 14px;
+  padding: 16px;
+  border-radius: 16px;
+  border: 1.5px solid var(--green);
+  background: var(--green-tint-2);
+}
+
+.notePromptTitle {
+  color: var(--ink);
+  font: 700 14px var(--font-ui);
+}
+
+.notePromptArea {
+  width: 100%;
+  margin-top: 10px;
+  padding: 11px 13px;
+  border: 1.5px solid var(--border-card);
+  border-radius: 12px;
+  background: var(--surface-card);
+  font-size: 13.5px;
+  color: var(--ink);
+  resize: none;
+  line-height: 1.4;
+  box-sizing: border-box;
+}
+
+.notePromptRow {
+  display: flex;
+  gap: 9px;
+  margin-top: 10px;
+}
+
+.notePromptSkip {
+  flex: 1;
+  padding: 11px;
+  border-radius: 12px;
+  font: 700 13px var(--font-ui);
+  border: 1.5px solid var(--border-card);
+  background: var(--surface-card);
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.notePromptSave {
+  flex: 1;
+  padding: 11px;
+  border-radius: 12px;
+  font: 700 13px var(--font-ui);
+  border: none;
+  background: var(--green);
+  color: #fff;
+  cursor: pointer;
+}
+
+/* ---------- ingredients ---------- */
+
+.sectionHeadRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 28px;
+}
+
+.sectionTitle {
+  font-family: var(--font-display);
+  font-size: 22px;
+  color: var(--ink);
+}
+
+.haveCounter {
+  font: 600 12.5px var(--font-ui);
+}
+
+.counterOk {
+  color: var(--green);
+}
+
+.counterMissing {
+  color: var(--warn);
+}
+
+.ingChips {
+  margin-top: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+}
+
+.ingChip {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 14px 8px 8px;
+  border-radius: 999px;
+  background: var(--surface-card);
+  border: 1.5px solid var(--border-hairline);
+  cursor: pointer;
+}
+
+.ingChipMissing {
+  border-color: var(--warn-border);
+}
+
+.ingChipThumb {
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  flex: none;
+}
+
+.ingChipName {
+  font: 600 13.5px var(--font-ui);
+  color: var(--ink);
+}
+
+.ingChipQty {
+  color: var(--muted-3);
+  font: 500 12px var(--font-ui);
+}
+
+.ingChipMark {
+  font-size: 14px;
+  line-height: 1;
+}
+
+.markHave {
+  color: var(--green);
+}
+
+.markMissing {
+  color: var(--warn);
+}
+
+.addMissingBtn {
+  margin-top: 10px;
+  width: 100%;
+  padding: 12px;
+  border: none;
+  border-radius: 13px;
+  background: var(--ink);
+  color: #fff;
+  font: 700 13.5px var(--font-ui);
+  cursor: pointer;
+}
+
+/* ---------- steps ---------- */
+
+.stepsHeadRow {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  justify-content: space-between;
+  margin-top: 28px;
+}
+
+.cookModeBtn {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 14px;
+  border-radius: 999px;
+  border: none;
+  background: var(--accent);
+  color: #fff;
+  font: 700 12.5px var(--font-ui);
+  cursor: pointer;
+}
+
+.stepList {
+  margin-top: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.stepRow {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+}
+
+.stepNum {
+  width: 30px;
+  height: 30px;
+  flex: none;
+  border-radius: 10px;
+  background: var(--accent);
+  color: #fff;
+  font: 700 14px var(--font-ui);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.stepText {
+  color: var(--body);
+  font: 400 15px var(--font-ui);
+  line-height: 1.5;
+  padding-top: 3px;
+}
+
+/* ---------- related meals ---------- */
+
+.relatedTitle {
+  font-family: var(--font-display);
+  font-size: 22px;
+  color: var(--ink);
+  margin-top: 28px;
+}
+
+.relatedGrid {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.relatedCard {
+  cursor: pointer;
+  border: none;
+  background: none;
+  padding: 0;
+  text-align: left;
+  width: 100%;
+}
+
+.relatedPhoto {
+  height: 120px;
+  border-radius: 18px;
+  box-shadow: var(--shadow-thumb);
+}
+
+.relatedName {
+  font-family: var(--font-display);
+  font-size: 18px;
+  color: var(--ink);
+  line-height: 1.05;
+  margin-top: 8px;
+}
+
+.relatedMeta {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin-top: 3px;
+  color: var(--muted-2);
+  font: 500 12px var(--font-ui);
+}
+
+/* ---------- journal ---------- */
+
+.journalTitle {
+  font-family: var(--font-display);
+  font-size: 20px;
+  color: var(--ink);
+  margin-top: 24px;
+}
+
+.journalEntry {
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid var(--border-hairline);
+  background: var(--surface-card);
+  margin-top: 10px;
+}
+
+.journalDate {
+  color: var(--muted-2);
+  font: 600 11px var(--font-ui);
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+
+.journalNote {
+  color: var(--body);
+  font: 400 14px var(--font-ui);
+  line-height: 1.5;
+  margin-top: 4px;
+}

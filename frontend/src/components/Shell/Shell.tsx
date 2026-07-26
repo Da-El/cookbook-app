@@ -3,6 +3,7 @@ import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useIsDesktop } from '../../hooks/useMediaQuery';
 import { useAuth } from '../../auth/AuthContext';
+import { useProfileTheme } from '../../theme/ThemeContext';
 import { api } from '../../api/client';
 import { Avatar } from '../Avatar/Avatar';
 import { BookIcon, HomeIcon, PlusIcon, SearchIcon } from '../Icon/Icon';
@@ -35,12 +36,20 @@ function BellGlyph() {
   );
 }
 
-/** Shown on the four tab screens. Detail screens render bare (no chrome). */
-export function Shell({ children }: { children: ReactNode }) {
+interface ShellProps {
+  children: ReactNode;
+  /** Detail/overlay screens (Meal Detail, Settings, Create forms, ...): the
+   * sidebar persists on desktop, but the mobile tab bar and logo header hide
+   * in favor of the screen's own back-button header. */
+  bare?: boolean;
+}
+
+export function Shell({ children, bare = false }: ShellProps) {
   const isDesktop = useIsDesktop();
   const navigate = useNavigate();
   const location = useLocation();
   const { user, logout } = useAuth();
+  const theme = useProfileTheme();
   const [menuOpen, setMenuOpen] = useState(false);
   const [search, setSearch] = useState('');
 
@@ -58,7 +67,13 @@ export function Shell({ children }: { children: ReactNode }) {
   if (!user) return <>{children}</>;
 
   const avatar = (size: 'sm' | 'md') => (
-    <Avatar name={user.display_name} size={size} shape="rounded" />
+    <Avatar
+      name={user.display_name}
+      size={size}
+      shape="rounded"
+      theme={theme?.cb_avatar_theme}
+      photoUrl={theme?.cb_avatar_photo_url}
+    />
   );
 
   const menu = menuOpen && (
@@ -170,34 +185,38 @@ export function Shell({ children }: { children: ReactNode }) {
 
   return (
     <div className={styles.mobileRoot}>
-      <div className={styles.mobileContent}>
-        <div className={styles.mobileHeader}>
-          <Link to="/" className={styles.mobileLogo}>
-            <div className={styles.mobileLogoMark}><LogoGlyph size={17} /></div>
-            <div className={styles.mobileWordmark}>Cookbook</div>
-          </Link>
-          <div className={styles.mobileHeaderActions}>
-            <button className={styles.avatarBtn} onClick={() => setMenuOpen((v) => !v)}>
-              {avatar('sm')}
-            </button>
+      <div className={bare ? styles.mobileContentBare : styles.mobileContent}>
+        {!bare && (
+          <div className={styles.mobileHeader}>
+            <Link to="/" className={styles.mobileLogo}>
+              <div className={styles.mobileLogoMark}><LogoGlyph size={17} /></div>
+              <div className={styles.mobileWordmark}>Cookbook</div>
+            </Link>
+            <div className={styles.mobileHeaderActions}>
+              <button className={styles.avatarBtn} onClick={() => setMenuOpen((v) => !v)}>
+                {avatar('sm')}
+              </button>
+            </div>
           </div>
-        </div>
+        )}
         {children}
       </div>
 
-      <nav className={styles.tabbar}>
-        {NAV.map(({ to, mobileLabel, Icon, end }) => (
-          <NavLink
-            key={to}
-            to={to}
-            end={end}
-            className={({ isActive }) => `${styles.tabItem} ${isActive ? styles.tabItemActive : ''}`}
-          >
-            <Icon size={23} strokeWidth={1.8} />
-            {mobileLabel}
-          </NavLink>
-        ))}
-      </nav>
+      {!bare && (
+        <nav className={styles.tabbar}>
+          {NAV.map(({ to, mobileLabel, Icon, end }) => (
+            <NavLink
+              key={to}
+              to={to}
+              end={end}
+              className={({ isActive }) => `${styles.tabItem} ${isActive ? styles.tabItemActive : ''}`}
+            >
+              <Icon size={23} strokeWidth={1.8} />
+              {mobileLabel}
+            </NavLink>
+          ))}
+        </nav>
+      )}
       {menu}
     </div>
   );

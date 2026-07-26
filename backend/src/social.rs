@@ -309,22 +309,126 @@ pub async fn profile(
     }))
 }
 
+#[derive(Serialize, sqlx::FromRow)]
+pub struct ChefMeal {
+    pub id: i64,
+    pub name: String,
+    pub cuisine: String,
+    pub time_minutes: i32,
+    pub rating: f64,
+    pub photo_url: Option<String>,
+}
+
+/// A chef's own published recipes. Gated by their `vis_mine` setting for
+/// anyone but themselves.
+pub async fn chef_published(
+    State(state): State<AppState>,
+    viewer: Option<CurrentUser>,
+    Path(id): Path<i64>,
+) -> Result<Json<Vec<ChefMeal>>, StatusCode> {
+    if !can_view(&state, id, viewer, "vis_mine").await? {
+        return Ok(Json(vec![]));
+    }
+    let rows = sqlx::query_as::<_, ChefMeal>(
+        "SELECT id, name, cuisine, time_minutes, rating::float8 AS rating, photo_url
+         FROM meals WHERE author_id = $1 AND visibility = 'public'
+         ORDER BY created_at DESC",
+    )
+    .bind(id)
+    .fetch_all(&state.db)
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(Json(rows))
+}
+
+/// Their public cooking log - meals they've cooked, whoever wrote them.
+pub async fn chef_cooked(
+    State(state): State<AppState>,
+    viewer: Option<CurrentUser>,
+    Path(id): Path<i64>,
+) -> Result<Json<Vec<ChefMeal>>, StatusCode> {
+    if !can_view(&state, id, viewer, "vis_made").await? {
+        return Ok(Json(vec![]));
+    }
+    let rows = sqlx::query_as::<_, ChefMeal>(
+        "SELECT m.id, m.name, m.cuisine, m.time_minutes, m.rating::float8 AS rating, m.photo_url
+         FROM meals m JOIN cooked_meals c ON c.meal_id = m.id
+         WHERE c.user_id = $1
+         ORDER BY c.cooked_at DESC",
+    )
+    .bind(id)
+    .fetch_all(&state.db)
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(Json(rows))
+}
+
+#[derive(Serialize, sqlx::FromRow)]
+pub struct ChefReview {
+    pub meal_id: i64,
+    pub meal_name: String,
+    pub photo_url: Option<String>,
+    pub score: Option<i16>,
+    pub note: Option<String>,
+    pub cooked_at: chrono::DateTime<chrono::Utc>,
+}
+
+/// Public reviews only - `is_public` is the reviewer's own choice per entry,
+/// independent of their profile-wide visibility settings.
+pub async fn chef_reviews(
+    State(state): State<AppState>,
+    Path(id): Path<i64>,
+) -> Result<Json<Vec<ChefReview>>, StatusCode> {
+    let rows = sqlx::query_as::<_, ChefReview>(
+        "SELECT r.meal_id, m.name AS meal_name, m.photo_url, r.score, r.note, r.cooked_at
+         FROM reviews r JOIN meals m ON m.id = r.meal_id
+         WHERE r.user_id = $1 AND r.is_public = true
+         ORDER BY r.cooked_at DESC",
+    )
+    .bind(id)
+    .fetch_all(&state.db)
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(Json(rows))
+}
+
+async fn can_view(
+    state: &AppState,
+    profile_id: i64,
+    viewer: Option<CurrentUser>,
+    column: &str,
+) -> Result<bool, StatusCode> {
+    if viewer.as_ref().map(|v| v.0.id) == Some(profile_id) {
+        return Ok(true);
+    }
+    let sql = match column {
+        "vis_mine" => "SELECT vis_mine FROM users WHERE id = $1",
+        "vis_made" => "SELECT vis_made FROM users WHERE id = $1",
+        _ => "SELECT vis_want FROM users WHERE id = $1",
+    };
+    let visibility: Option<String> = sqlx::query_scalar(sql)
+        .bind(profile_id)
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(visibility.as_deref() != Some("private"))
+}
+
 #[derive(Deserialize)]
 pub struct UpdateProfile {
     pub display_name: Option<String>,
-    pub cb_title: Option<String>,
-    pub cb_bio: Option<String>,
-    pub cb_page_theme: Option<String>,
-    pub cb_page_photo_url: Option<String>,
-    pub cb_hero_theme: Option<String>,
-    pub cb_hero_photo_url: Option<String>,
-    pub cb_avatar_theme: Option<String>,
-    pub cb_avatar_photo_url: Option<String>,
+    pub bio: Option<String>,
     pub diet_prefs: Option<Vec<String>>,
     pub has_onboarded: Option<bool>,
+    pub vis_mine: Option<String>,
+    pub vis_made: Option<String>,
+    pub vis_want: Option<String>,
+    pub vis_fridge: Option<String>,
 }
 
-/// Every field is optional; COALESCE leaves omitted ones untouched.
+/// Every field is optional; COALESCE leaves omitted ones untouched. Used by
+/// Settings and onboarding - never touches the Customize (cb_*) fields, whose
+/// "clear this photo" case COALESCE can't represent (see update_customize).
 pub async fn update_profile(
     State(state): State<AppState>,
     CurrentUser(user): CurrentUser,
@@ -333,35 +437,117 @@ pub async fn update_profile(
     sqlx::query(
         "UPDATE users SET
            display_name = COALESCE(NULLIF($2,''), display_name),
-           cb_title = COALESCE($3, cb_title),
-           cb_bio = COALESCE($4, cb_bio),
-           cb_page_theme = COALESCE(NULLIF($5,''), cb_page_theme),
-           cb_page_photo_url = COALESCE($6, cb_page_photo_url),
-           cb_hero_theme = COALESCE(NULLIF($7,''), cb_hero_theme),
-           cb_hero_photo_url = COALESCE($8, cb_hero_photo_url),
-           cb_avatar_theme = COALESCE(NULLIF($9,''), cb_avatar_theme),
-           cb_avatar_photo_url = COALESCE($10, cb_avatar_photo_url),
-           diet_prefs = COALESCE($11, diet_prefs),
-           has_onboarded = COALESCE($12, has_onboarded),
+           bio = COALESCE($3, bio),
+           diet_prefs = COALESCE($4, diet_prefs),
+           has_onboarded = COALESCE($5, has_onboarded),
+           vis_mine = COALESCE(NULLIF($6,''), vis_mine),
+           vis_made = COALESCE(NULLIF($7,''), vis_made),
+           vis_want = COALESCE(NULLIF($8,''), vis_want),
+           vis_fridge = COALESCE(NULLIF($9,''), vis_fridge),
            updated_at = now()
          WHERE id = $1",
     )
     .bind(user.id)
     .bind(b.display_name.as_deref().map(str::trim))
-    .bind(b.cb_title.as_deref())
-    .bind(b.cb_bio.as_deref())
-    .bind(b.cb_page_theme.as_deref())
-    .bind(b.cb_page_photo_url.as_deref())
-    .bind(b.cb_hero_theme.as_deref())
-    .bind(b.cb_hero_photo_url.as_deref())
-    .bind(b.cb_avatar_theme.as_deref())
-    .bind(b.cb_avatar_photo_url.as_deref())
+    .bind(b.bio.as_deref())
     .bind(b.diet_prefs.as_deref())
     .bind(b.has_onboarded)
+    .bind(b.vis_mine.as_deref())
+    .bind(b.vis_made.as_deref())
+    .bind(b.vis_want.as_deref())
+    .bind(b.vis_fridge.as_deref())
     .execute(&state.db)
     .await
     .map_err(|e| {
         tracing::error!("update profile failed: {e}");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[derive(Deserialize)]
+pub struct UpdateCustomize {
+    pub cb_title: String,
+    pub cb_bio: String,
+    pub cb_page_theme: String,
+    pub cb_page_photo_url: Option<String>,
+    pub cb_hero_theme: String,
+    pub cb_hero_photo_url: Option<String>,
+    pub cb_avatar_theme: String,
+    pub cb_avatar_photo_url: Option<String>,
+}
+
+#[derive(Serialize)]
+pub struct ProfileTheme {
+    pub cb_title: Option<String>,
+    pub cb_bio: Option<String>,
+    pub cb_page_theme: String,
+    pub cb_page_photo_url: Option<String>,
+    pub cb_hero_theme: String,
+    pub cb_hero_photo_url: Option<String>,
+    pub cb_avatar_theme: String,
+    pub cb_avatar_photo_url: Option<String>,
+}
+
+/// Small and cheap on purpose: fetched once near app root to paint the page
+/// background/avatar everywhere, and reused by the Customize screen to seed
+/// its form (it always resends the full state back on save - see below).
+pub async fn my_theme(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+) -> Result<Json<ProfileTheme>, StatusCode> {
+    let row = sqlx::query_as::<_, (Option<String>, Option<String>, String, Option<String>, String, Option<String>, String, Option<String>)>(
+        "SELECT cb_title, cb_bio, cb_page_theme, cb_page_photo_url,
+                cb_hero_theme, cb_hero_photo_url, cb_avatar_theme, cb_avatar_photo_url
+         FROM users WHERE id = $1",
+    )
+    .bind(user.id)
+    .fetch_one(&state.db)
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    Ok(Json(ProfileTheme {
+        cb_title: row.0,
+        cb_bio: row.1,
+        cb_page_theme: row.2,
+        cb_page_photo_url: row.3,
+        cb_hero_theme: row.4,
+        cb_hero_photo_url: row.5,
+        cb_avatar_theme: row.6,
+        cb_avatar_photo_url: row.7,
+    }))
+}
+
+/// Always overwrites the full customize state (the screen loads current
+/// values first, so every save carries the true state) - unlike
+/// update_profile, an explicit null here really does clear a photo.
+pub async fn update_customize(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Json(b): Json<UpdateCustomize>,
+) -> Result<StatusCode, StatusCode> {
+    sqlx::query(
+        "UPDATE users SET
+           cb_title = $2, cb_bio = $3,
+           cb_page_theme = $4, cb_page_photo_url = $5,
+           cb_hero_theme = $6, cb_hero_photo_url = $7,
+           cb_avatar_theme = $8, cb_avatar_photo_url = $9,
+           updated_at = now()
+         WHERE id = $1",
+    )
+    .bind(user.id)
+    .bind(b.cb_title.trim())
+    .bind(b.cb_bio.trim())
+    .bind(b.cb_page_theme)
+    .bind(b.cb_page_photo_url)
+    .bind(b.cb_hero_theme)
+    .bind(b.cb_hero_photo_url)
+    .bind(b.cb_avatar_theme)
+    .bind(b.cb_avatar_photo_url)
+    .execute(&state.db)
+    .await
+    .map_err(|e| {
+        tracing::error!("update customize failed: {e}");
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
     Ok(StatusCode::NO_CONTENT)

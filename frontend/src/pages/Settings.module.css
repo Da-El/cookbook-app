@@ -1,0 +1,225 @@
+.page {
+  max-width: 640px;
+  margin: 0 auto;
+  padding-top: 6px;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-top: 2px;
+}
+
+.backBtn {
+  width: 40px;
+  height: 40px;
+  flex: none;
+  border-radius: 13px;
+  border: 1.5px solid var(--border-card);
+  background: var(--surface-card);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--ink);
+}
+
+.title {
+  font-family: var(--font-display);
+  font-size: 26px;
+  color: var(--ink);
+}
+
+.section {
+  margin-top: 28px;
+}
+
+.sectionTitle {
+  font-family: var(--font-display);
+  font-size: 19px;
+  color: var(--ink);
+  margin-bottom: 12px;
+}
+
+.label {
+  font: 600 12px var(--font-ui);
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  margin-bottom: 8px;
+  display: block;
+}
+
+.field {
+  margin-top: 16px;
+}
+
+.field:first-child {
+  margin-top: 0;
+}
+
+.input {
+  width: 100%;
+  padding: 14px 16px;
+  border: 1.5px solid var(--border-card);
+  border-radius: 15px;
+  background: var(--surface-card);
+  font-size: 15px;
+  color: var(--ink);
+}
+
+.saveBtn {
+  margin-top: 16px;
+  padding: 12px 22px;
+  border-radius: 13px;
+  border: none;
+  background: var(--ink);
+  color: #fff;
+  font: 700 13.5px var(--font-ui);
+  cursor: pointer;
+}
+
+.saveBtn:disabled {
+  opacity: .55;
+  cursor: not-allowed;
+}
+
+.error {
+  color: #C0392B;
+  font: 600 13px var(--font-ui);
+  margin-top: 10px;
+}
+
+.success {
+  color: var(--green);
+  font: 600 13px var(--font-ui);
+  margin-top: 10px;
+}
+
+.chipRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+}
+
+.chip {
+  padding: 9px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--border-chip);
+  background: var(--chip-bg);
+  color: var(--secondary);
+  font: 600 13px var(--font-ui);
+  cursor: pointer;
+}
+
+.chipActive {
+  background: var(--ink);
+  color: #fff;
+  border-color: var(--ink);
+}
+
+.visRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 13px 0;
+  border-bottom: 1px solid var(--border-hairline);
+}
+
+.visRow:last-child {
+  border-bottom: none;
+}
+
+.visLabel {
+  font: 600 14px var(--font-ui);
+  color: var(--ink);
+}
+
+.visSub {
+  font: 400 12.5px var(--font-ui);
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+.visToggle {
+  display: flex;
+  gap: 4px;
+  background: var(--border-hairline);
+  padding: 4px;
+  border-radius: 999px;
+  flex: none;
+}
+
+.visToggle button {
+  padding: 7px 14px;
+  border: none;
+  border-radius: 999px;
+  font: 700 12px var(--font-ui);
+  cursor: pointer;
+  background: transparent;
+  color: var(--muted);
+}
+
+.visActive {
+  background: var(--ink) !important;
+  color: #fff !important;
+}
+
+.dangerZone {
+  margin-top: 40px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border-hairline);
+}
+
+.deleteBtn {
+  padding: 12px 22px;
+  border-radius: 13px;
+  border: 1.5px solid #E3A79A;
+  background: var(--surface-card);
+  color: #C0392B;
+  font: 700 13.5px var(--font-ui);
+  cursor: pointer;
+}
+
+.confirmCard {
+  margin-top: 14px;
+  padding: 16px;
+  border-radius: 16px;
+  border: 1.5px solid #E3A79A;
+  background: #FDEDE8;
+}
+
+.confirmText {
+  color: var(--ink);
+  font: 500 13.5px var(--font-ui);
+  line-height: 1.5;
+}
+
+.confirmRow {
+  display: flex;
+  gap: 9px;
+  margin-top: 12px;
+}
+
+.confirmCancel {
+  flex: 1;
+  padding: 11px;
+  border: 1.5px solid var(--border-card);
+  border-radius: 12px;
+  background: var(--surface-card);
+  color: var(--ink);
+  font: 700 13px var(--font-ui);
+  cursor: pointer;
+}
+
+.confirmDelete {
+  flex: 1;
+  padding: 11px;
+  border: none;
+  border-radius: 12px;
+  background: #C0392B;
+  color: #fff;
+  font: 700 13px var(--font-ui);
+  cursor: pointer;
+}

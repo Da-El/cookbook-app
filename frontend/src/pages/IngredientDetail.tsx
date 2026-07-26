@@ -2,7 +2,8 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../api/client';
 import type { IngredientDetail as Detail, Micros } from '../api/types';
-import { Card } from '../components/Card/Card';
+import { ChevronLeft } from '../components/Icon/Icon';
+import { ingredientBackground } from '../lib/imagery';
 import styles from './IngredientDetail.module.css';
 
 // FDA daily values (mg) - drives the %DV bars.
@@ -15,6 +16,13 @@ const DV: Record<keyof Micros, { label: string; dv: number }> = {
   sodium_mg: { label: 'Sodium', dv: 2300 },
 };
 
+interface UsedInMeal {
+  id: number;
+  name: string;
+  cuisine: string;
+  can_make: boolean;
+}
+
 export function IngredientDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -25,15 +33,25 @@ export function IngredientDetail() {
     enabled: Boolean(id),
   });
 
+  const { data: usedIn = [] } = useQuery({
+    queryKey: ['ingredient-used-in', id],
+    queryFn: () => api.get<UsedInMeal[]>(`/ingredients/${id}/used-in`),
+    enabled: Boolean(id),
+  });
+
   if (isLoading || !data) return null;
 
   const n = data.nutrition;
 
   return (
     <div className={styles.page}>
-      <button className={styles.back} onClick={() => navigate(-1)}>
-        ← Back
-      </button>
+      <div className={styles.header}>
+        <button className={styles.backBtn} onClick={() => navigate(-1)} aria-label="Back">
+          <ChevronLeft size={18} strokeWidth={2.2} />
+        </button>
+      </div>
+
+      <div className={styles.photo} style={{ background: ingredientBackground(data.photo_url, data.category) }} />
 
       <h1 className={styles.name}>{data.name}</h1>
 
@@ -47,7 +65,7 @@ export function IngredientDetail() {
       <p className={styles.desc}>{data.description}</p>
 
       {n && (
-        <Card>
+        <div className={styles.card}>
           <p className={styles.sectionTitle}>Nutrition facts</p>
           <p className={styles.serving}>Per {n.serving_size}</p>
 
@@ -80,7 +98,28 @@ export function IngredientDetail() {
               </div>
             );
           })}
-        </Card>
+        </div>
+      )}
+
+      {usedIn.length > 0 && (
+        <>
+          <h2 className={styles.usedTitle}>Used in {usedIn.length} meal{usedIn.length === 1 ? '' : 's'}</h2>
+          <div className={styles.usedList}>
+            {usedIn.map((m) => (
+              <button key={m.id} className={styles.usedRow} onClick={() => navigate(`/meals/${m.id}`)}>
+                <span
+                  className={styles.usedThumb}
+                  style={{ background: ingredientBackground(null, data.category) }}
+                />
+                <span style={{ flex: 1, minWidth: 0 }}>
+                  <span className={styles.usedName} style={{ display: 'block' }}>{m.name}</span>
+                  <span style={{ color: 'var(--muted-2)', fontSize: 12.5, fontWeight: 500 }}>{m.cuisine}</span>
+                </span>
+                {m.can_make && <span className={styles.usedDot} title="You can make this" />}
+              </button>
+            ))}
+          </div>
+        </>
       )}
     </div>
   );

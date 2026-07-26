@@ -288,6 +288,33 @@ pub async fn create(
     Ok((StatusCode::CREATED, Json(serde_json::json!({ "id": meal_id }))))
 }
 
+#[derive(Deserialize)]
+pub struct UpdatePhoto {
+    pub photo_url: String,
+}
+
+/// Only the meal's author can replace its cover photo.
+pub async fn update_photo(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Path(id): Path<i64>,
+    Json(body): Json<UpdatePhoto>,
+) -> Result<StatusCode, StatusCode> {
+    let updated = sqlx::query("UPDATE meals SET photo_url = $1 WHERE id = $2 AND author_id = $3")
+        .bind(body.photo_url)
+        .bind(id)
+        .bind(user.id)
+        .execute(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .rows_affected();
+
+    if updated == 0 {
+        return Err(StatusCode::FORBIDDEN);
+    }
+    Ok(StatusCode::NO_CONTENT)
+}
+
 /// Saving is a plain toggle; cooking is one-way (and moves the meal out of Saved).
 pub async fn toggle_save(
     State(state): State<AppState>,
@@ -407,6 +434,33 @@ async fn upsert_rating(
         )
         .bind(subject_id).execute(&mut **tx).await.ok();
     }
+}
+
+#[derive(Serialize, sqlx::FromRow)]
+pub struct JournalEntry {
+    pub id: i64,
+    pub note: Option<String>,
+    pub score: Option<i16>,
+    pub cooked_at: chrono::DateTime<chrono::Utc>,
+}
+
+/// The viewer's own cooking notes for this meal - private, newest first.
+pub async fn my_journal(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Path(id): Path<i64>,
+) -> Result<Json<Vec<JournalEntry>>, StatusCode> {
+    let rows = sqlx::query_as::<_, JournalEntry>(
+        "SELECT id, note, score, cooked_at FROM reviews
+         WHERE user_id = $1 AND meal_id = $2 AND note IS NOT NULL
+         ORDER BY cooked_at DESC",
+    )
+    .bind(user.id)
+    .bind(id)
+    .fetch_all(&state.db)
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(Json(rows))
 }
 
 pub async fn filters(State(state): State<AppState>) -> Json<serde_json::Value> {

@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api/client';
 import type { IngredientSummary } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
+import { useProfileTheme } from '../theme/ThemeContext';
 import { useIsDesktop } from '../hooks/useMediaQuery';
 import { useToast } from '../components/Toast/ToastContext';
 import { Segmented } from '../components/Segmented/Segmented';
@@ -12,6 +13,7 @@ import { MealCard, MealGrid } from '../components/MealCard/MealCard';
 import { EmptyCard, EmptyLine } from '../components/Empty/Empty';
 import { PencilIcon, SearchIcon } from '../components/Icon/Icon';
 import { ingredientBackground, mealBackground } from '../lib/imagery';
+import { PAGE_THEMES, heroTextColors } from '../lib/themes';
 import styles from './Cookbook.module.css';
 
 type Group = 'recipes' | 'kitchen';
@@ -72,6 +74,7 @@ export function Cookbook() {
   const navigate = useNavigate();
   const isDesktop = useIsDesktop();
   const { user } = useAuth();
+  const theme = useProfileTheme();
   const qc = useQueryClient();
   const toast = useToast();
 
@@ -171,28 +174,49 @@ export function Cookbook() {
 
   const subTabs: SubTab[] = group === 'recipes' ? ['cooked', 'saved', 'published'] : ['fridge', 'shopping'];
 
+  const hasHeroPhoto = Boolean(theme?.cb_hero_photo_url);
+  const heroTheme = theme?.cb_hero_theme ?? 'cream';
+  const heroBg = hasHeroPhoto
+    ? `center/cover no-repeat url("${theme!.cb_hero_photo_url}")`
+    : PAGE_THEMES[heroTheme].cardBg;
+  const heroColors = heroTextColors(hasHeroPhoto, heroTheme);
+  const cookbookTitle = theme?.cb_title?.trim() || 'Your Cookbook';
+  const cookbookBio = theme?.cb_bio?.trim();
+
   return (
     <div className={styles.page}>
-      <div className={styles.hero} style={{ background: 'linear-gradient(155deg,#FBF8F2,#F4ECDD)' }}>
+      <div className={styles.hero} style={{ background: heroBg }}>
+        {hasHeroPhoto && <div className={styles.heroScrim} />}
         <div className={styles.heroRow}>
-          <div style={{ minWidth: 0 }}>
-            <div className={styles.heroEyebrow} style={{ color: 'var(--accent-dark)' }}>
+          <div style={{ minWidth: 0, position: 'relative' }}>
+            <div className={styles.heroEyebrow} style={{ color: heroColors.eyebrow }}>
               {user.display_name}'s kitchen
             </div>
-            <div className={styles.heroTitle} style={{ color: 'var(--ink)' }}>Your Cookbook</div>
+            <div className={styles.heroTitle} style={{ color: heroColors.title }}>{cookbookTitle}</div>
+            {cookbookBio && (
+              <div className={styles.heroBio} style={{ color: heroColors.bio }}>{cookbookBio}</div>
+            )}
             <div className={styles.heroStats}>
-              <span className={styles.heroStatNum}>{counts?.published ?? 0}</span>
-              <span className={styles.heroStatLabel} style={{ color: 'var(--muted-2)' }}>recipes</span>
-              <span style={{ color: '#D8CBB6' }}>·</span>
-              <span className={styles.heroStatNum}>{counts?.cooked ?? 0}</span>
-              <span className={styles.heroStatLabel} style={{ color: 'var(--muted-2)' }}>cooked</span>
+              <span className={styles.heroStatNum} style={{ color: heroColors.stat }}>{counts?.published ?? 0}</span>
+              <span className={styles.heroStatLabel} style={{ color: heroColors.statLabel }}>recipes</span>
+              <span style={{ color: heroColors.dot }}>·</span>
+              <span className={styles.heroStatNum} style={{ color: heroColors.stat }}>{counts?.cooked ?? 0}</span>
+              <span className={styles.heroStatLabel} style={{ color: heroColors.statLabel }}>cooked</span>
             </div>
           </div>
-          <div className={styles.heroActions}>
+          <div className={styles.heroActions} style={{ position: 'relative' }}>
             <button className={styles.pencil} onClick={() => navigate('/cookbook/customize')} title="Customize">
               <PencilIcon size={19} strokeWidth={1.7} />
             </button>
-            {!isDesktop && <Avatar name={user.display_name} size="md" shape="rounded" />}
+            {!isDesktop && (
+              <Avatar
+                name={user.display_name}
+                size="md"
+                shape="rounded"
+                theme={theme?.cb_avatar_theme}
+                photoUrl={theme?.cb_avatar_photo_url}
+              />
+            )}
           </div>
         </div>
       </div>
