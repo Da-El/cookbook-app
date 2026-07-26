@@ -1,10 +1,13 @@
 mod auth;
 mod ingredients;
+mod kitchen;
+mod meals;
 mod seed;
+mod social;
 mod state;
 
 use axum::{
-    routing::{get, post},
+    routing::{delete, get, post},
     Json, Router,
 };
 use serde_json::json;
@@ -36,6 +39,33 @@ async fn main() -> anyhow::Result<()> {
         .route("/ingredients", get(ingredients::list))
         .route("/ingredients/categories", get(ingredients::categories))
         .route("/ingredients/{id}", get(ingredients::detail))
+        // meals
+        .route("/meals", get(meals::browse).post(meals::create))
+        .route("/meals/filters", get(meals::filters))
+        .route("/meals/{id}", get(meals::detail))
+        .route("/meals/{id}/save", post(meals::toggle_save))
+        .route("/meals/{id}/cook", post(meals::cook))
+        .route("/meals/{id}/rate", post(meals::rate))
+        .route("/meals/{id}/like", post(social::toggle_like))
+        // kitchen
+        .route("/fridge", get(kitchen::fridge_list).post(kitchen::fridge_add))
+        .route("/fridge/{id}", delete(kitchen::fridge_remove))
+        .route("/shopping", get(kitchen::shopping_list).post(kitchen::shopping_add))
+        .route("/shopping/{id}", delete(kitchen::shopping_remove))
+        .route("/shopping/{id}/got-it", post(kitchen::shopping_got_it))
+        // cookbook lists
+        .route("/cookbook/counts", get(kitchen::counts))
+        .route("/cookbook/cooked", get(kitchen::cooked))
+        .route("/cookbook/saved", get(kitchen::saved))
+        .route("/cookbook/published", get(kitchen::published))
+        // social
+        .route("/feed", get(social::feed))
+        .route("/activity", get(social::activity).post(social::mark_activity_seen))
+        .route("/chefs/suggested", get(social::suggested_chefs))
+        .route("/chefs/following", get(social::following))
+        .route("/chefs/{id}", get(social::profile))
+        .route("/chefs/{id}/follow", post(social::toggle_follow))
+        .route("/profile", post(social::update_profile))
         .with_state(state);
 
     let mut app = Router::new().nest("/api", api);

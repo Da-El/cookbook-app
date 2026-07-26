@@ -1,0 +1,53 @@
+.track {
+  display: flex;
+  gap: 5px;
+  padding: 4px;
+  background: #F0E9DD;
+  border-radius: 999px;
+}
+
+.trackFill button {
+  flex: 1;
+}
+
+.button {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 999px;
+  font: 700 13px var(--font-ui);
+  cursor: pointer;
+  background: transparent;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.active {
+  background: var(--surface-card);
+  color: var(--ink);
+}
+
+/* Square-cornered variant used by the Browse Meals/Ingredients toggle on mobile. */
+.trackSquare {
+  background: var(--border-hairline);
+  border-radius: 14px;
+}
+
+.trackSquare .button {
+  border-radius: 11px;
+  padding: 11px;
+  font-size: 14px;
+}
+
+.trackSquare .active {
+  background: var(--ink);
+  color: #fff;
+}
+
+.trackDark .active {
+  background: var(--ink);
+  color: #fff;
+}
+
+.trackDark {
+  background: var(--border-hairline);
+}

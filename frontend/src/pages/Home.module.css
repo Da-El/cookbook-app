@@ -1,0 +1,501 @@
+.layout {
+  display: flex;
+  gap: 26px;
+  align-items: flex-start;
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+.feedCol {
+  flex: 1;
+  min-width: 0;
+  max-width: 700px;
+}
+
+.rightRail {
+  width: 300px;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+@media (max-width: 980px) {
+  .rightRail { display: none; }
+}
+
+.headRow {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.eyebrow {
+  color: var(--accent-dark);
+  font: 700 11px var(--font-ui);
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}
+
+.pageTitle {
+  font-family: var(--font-display);
+  font-size: 34px;
+  line-height: 1;
+  color: var(--ink);
+  margin-top: 6px;
+}
+
+.segmentWrap {
+  margin-top: 15px;
+}
+
+@media (min-width: 900px) {
+  .segmentWrap { margin-top: 0; }
+}
+
+/* ---------- stories rail ---------- */
+
+.stories {
+  margin-top: 16px;
+  display: flex;
+  gap: 13px;
+}
+
+@media (min-width: 900px) {
+  .stories { margin-top: 22px; gap: 16px; }
+}
+
+.story {
+  flex: none;
+  width: 60px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  cursor: pointer;
+  background: none;
+  border: none;
+  padding: 0;
+}
+
+@media (min-width: 900px) {
+  .story { width: 64px; }
+}
+
+.storyRing {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  padding: 2.5px;
+  background: linear-gradient(150deg, var(--accent), var(--amber));
+  flex: none;
+}
+
+@media (min-width: 900px) {
+  .storyRing { width: 60px; height: 60px; }
+}
+
+.storyInner {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: linear-gradient(145deg, var(--green), var(--green-dark));
+  border: 2px solid var(--bg-page);
+  color: #fff;
+  font: 700 18px var(--font-ui);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+@media (min-width: 900px) {
+  .storyInner { font-size: 19px; }
+}
+
+.storyFind {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  border: 1.6px dashed var(--muted-4);
+  background: var(--surface-card);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent-dark);
+  flex: none;
+}
+
+@media (min-width: 900px) {
+  .storyFind { width: 60px; height: 60px; }
+}
+
+.storyLabel {
+  font: 600 11px var(--font-ui);
+  color: var(--secondary);
+  max-width: 60px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.storyLabelMuted {
+  color: var(--muted);
+}
+
+@media (min-width: 900px) {
+  .storyLabel { font-size: 11.5px; max-width: 64px; }
+}
+
+/* ---------- feed ---------- */
+
+.posts {
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+@media (min-width: 900px) {
+  .posts { margin-top: 20px; gap: 18px; }
+}
+
+.post {
+  background: var(--surface-card);
+  border: 1px solid var(--border-hairline);
+  border-radius: 22px;
+  padding: 14px;
+  box-shadow: 0 16px 32px -28px rgba(60, 40, 20, .7);
+}
+
+@media (min-width: 900px) {
+  .post { border-radius: 24px; padding: 18px; box-shadow: 0 18px 36px -30px rgba(60, 40, 20, .7); }
+}
+
+.postHead {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+}
+
+@media (min-width: 900px) {
+  .postHead { gap: 12px; }
+}
+
+.postAuthor {
+  font: 700 14px var(--font-ui);
+  color: var(--ink);
+  cursor: pointer;
+  background: none;
+  border: none;
+  padding: 0;
+}
+
+.postVerb {
+  font: 500 12px var(--font-ui);
+  color: var(--muted-2);
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.postTime {
+  font: 600 11.5px var(--font-ui);
+  color: var(--muted-4);
+  flex: none;
+}
+
+.postPhoto {
+  margin-top: 12px;
+  height: 196px;
+  border-radius: 16px;
+  overflow: hidden;
+  position: relative;
+  cursor: pointer;
+  border: none;
+  padding: 0;
+  width: 100%;
+  display: block;
+}
+
+@media (min-width: 900px) {
+  .postPhoto { margin-top: 14px; height: 320px; border-radius: 18px; }
+}
+
+.postScrim {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0) 42%, rgba(20, 10, 4, .8));
+}
+
+.postCaption {
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: 13px;
+  color: #fff;
+  text-align: left;
+}
+
+@media (min-width: 900px) {
+  .postCaption { left: 20px; right: 20px; bottom: 18px; }
+}
+
+.postTitle {
+  font-family: var(--font-display);
+  font-size: 24px;
+  line-height: 1.02;
+}
+
+@media (min-width: 900px) {
+  .postTitle { font-size: 30px; }
+}
+
+.postSub {
+  font: 500 12.5px var(--font-ui);
+  margin-top: 5px;
+  opacity: .92;
+}
+
+@media (min-width: 900px) {
+  .postSub { font-size: 13.5px; margin-top: 6px; }
+}
+
+.postActions {
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+@media (min-width: 900px) {
+  .postActions { margin-top: 14px; }
+}
+
+.likeBtn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 13px;
+  border-radius: 999px;
+  border: 1.5px solid var(--border-hairline);
+  background: var(--surface-card);
+  cursor: pointer;
+  font: 700 12.5px var(--font-ui);
+  color: var(--muted);
+}
+
+.likeBtnOn {
+  color: var(--accent);
+}
+
+@media (min-width: 900px) {
+  .likeBtn { padding: 9px 15px; gap: 7px; font-size: 13px; }
+}
+
+.saveBtn {
+  margin-left: auto;
+  padding: 8px 15px;
+  border-radius: 999px;
+  border: none;
+  cursor: pointer;
+  font: 700 12.5px var(--font-ui);
+  background: var(--accent);
+  color: #fff;
+}
+
+.saveBtnOn {
+  background: var(--ink);
+}
+
+@media (min-width: 900px) {
+  .saveBtn { padding: 9px 18px; font-size: 13px; }
+}
+
+/* ---------- chefs to follow ---------- */
+
+.railCard {
+  background: var(--surface-card);
+  border: 1px solid var(--border-hairline);
+  border-radius: 22px;
+  padding: 18px;
+}
+
+.railTitle {
+  font-family: var(--font-display);
+  font-size: 21px;
+  color: var(--ink);
+}
+
+.railList {
+  margin-top: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+}
+
+.railRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.railName {
+  font: 700 13.5px var(--font-ui);
+  color: var(--ink);
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  background: none;
+  border: none;
+  padding: 0;
+  text-align: left;
+}
+
+.railSub {
+  font: 500 11.5px var(--font-ui);
+  color: var(--muted-2);
+  margin-top: 2px;
+}
+
+.followBtn {
+  flex: none;
+  padding: 7px 14px;
+  border-radius: 999px;
+  border: 1.5px solid var(--accent);
+  background: var(--accent);
+  color: #fff;
+  font: 700 12px var(--font-ui);
+  cursor: pointer;
+}
+
+.followBtnOn {
+  background: var(--surface-card);
+  color: var(--ink);
+  border-color: var(--border-card);
+}
+
+/* mobile horizontal chef rail */
+.chefSection {
+  margin-top: 22px;
+}
+
+.chefSectionTitle {
+  font-family: var(--font-display);
+  font-size: 23px;
+  color: var(--ink);
+}
+
+.chefRail {
+  margin-top: 12px;
+  display: flex;
+  gap: 12px;
+  padding-bottom: 4px;
+}
+
+.chefCard {
+  flex: none;
+  width: 148px;
+  background: var(--surface-card);
+  border: 1px solid var(--border-hairline);
+  border-radius: 20px;
+  padding: 15px 13px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 9px;
+}
+
+.chefCardName {
+  font: 700 13.5px var(--font-ui);
+  color: var(--ink);
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 118px;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+.chefCardBtn {
+  width: 100%;
+  padding: 9px;
+  border-radius: 999px;
+  border: 1.5px solid var(--accent);
+  background: var(--accent);
+  color: #fff;
+  font: 700 12.5px var(--font-ui);
+  cursor: pointer;
+}
+
+/* ---------- activity ---------- */
+
+.activityList {
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+@media (min-width: 900px) {
+  .activityList { margin-top: 22px; gap: 11px; }
+}
+
+.activityRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 13px;
+  border-radius: 18px;
+  background: var(--surface-card);
+  border: 1px solid var(--border-hairline);
+  text-align: left;
+  width: 100%;
+  cursor: pointer;
+}
+
+@media (min-width: 900px) {
+  .activityRow { gap: 14px; padding: 16px; border-radius: 20px; }
+}
+
+.activityUnread {
+  background: #FFF6EF;
+  border-color: #F3DAC2;
+}
+
+.activityGlyph {
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  flex: none;
+  color: #fff;
+  font: 700 15px var(--font-ui);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+@media (min-width: 900px) {
+  .activityGlyph { width: 40px; height: 40px; border-radius: 13px; font-size: 16px; }
+}
+
+.activityTitle {
+  font: 600 13.5px var(--font-ui);
+  color: var(--ink);
+  line-height: 1.35;
+}
+
+@media (min-width: 900px) {
+  .activityTitle { font-size: 14.5px; }
+}
+
+.activityTime {
+  font: 600 11.5px var(--font-ui);
+  color: var(--muted-4);
+  flex: none;
+}

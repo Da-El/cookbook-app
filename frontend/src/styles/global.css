@@ -8,6 +8,7 @@
 
 *, *::before, *::after {
   box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
 }
 
 html, body {
@@ -19,19 +20,24 @@ body {
   background: var(--bg-page);
   color: var(--ink);
   font-family: var(--font-ui);
-  font-size: var(--text-ui-md);
+  font-size: 14px;
   -webkit-font-smoothing: antialiased;
 }
 
-h1, h2, h3, .display {
+h1, h2, h3 {
   font-family: var(--font-display);
   font-weight: 400;
   margin: 0;
 }
 
-button, input, textarea, select {
-  font-family: inherit;
+input, textarea, button, select {
+  font-family: var(--font-ui);
   color: inherit;
+}
+
+input:focus, textarea:focus {
+  outline: none;
+  border-color: var(--accent) !important;
 }
 
 img {
@@ -40,14 +46,20 @@ img {
 }
 
 a {
-  color: inherit;
+  color: var(--accent-dark);
   text-decoration: none;
 }
 
-.eyebrow {
-  font-family: var(--font-ui);
-  font-size: var(--text-eyebrow-size);
-  font-weight: var(--text-eyebrow-weight);
-  letter-spacing: var(--text-eyebrow-tracking);
-  text-transform: uppercase;
+a:hover {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+/* Horizontal scroll rails (chef stories, filter chips) hide their scrollbar. */
+.hscroll {
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.hscroll::-webkit-scrollbar {
+  display: none;
 }

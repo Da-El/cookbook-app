@@ -1,0 +1,98 @@
+.grid {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+@media (min-width: 900px) {
+  .grid {
+    margin-top: 20px;
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    gap: 22px;
+  }
+}
+
+.card {
+  cursor: pointer;
+  border: none;
+  background: none;
+  padding: 0;
+  text-align: left;
+  display: block;
+  width: 100%;
+}
+
+.photo {
+  height: 120px;
+  border-radius: 18px;
+  box-shadow: var(--shadow-thumb);
+  position: relative;
+}
+
+@media (min-width: 900px) {
+  .photo {
+    height: 190px;
+    border-radius: 20px;
+    box-shadow: var(--shadow-card);
+  }
+}
+
+.title {
+  font-family: var(--font-display);
+  font-size: 18px;
+  color: var(--ink);
+  line-height: 1.05;
+  margin-top: 8px;
+}
+
+@media (min-width: 900px) {
+  .title {
+    font-size: 21px;
+    margin-top: 11px;
+  }
+}
+
+.meta {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin-top: 3px;
+  color: var(--muted-2);
+  font: 500 12px var(--font-ui);
+  flex-wrap: wrap;
+}
+
+@media (min-width: 900px) {
+  .meta {
+    gap: 7px;
+    margin-top: 5px;
+    font-size: 12.5px;
+  }
+}
+
+/* Inline dot before the cuisine, not an overlay badge on the photo. */
+.canMakeDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--green);
+  flex: none;
+}
+
+.rating {
+  color: var(--amber);
+}
+
+/* Corner badge used on the Cookbook grid (Cooked / Saved / Yours). */
+.badge {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  background: rgba(255, 255, 255, .94);
+  font: 700 10px var(--font-ui);
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  padding: 5px 10px;
+  border-radius: 999px;
+}

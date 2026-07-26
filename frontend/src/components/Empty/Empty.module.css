@@ -1,0 +1,69 @@
+/* Clickable "do this next" card - used for the Cookbook recipe tabs and the feed. */
+.card {
+  margin-top: 14px;
+  padding: 24px 20px;
+  border-radius: 18px;
+  border: 1.5px dashed #D8CBB6;
+  background: var(--surface-card);
+  text-align: center;
+  cursor: pointer;
+  width: 100%;
+  display: block;
+}
+
+@media (min-width: 900px) {
+  .card {
+    margin-top: 18px;
+    max-width: 520px;
+    padding: 30px;
+    border-radius: 20px;
+  }
+}
+
+.cardTitle {
+  color: var(--ink);
+  font: 700 14px var(--font-ui);
+}
+
+.cardText {
+  color: var(--muted);
+  font: 400 13px var(--font-ui);
+  margin-top: 4px;
+  line-height: 1.45;
+}
+
+@media (min-width: 900px) {
+  .cardTitle { font-size: 15px; }
+  .cardText { font-size: 13.5px; margin-top: 5px; }
+}
+
+/* Plain centred line - used for fridge, shopping and browse results. */
+.line {
+  text-align: center;
+  color: var(--muted-3);
+  font: 500 14px var(--font-ui);
+  padding: 20px 0;
+}
+
+.lineRoomy {
+  padding: 40px 0;
+}
+
+@media (min-width: 900px) {
+  .lineRoomy {
+    font-size: 15px;
+    padding: 60px 0;
+  }
+}
+
+/* Static dashed card with no title - used on chef profiles. */
+.static {
+  padding: 24px 20px;
+  border-radius: 18px;
+  border: 1.5px dashed #D8CBB6;
+  background: var(--surface-card);
+  text-align: center;
+  color: var(--muted);
+  font: 500 13.5px var(--font-ui);
+  line-height: 1.45;
+}

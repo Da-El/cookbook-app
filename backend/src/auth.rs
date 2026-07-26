@@ -69,6 +69,23 @@ impl FromRequestParts<AppState> for CurrentUser {
     }
 }
 
+/// Lets handlers take `Option<CurrentUser>` for endpoints that work signed out
+/// (e.g. browsing meals) but personalise their response when a session exists.
+impl axum::extract::OptionalFromRequestParts<AppState> for CurrentUser {
+    type Rejection = std::convert::Infallible;
+
+    async fn from_request_parts(
+        parts: &mut Parts,
+        state: &AppState,
+    ) -> Result<Option<Self>, Self::Rejection> {
+        Ok(
+            <CurrentUser as FromRequestParts<AppState>>::from_request_parts(parts, state)
+                .await
+                .ok(),
+        )
+    }
+}
+
 fn hash_token(token: &str) -> Vec<u8> {
     Sha256::digest(token.as_bytes()).to_vec()
 }

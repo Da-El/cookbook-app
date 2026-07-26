@@ -1,0 +1,21 @@
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 34px;
+  transform: translateX(-50%);
+  background: var(--ink);
+  color: #fff;
+  font: 600 13px var(--font-ui);
+  padding: 11px 18px;
+  border-radius: 999px;
+  box-shadow: 0 14px 28px -12px rgba(0, 0, 0, .5);
+  z-index: 50;
+  white-space: nowrap;
+  max-width: calc(100vw - 40px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mobile {
+  bottom: 100px;
+}
