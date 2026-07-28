@@ -293,3 +293,74 @@ structure verified via curl and the actual browser download trigger
 behavior (1 vote = not applied, 2 = applied) confirmed at the API level
 for both the meal page and the Browse filter, then spot-checked through
 the real UI.
+
+---
+
+## Batch 7 — Iterations 31–35
+
+**Commit:** local only — not pushed/deployed this batch, per standing
+instruction · **Migrations:** 0027–0028 · **Tests:** 61 backend, passing
+
+31. **Public collections** — `meal_collections` gained an `is_public` flag
+    and an owner-only visibility toggle plus a "copy link" action. Any
+    signed-in user can now open a public collection (`detail()` switched
+    from requiring `CurrentUser` to accepting `viewer: Option<CurrentUser>`);
+    a private collection still 404s for everyone but its owner. The
+    detail view is read-only for non-owners — no remove button, no
+    visibility control — gated on a new `is_mine` field in the response.
+32. **Revision diff view** — meal edit history (`MealHistory.tsx`, from
+    Iteration 1's revision system) gained a per-row "View changes" toggle
+    that renders a structured, field-by-field diff instead of just a
+    timestamp and author. The tricky part was pairing: each revision's
+    `snapshot` captures the meal's state *before* that revision's own
+    edit, so the edit that produced `revisions[i]` is the diff between
+    `revisions[i].snapshot` and `revisions[i-1].snapshot` — or the current
+    live meal for the newest row, which has no newer revision to supply
+    an "after" state. Traced through a concrete 3-revision example before
+    writing any code, having first drafted the pairing backwards.
+33. **Rate limiting** — a generic per-user, per-action limiter
+    (`rate_limit_events` table + `ratelimit::check()`) applied to four
+    previously-unbounded write endpoints: content flags (20/hour), review
+    replies and guide comments (20/10min each), and ingredient reviews
+    (30/10min). A rejected request isn't itself recorded, so a blocked
+    burst can't extend its own lockout. Found and fixed a real pre-existing
+    gap as a byproduct: `IngredientDetail.tsx`'s review form and
+    `Guides.tsx`'s comment form had no error handling at all, so a 429 (or
+    any failure) would fail completely silently — both now toast the error.
+34. **"Surprise me" + featured pick** — a `GET /meals/random` endpoint
+    (`ORDER BY random() LIMIT 1` over live public meals, with optional
+    `exclude` and `min_rating_count` params) backs two new spots: a "🎲
+    Surprise me" button on Browse that jumps straight to a random recipe,
+    and a "✨ Featured" card on the Home feed showing a random *rated*
+    pick (`min_rating_count=1`, so an unproven, unrated recipe never gets
+    the editorial-sounding "Featured" label). The card renders nothing at
+    all once the catalog has no rated meals yet, rather than a
+    broken-feeling empty state.
+35. **Cooking streak** — a "consecutive days cooked" tracker on the
+    Cookbook page, built on the `meal_log` table from Iteration 28. The
+    streak math (`compute_streak()` in `kitchen.rs`) is a small pure
+    function over a list of calendar days, unit-tested directly rather
+    than only through the database: a day missed *today* doesn't zero the
+    streak until tomorrow arrives with still nothing logged, so a
+    yesterday-ending run still shows as alive. Longest streak is tracked
+    separately from current, so a broken streak still shows what the
+    user's best was rather than just resetting to zero and forgetting.
+
+**Verified:** public collections' full authorization matrix (private
+404s for a non-owner, a non-owner can't toggle visibility, the owner can,
+and a public collection is viewable by a second signed-in user with
+correct `is_mine`/`owner_name`); the revision diff view's two pairing
+cases against a real 3-revision chain on a test meal, both the
+"vs current" and "vs an older revision" paths; rate limiting's exact
+threshold boundary via 21 sequential requests confirming the 20th
+succeeds and the 21st 429s, the error surfacing via toast in a real
+browser session, and a different action key staying unaffected; `/meals/
+random`'s `exclude` and `min_rating_count` filters against a purpose-made
+second test meal (both were untestable against the single-meal seed data
+alone), plus the "Surprise me" button and "Featured" card in both desktop
+and mobile layouts through a real browser session; and the cooking
+streak's three real states — an active streak, a streak broken by a
+gap (current resets, longest is preserved), and no history at all (card
+renders nothing) — each driven by real `meal_log` rows through curl, then
+the active and broken states re-confirmed visually in the browser in
+both light and dark mode.
