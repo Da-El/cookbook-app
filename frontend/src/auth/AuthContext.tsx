@@ -3,10 +3,16 @@ import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { api, ApiError } from '../api/client';
 import type { UserProfile } from '../api/types';
 
+/// Either a normal login response, or - when the account has 2FA turned
+/// on - a challenge to complete with `verifyTwoFactor` instead of a
+/// session having been created yet.
+type LoginOutcome = { twoFactorRequired: false } | { twoFactorRequired: true; challenge: string };
+
 interface AuthValue {
   user: UserProfile | null;
   loading: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<LoginOutcome>;
+  verifyTwoFactor: (challenge: string, code: string) => Promise<void>;
   register: (email: string, password: string, displayName: string) => Promise<void>;
   logout: () => Promise<void>;
 }
@@ -33,7 +39,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const loginMut = useMutation({
     mutationFn: (v: { email: string; password: string }) =>
-      api.post<UserProfile>('/auth/login', v),
+      api.post<UserProfile | { two_factor_required: true; challenge: string }>('/auth/login', v),
+  });
+
+  const verifyMut = useMutation({
+    mutationFn: (v: { challenge: string; code: string }) => api.post<UserProfile>('/auth/2fa/verify', v),
     onSuccess: setUser,
   });
 
@@ -47,7 +57,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     user: user ?? null,
     loading: isLoading,
     login: async (email, password) => {
-      await loginMut.mutateAsync({ email, password });
+      const res = await loginMut.mutateAsync({ email, password });
+      if ('two_factor_required' in res && res.two_factor_required) {
+        return { twoFactorRequired: true, challenge: res.challenge };
+      }
+      setUser(res as UserProfile);
+      return { twoFactorRequired: false };
+    },
+    verifyTwoFactor: async (challenge, code) => {
+      await verifyMut.mutateAsync({ challenge, code });
     },
     register: async (email, password, display_name) => {
       await registerMut.mutateAsync({ email, password, display_name });

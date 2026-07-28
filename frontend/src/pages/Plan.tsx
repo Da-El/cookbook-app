@@ -7,6 +7,7 @@ import type { CookbookMealLite } from '../api/types';
 import { Segmented } from '../components/Segmented/Segmented';
 import { EmptyLine } from '../components/Empty/Empty';
 import { useToast } from '../components/Toast/ToastContext';
+import { useEscapeKey } from '../hooks/useEscapeKey';
 import { mealBackground, ingredientBackground } from '../lib/imagery';
 import styles from './Plan.module.css';
 
@@ -62,6 +63,7 @@ export function Plan() {
   // in place rather than adding a new one - same picker UI, different action
   // on click, so a swap doesn't need its own dialog built from scratch.
   const [picking, setPicking] = useState<{ date: string; slot: PlanSlot; swapId?: number } | null>(null);
+  useEscapeKey(() => setPicking(null), picking !== null);
 
   const weekStart = useMemo(() => {
     const d = startOfWeek(new Date());

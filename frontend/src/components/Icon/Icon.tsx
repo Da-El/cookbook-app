@@ -94,6 +94,9 @@ export const PrintIcon = (p: IconProps) =>
     p,
   );
 
+export const FolderIcon = (p: IconProps) =>
+  svg(<path d="M4 6.5A1.5 1.5 0 0 1 5.5 5h4l2 2.5h7A1.5 1.5 0 0 1 20 9v8.5A1.5 1.5 0 0 1 18.5 19h-13A1.5 1.5 0 0 1 4 17.5z" />, p);
+
 export const HeartIcon = ({ filled, ...p }: IconProps & { filled?: boolean }) => (
   <svg
     width={p.size ?? 20}

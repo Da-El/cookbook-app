@@ -45,6 +45,7 @@ interface SettingsProfile {
   vis_made: 'public' | 'private';
   vis_want: 'public' | 'private';
   vis_fridge: 'public' | 'private';
+  two_factor_enabled: boolean;
 }
 
 const VIS_ROWS: [keyof Pick<SettingsProfile, 'vis_mine' | 'vis_made' | 'vis_want' | 'vis_fridge'>, string, string][] = [
@@ -128,6 +129,11 @@ export function Settings() {
 
   const toggleDiet = useMutation({
     mutationFn: (next: string[]) => api.post('/profile', { diet_prefs: next }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['settings'] }),
+  });
+
+  const toggleTwoFactor = useMutation({
+    mutationFn: (enabled: boolean) => api.post(`/auth/2fa/${enabled ? 'enable' : 'disable'}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['settings'] }),
   });
 
@@ -293,6 +299,29 @@ export function Settings() {
           )
         )}
       </div>
+
+      {settings && (
+        <div className={styles.section}>
+          <div className={styles.sectionTitle}>Two-factor authentication</div>
+          <div className={styles.visRow}>
+            <div>
+              <div className={styles.visLabel}>Email code at sign-in</div>
+              <div className={styles.visSub}>
+                {settings.two_factor_enabled
+                  ? "We'll email a 6-digit code every time you sign in."
+                  : 'Add a second step at sign-in beyond just your password.'}
+              </div>
+            </div>
+            <button
+              className={`${styles.twoFactorToggle} ${settings.two_factor_enabled ? styles.twoFactorToggleOn : ''}`}
+              disabled={toggleTwoFactor.isPending}
+              onClick={() => toggleTwoFactor.mutate(!settings.two_factor_enabled)}
+            >
+              {settings.two_factor_enabled ? 'On' : 'Off'}
+            </button>
+          </div>
+        </div>
+      )}
 
       {loginHistory.length > 0 && (
         <div className={styles.section}>

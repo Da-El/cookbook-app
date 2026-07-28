@@ -465,6 +465,27 @@
   bottom: 100px;
 }
 
+/* Off-screen until Tab-focused, then jumps into view at the top-left - the
+   first thing a keyboard or screen-reader user reaches on every page,
+   letting them skip the nav (sidebar on desktop, header+tab bar on mobile)
+   and land straight in the page content. */
+.skipLink {
+  position: fixed;
+  top: -100px;
+  left: 12px;
+  z-index: 100;
+  background: var(--ink);
+  color: #fff;
+  padding: 10px 18px;
+  border-radius: 10px;
+  font: 700 13px var(--font-ui);
+  text-decoration: none;
+  transition: top 0.15s ease;
+}
+.skipLink:focus {
+  top: 12px;
+}
+
 /* Print: none of the app's own chrome belongs on a page meant to sit next
    to a cutting board - hiding it here (rather than per-page) covers every
    printable screen at once, not just the recipe page that prompted this. */

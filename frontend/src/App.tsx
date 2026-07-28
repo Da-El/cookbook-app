@@ -30,6 +30,9 @@ import { Discover } from './pages/Discover';
 import { Guides, GuidePage } from './pages/Guides';
 import { Admin } from './pages/Admin';
 import { Leaderboard } from './pages/Leaderboard';
+import { Collections } from './pages/Collections';
+import { CollectionDetail } from './pages/CollectionDetail';
+import { Compare } from './pages/Compare';
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { refetchOnWindowFocus: false } },
@@ -97,6 +100,9 @@ function Routed() {
       <Route path="/guides/:slug" element={<Bare><GuidePage /></Bare>} />
       <Route path="/admin" element={<Bare><Admin /></Bare>} />
       <Route path="/leaderboard" element={<Bare><Leaderboard /></Bare>} />
+      <Route path="/collections" element={<Bare><Collections /></Bare>} />
+      <Route path="/collections/:id" element={<Bare><CollectionDetail /></Bare>} />
+      <Route path="/compare" element={<Bare><Compare /></Bare>} />
 
       {/* Full-screen, no chrome on either platform. */}
       <Route path="/meals/:id/cook" element={<CookMode />} />

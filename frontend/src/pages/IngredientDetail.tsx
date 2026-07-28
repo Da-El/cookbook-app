@@ -83,6 +83,12 @@ export function IngredientDetail() {
         <button className={styles.backBtn} onClick={() => navigate(-1)} aria-label="Back">
           <ChevronLeft size={18} strokeWidth={2.2} />
         </button>
+        <button
+          className={styles.compareBtn}
+          onClick={() => navigate(`/compare?ids=${data.id}`)}
+        >
+          ⚖ Compare
+        </button>
       </div>
 
       <div className={styles.photo} style={{ background: ingredientBackground(data.photo_url, data.category) }} />

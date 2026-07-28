@@ -9,6 +9,8 @@ import { Avatar } from '../components/Avatar/Avatar';
 import { LoadingState, ErrorState } from '../components/PageState/PageState';
 import { FlagButton } from '../components/Flag/FlagButton';
 import { ContributorBadge, type ContributorTier } from '../components/ContributorBadge/ContributorBadge';
+import { ReviewReplies } from '../components/ReviewReplies/ReviewReplies';
+import { AddToCollection } from '../components/AddToCollection/AddToCollection';
 import { mealBackground, ingredientBackground } from '../lib/imagery';
 import { pickImage } from '../lib/photo';
 import styles from './MealDetail.module.css';
@@ -116,6 +118,16 @@ interface MealReview {
   helpful_count: number;
   your_helpful_vote: boolean;
   author_tier: ContributorTier;
+  replies: ReviewReply[];
+}
+
+interface ReviewReply {
+  id: number;
+  review_id: number;
+  user_id: number | null;
+  author_name: string | null;
+  body: string;
+  created_at: string;
 }
 
 function formatDate(iso: string) {
@@ -336,6 +348,7 @@ export function MealDetail() {
               <ForkIcon size={17} strokeWidth={1.8} />
             </button>
           )}
+          {user && <AddToCollection mealId={meal.id} triggerClassName={styles.actionBtn} />}
           <button className={styles.actionBtn} title="Print this recipe" onClick={() => window.print()}>
             <PrintIcon size={17} strokeWidth={1.8} />
           </button>
@@ -715,6 +728,7 @@ export function MealDetail() {
                     </button>
                     {user && r.user_id !== user.id && <FlagButton contentType="review" contentId={r.id} />}
                   </span>
+                  <ReviewReplies mealId={meal.id} reviewId={r.id} replies={r.replies} />
                 </span>
               </div>
             ))}

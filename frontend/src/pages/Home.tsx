@@ -71,6 +71,7 @@ const ACTIVITY_GLYPH: Record<string, { glyph: string; bg: string }> = {
   new_follower: { glyph: '+', bg: 'var(--green)' },
   content_removed: { glyph: '⚑', bg: 'var(--warn)' },
   flag_resolved: { glyph: '✓', bg: 'var(--muted)' },
+  review_reply: { glyph: '💬', bg: 'var(--accent)' },
 };
 
 function activityCopy(a: ActivityItem): string {
@@ -83,6 +84,7 @@ function activityCopy(a: ActivityItem): string {
     case 'edit_won': return 'Your edit is now the top answer';
     case 'content_removed': return 'A moderator removed something you posted';
     case 'flag_resolved': return 'A moderator resolved a flag you raised';
+    case 'review_reply': return `${who} replied to your review`;
     default: return 'New activity';
   }
 }

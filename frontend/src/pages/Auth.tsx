@@ -8,7 +8,7 @@ import { api } from '../api/client';
 import styles from './Auth.module.css';
 
 export function Auth() {
-  const { login, register } = useAuth();
+  const { login, verifyTwoFactor, register } = useAuth();
   const [mode, setMode] = useState<'login' | 'signup' | 'forgot'>('login');
   const [displayName, setDisplayName] = useState('');
   const [email, setEmail] = useState('');
@@ -16,6 +16,10 @@ export function Auth() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [resetSent, setResetSent] = useState(false);
+  // Set once `login` comes back asking for a second factor - while this is
+  // non-null the form below shows the code prompt instead of email/password.
+  const [challenge, setChallenge] = useState<string | null>(null);
+  const [code, setCode] = useState('');
 
   const isSignup = mode === 'signup';
   const isForgot = mode === 'forgot';
@@ -37,8 +41,23 @@ export function Auth() {
       if (isSignup) {
         await register(email, password, displayName);
       } else {
-        await login(email, password);
+        const result = await login(email, password);
+        if (result.twoFactorRequired) setChallenge(result.challenge);
       }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Something went wrong.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function onVerify(e: FormEvent) {
+    e.preventDefault();
+    if (!challenge) return;
+    setError(null);
+    setBusy(true);
+    try {
+      await verifyTwoFactor(challenge, code.trim());
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong.');
     } finally {
@@ -50,6 +69,8 @@ export function Auth() {
     setMode(next);
     setError(null);
     setResetSent(false);
+    setChallenge(null);
+    setCode('');
   }
 
   return (
@@ -61,7 +82,30 @@ export function Auth() {
         </div>
 
         <Card>
-          {isForgot ? (
+          {challenge ? (
+            <form className={styles.form} onSubmit={onVerify}>
+              {error && <p className={styles.error}>{error}</p>}
+              <p className={styles.forgotHint}>
+                We sent a 6-digit code to your email. It expires in 10 minutes.
+              </p>
+              <Input
+                label="Code"
+                inputMode="numeric"
+                value={code}
+                onChange={(e) => setCode(e.target.value)}
+                autoComplete="one-time-code"
+                maxLength={6}
+                autoFocus
+                required
+              />
+              <Button type="submit" fullWidth disabled={busy || code.trim().length !== 6}>
+                {busy ? 'Checking…' : 'Verify'}
+              </Button>
+              <button type="button" className={styles.forgotLink} onClick={() => switchMode('login')}>
+                Back to sign in
+              </button>
+            </form>
+          ) : isForgot ? (
             resetSent ? (
               <div className={styles.form}>
                 <p className={styles.resetSent}>

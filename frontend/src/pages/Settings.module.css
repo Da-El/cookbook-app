@@ -166,6 +166,26 @@
   color: #fff !important;
 }
 
+.twoFactorToggle {
+  flex: none;
+  padding: 8px 18px;
+  border-radius: 999px;
+  border: 1.5px solid var(--border-card);
+  background: var(--surface-card);
+  color: var(--secondary);
+  font: 700 12.5px var(--font-ui);
+  cursor: pointer;
+}
+.twoFactorToggle:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.twoFactorToggleOn {
+  background: var(--green);
+  border-color: var(--green);
+  color: #fff;
+}
+
 .sessionList {
   display: flex;
   flex-direction: column;

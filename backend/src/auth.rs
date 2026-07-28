@@ -7,7 +7,7 @@ use axum::Json;
 use axum_extra::extract::cookie::{Cookie, CookieJar, SameSite};
 use base64::Engine;
 use chrono::{DateTime, Duration, Utc};
-use rand::Rng;
+use rand::{Rng, RngExt};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
@@ -20,6 +20,8 @@ const ATTEMPT_WINDOW_MINS: i64 = 15;
 const RESET_TOKEN_HOURS: i64 = 1;
 const MAX_RESET_ATTEMPTS: i64 = 5;
 const RESET_ATTEMPT_WINDOW_MINS: i64 = 60;
+const TWO_FACTOR_CODE_MINUTES: i64 = 10;
+const TWO_FACTOR_MAX_ATTEMPTS: i16 = 5;
 
 #[derive(Deserialize)]
 pub struct Credentials {
@@ -276,7 +278,7 @@ pub async fn login(
     jar: CookieJar,
     headers: HeaderMap,
     Json(body): Json<Credentials>,
-) -> Result<(CookieJar, Json<UserProfile>), (StatusCode, Json<serde_json::Value>)> {
+) -> Result<(CookieJar, Json<serde_json::Value>), (StatusCode, Json<serde_json::Value>)> {
     let email = body.email.trim().to_lowercase();
 
     let recent: i64 = sqlx::query_scalar(
@@ -296,8 +298,9 @@ pub async fn login(
         ));
     }
 
-    let row = sqlx::query_as::<_, (i64, Option<String>, String, bool, bool, Option<String>)>(
-        "SELECT id, email, display_name, has_onboarded, is_admin, password_hash FROM users WHERE lower(email) = $1",
+    let row = sqlx::query_as::<_, (i64, Option<String>, String, bool, bool, bool, Option<String>)>(
+        "SELECT id, email, display_name, has_onboarded, is_admin, two_factor_enabled, password_hash
+         FROM users WHERE lower(email) = $1",
     )
     .bind(&email)
     .fetch_optional(&state.db)
@@ -308,7 +311,8 @@ pub async fn login(
     // so this endpoint can't be used to enumerate registered accounts.
     let invalid = || err(StatusCode::UNAUTHORIZED, "Incorrect email or password.");
 
-    let Some((id, stored_email, display_name, has_onboarded, is_admin, Some(password_hash))) = row else {
+    let Some((id, stored_email, display_name, has_onboarded, is_admin, two_factor_enabled, Some(password_hash))) = row
+    else {
         record_attempt(&state, &email).await;
         return Err(invalid());
     };
@@ -325,7 +329,45 @@ pub async fn login(
         .execute(&state.db)
         .await
         .ok();
+    // The password was correct either way - that's the meaningful "was this
+    // you" signal for the account's own history, independent of whether a
+    // second factor is also required below.
     record_history(&state, id, true, &headers).await;
+
+    let resolved_email = stored_email.unwrap_or(email);
+
+    if two_factor_enabled {
+        let challenge = new_token();
+        let code = new_two_factor_code();
+        let expires = Utc::now() + Duration::minutes(TWO_FACTOR_CODE_MINUTES);
+
+        sqlx::query(
+            "INSERT INTO two_factor_codes (user_id, challenge_hash, code_hash, expires_at) VALUES ($1,$2,$3,$4)",
+        )
+        .bind(id)
+        .bind(hash_token(&challenge))
+        .bind(hash_token(&code))
+        .bind(expires)
+        .execute(&state.db)
+        .await
+        .map_err(|_| oops())?;
+
+        crate::email::send(
+            &resolved_email,
+            "Your Cookbook sign-in code",
+            &format!(
+                "Your code is {code}\n\n\
+                 It expires in {TWO_FACTOR_CODE_MINUTES} minutes. If you didn't just try to sign in, \
+                 you can ignore this - your account is still safe."
+            ),
+        )
+        .await;
+
+        return Ok((
+            jar,
+            Json(serde_json::json!({ "two_factor_required": true, "challenge": challenge })),
+        ));
+    }
 
     let token = create_session(&state, id, user_agent_of(&headers).as_deref())
         .await
@@ -333,14 +375,111 @@ pub async fn login(
 
     Ok((
         jar.add(session_cookie(token, state.secure_cookies)),
+        Json(
+            serde_json::to_value(UserProfile { id, email: resolved_email, display_name, has_onboarded, is_admin })
+                .unwrap(),
+        ),
+    ))
+}
+
+#[derive(Deserialize)]
+pub struct TwoFactorVerify {
+    pub challenge: String,
+    pub code: String,
+}
+
+/// The second step of a 2FA login: exchanges a challenge + the emailed code
+/// for the same cookie+profile response a normal `login` would have given
+/// directly. Wrong code just increments `attempts` on the same challenge
+/// row rather than failing it outright - a mistyped digit shouldn't force
+/// starting over from the password - but once `attempts` hits the cap the
+/// challenge is spent regardless, so brute-forcing the 6-digit space isn't
+/// viable within one challenge's lifetime.
+pub async fn verify_two_factor(
+    State(state): State<AppState>,
+    jar: CookieJar,
+    headers: HeaderMap,
+    Json(body): Json<TwoFactorVerify>,
+) -> Result<(CookieJar, Json<UserProfile>), (StatusCode, Json<serde_json::Value>)> {
+    let invalid = || err(StatusCode::UNAUTHORIZED, "That code isn't right. Check your email and try again.");
+
+    let row: Option<(i64, i64, Vec<u8>, i16, DateTime<Utc>)> = sqlx::query_as(
+        "SELECT id, user_id, code_hash, attempts, expires_at
+         FROM two_factor_codes WHERE challenge_hash = $1",
+    )
+    .bind(hash_token(&body.challenge))
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|_| oops())?;
+
+    let Some((row_id, user_id, code_hash, attempts, expires_at)) = row else {
+        return Err(invalid());
+    };
+
+    if expires_at < Utc::now() || attempts >= TWO_FACTOR_MAX_ATTEMPTS {
+        sqlx::query("DELETE FROM two_factor_codes WHERE id = $1").bind(row_id).execute(&state.db).await.ok();
+        return Err(err(StatusCode::BAD_REQUEST, "That code has expired. Sign in again to get a new one."));
+    }
+
+    if hash_token(body.code.trim()) != code_hash {
+        sqlx::query("UPDATE two_factor_codes SET attempts = attempts + 1 WHERE id = $1")
+            .bind(row_id)
+            .execute(&state.db)
+            .await
+            .ok();
+        return Err(invalid());
+    }
+
+    sqlx::query("DELETE FROM two_factor_codes WHERE id = $1").bind(row_id).execute(&state.db).await.ok();
+
+    let profile = sqlx::query_as::<_, (i64, Option<String>, String, bool, bool)>(
+        "SELECT id, email, display_name, has_onboarded, is_admin FROM users WHERE id = $1",
+    )
+    .bind(user_id)
+    .fetch_one(&state.db)
+    .await
+    .map_err(|_| oops())?;
+
+    let token = create_session(&state, user_id, user_agent_of(&headers).as_deref())
+        .await
+        .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, "Could not create session."))?;
+
+    Ok((
+        jar.add(session_cookie(token, state.secure_cookies)),
         Json(UserProfile {
-            id,
-            email: stored_email.unwrap_or(email),
-            display_name,
-            has_onboarded,
-            is_admin,
+            id: profile.0,
+            email: profile.1.unwrap_or_default(),
+            display_name: profile.2,
+            has_onboarded: profile.3,
+            is_admin: profile.4,
         }),
     ))
+}
+
+pub async fn enable_two_factor(State(state): State<AppState>, CurrentUser(user): CurrentUser) -> StatusCode {
+    match sqlx::query("UPDATE users SET two_factor_enabled = true WHERE id = $1")
+        .bind(user.id)
+        .execute(&state.db)
+        .await
+    {
+        Ok(_) => StatusCode::NO_CONTENT,
+        Err(_) => StatusCode::INTERNAL_SERVER_ERROR,
+    }
+}
+
+pub async fn disable_two_factor(State(state): State<AppState>, CurrentUser(user): CurrentUser) -> StatusCode {
+    match sqlx::query("UPDATE users SET two_factor_enabled = false WHERE id = $1")
+        .bind(user.id)
+        .execute(&state.db)
+        .await
+    {
+        Ok(_) => StatusCode::NO_CONTENT,
+        Err(_) => StatusCode::INTERNAL_SERVER_ERROR,
+    }
+}
+
+fn new_two_factor_code() -> String {
+    format!("{:06}", rand::rng().random_range(0..1_000_000u32))
 }
 
 async fn record_attempt(state: &AppState, email: &str) {
@@ -394,14 +533,15 @@ pub struct SettingsProfile {
     pub vis_made: String,
     pub vis_want: String,
     pub vis_fridge: String,
+    pub two_factor_enabled: bool,
 }
 
 pub async fn settings(
     State(state): State<AppState>,
     CurrentUser(user): CurrentUser,
 ) -> Result<Json<SettingsProfile>, StatusCode> {
-    let row = sqlx::query_as::<_, (String, Option<String>, Option<String>, Vec<String>, String, String, String, String)>(
-        "SELECT display_name, email, bio, diet_prefs, vis_mine, vis_made, vis_want, vis_fridge
+    let row = sqlx::query_as::<_, (String, Option<String>, Option<String>, Vec<String>, String, String, String, String, bool)>(
+        "SELECT display_name, email, bio, diet_prefs, vis_mine, vis_made, vis_want, vis_fridge, two_factor_enabled
          FROM users WHERE id = $1",
     )
     .bind(user.id)
@@ -418,6 +558,7 @@ pub async fn settings(
         vis_made: row.5,
         vis_want: row.6,
         vis_fridge: row.7,
+        two_factor_enabled: row.8,
     }))
 }
 

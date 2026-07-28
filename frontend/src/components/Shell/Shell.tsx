@@ -2,6 +2,7 @@ import { useState, type ReactNode } from 'react';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useIsDesktop } from '../../hooks/useMediaQuery';
+import { useEscapeKey } from '../../hooks/useEscapeKey';
 import { useAuth } from '../../auth/AuthContext';
 import { useProfileTheme } from '../../theme/ThemeContext';
 import { canOfferInstall, useInstall } from '../../pwa/InstallContext';
@@ -59,6 +60,7 @@ export function Shell({ children, bare = false }: ShellProps) {
   const install = useInstall();
   const [menuOpen, setMenuOpen] = useState(false);
   const [search, setSearch] = useState('');
+  useEscapeKey(() => setMenuOpen(false), menuOpen);
 
   const { data: counts } = useQuery({
     queryKey: ['cookbook-counts'],
@@ -150,6 +152,7 @@ export function Shell({ children, bare = false }: ShellProps) {
   if (isDesktop) {
     return (
       <div className={styles.root}>
+        <a href="#main-content" className={styles.skipLink}>Skip to content</a>
         <aside className={styles.sidebar}>
           <div className={styles.logo}>
             <div className={styles.logoMark}><LogoGlyph /></div>
@@ -222,7 +225,7 @@ export function Shell({ children, bare = false }: ShellProps) {
               </button>
             </div>
           </div>
-          <div className={styles.content}>{children}</div>
+          <div className={styles.content} id="main-content" tabIndex={-1}>{children}</div>
         </div>
         {menu}
       </div>
@@ -231,7 +234,8 @@ export function Shell({ children, bare = false }: ShellProps) {
 
   return (
     <div className={styles.mobileRoot}>
-      <div className={bare ? styles.mobileContentBare : styles.mobileContent}>
+      <a href="#main-content" className={styles.skipLink}>Skip to content</a>
+      <div className={bare ? styles.mobileContentBare : styles.mobileContent} id="main-content" tabIndex={-1}>
         {!bare && (
           <div className={styles.mobileHeader}>
             <Link to="/" className={styles.mobileLogo}>

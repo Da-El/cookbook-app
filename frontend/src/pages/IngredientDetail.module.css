@@ -11,6 +11,18 @@
   padding-top: 2px;
 }
 
+.compareBtn {
+  margin-left: auto;
+  border: 1.5px solid var(--border-card);
+  background: var(--surface-card);
+  color: var(--ink);
+  padding: 8px 14px;
+  border-radius: 999px;
+  font: 700 12.5px var(--font-ui);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
 .backBtn {
   width: 40px;
   height: 40px;

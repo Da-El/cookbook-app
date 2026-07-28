@@ -1621,7 +1621,28 @@ pub async fn my_journal(
     Ok(Json(rows))
 }
 
-#[derive(Serialize, sqlx::FromRow)]
+// Two structs rather than one `#[sqlx(default)]` field: sqlx's FromRow
+// derive still requires a `Vec<ReviewReply>` field to itself be decodable
+// even when defaulted, which a plain nested struct isn't. `MealReviewRow`
+// matches the query exactly; `replies` gets grouped in afterward in Rust.
+#[derive(sqlx::FromRow)]
+struct MealReviewRow {
+    id: i64,
+    user_id: i64,
+    author_name: String,
+    avatar_theme: String,
+    avatar_photo_url: Option<String>,
+    score: Option<i16>,
+    note: Option<String>,
+    cooked_at: chrono::DateTime<chrono::Utc>,
+    meal_revision_count: i32,
+    is_current_version: bool,
+    helpful_count: i32,
+    your_helpful_vote: bool,
+    author_tier: String,
+}
+
+#[derive(Serialize)]
 pub struct MealReview {
     pub id: i64,
     pub user_id: i64,
@@ -1639,6 +1660,39 @@ pub struct MealReview {
     pub helpful_count: i32,
     pub your_helpful_vote: bool,
     pub author_tier: String,
+    pub replies: Vec<ReviewReply>,
+}
+
+impl From<MealReviewRow> for MealReview {
+    fn from(r: MealReviewRow) -> Self {
+        MealReview {
+            id: r.id,
+            user_id: r.user_id,
+            author_name: r.author_name,
+            avatar_theme: r.avatar_theme,
+            avatar_photo_url: r.avatar_photo_url,
+            score: r.score,
+            note: r.note,
+            cooked_at: r.cooked_at,
+            meal_revision_count: r.meal_revision_count,
+            is_current_version: r.is_current_version,
+            helpful_count: r.helpful_count,
+            your_helpful_vote: r.your_helpful_vote,
+            author_tier: r.author_tier,
+            replies: Vec::new(),
+        }
+    }
+}
+
+#[derive(Serialize, sqlx::FromRow)]
+pub struct ReviewReply {
+    pub id: i64,
+    pub review_id: i64,
+    /// NULL for a former user whose account was deleted.
+    pub user_id: Option<i64>,
+    pub author_name: Option<String>,
+    pub body: String,
+    pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
 /// Public, multi-author reviews for a recipe - the actual "Reviews" section a
@@ -1662,7 +1716,7 @@ pub async fn meal_reviews(
             .await
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    let rows = sqlx::query_as::<_, MealReview>(
+    let rows = sqlx::query_as::<_, MealReviewRow>(
         "SELECT r.id, r.user_id, u.display_name AS author_name,
                 u.cb_avatar_theme AS avatar_theme, u.cb_avatar_photo_url AS avatar_photo_url,
                 r.score, r.note, r.cooked_at, r.meal_revision_count,
@@ -1684,7 +1738,106 @@ pub async fn meal_reviews(
         tracing::error!("meal_reviews failed: {e}");
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
+    let mut rows: Vec<MealReview> = rows.into_iter().map(MealReview::from).collect();
+
+    let review_ids: Vec<i64> = rows.iter().map(|r| r.id).collect();
+    let replies = sqlx::query_as::<_, ReviewReply>(
+        "SELECT id, review_id, user_id, author_name, body, created_at
+         FROM review_replies WHERE review_id = ANY($1) ORDER BY created_at",
+    )
+    .bind(&review_ids)
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default();
+
+    for reply in replies {
+        if let Some(review) = rows.iter_mut().find(|r| r.id == reply.review_id) {
+            review.replies.push(reply);
+        }
+    }
+
     Ok(Json(rows))
+}
+
+#[derive(Deserialize)]
+pub struct NewReply {
+    pub body: String,
+}
+
+/// Any signed-in user, not just the meal's author - the same "everyone who
+/// cooked this can speak" spirit as reviews themselves. One level deep:
+/// replies to reviews, never replies to replies.
+pub async fn create_reply(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Path((meal_id, review_id)): Path<(i64, i64)>,
+    Json(body): Json<NewReply>,
+) -> Result<(StatusCode, Json<serde_json::Value>), (StatusCode, Json<serde_json::Value>)> {
+    let text = body.body.trim();
+    if text.is_empty() || text.chars().count() > 1000 {
+        return Err(bad("Say something between 1 and 1000 characters."));
+    }
+
+    let belongs: Option<i64> = sqlx::query_scalar("SELECT id FROM reviews WHERE id = $1 AND meal_id = $2")
+        .bind(review_id)
+        .bind(meal_id)
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|_| oops())?;
+    if belongs.is_none() {
+        return Err((StatusCode::NOT_FOUND, Json(serde_json::json!({ "error": "Review not found." }))));
+    }
+
+    let reply_id: i64 = sqlx::query_scalar(
+        "INSERT INTO review_replies (review_id, user_id, author_name, body) VALUES ($1,$2,$3,$4) RETURNING id",
+    )
+    .bind(review_id)
+    .bind(user.id)
+    .bind(&user.display_name)
+    .bind(text)
+    .fetch_one(&state.db)
+    .await
+    .map_err(|e| {
+        tracing::error!("create reply failed: {e}");
+        oops()
+    })?;
+
+    sqlx::query(
+        "INSERT INTO notifications (recipient_id, actor_id, type, subject_type, subject_id)
+         SELECT user_id, $2, 'review_reply', 'meal', $3 FROM reviews WHERE id = $1 AND user_id <> $2",
+    )
+    .bind(review_id)
+    .bind(user.id)
+    .bind(meal_id)
+    .execute(&state.db)
+    .await
+    .ok();
+
+    Ok((StatusCode::CREATED, Json(serde_json::json!({ "id": reply_id }))))
+}
+
+/// Author-only: withdraw your own reply. No edit history to preserve here
+/// (unlike reviews/meals/ingredient facts) - a reply is closer to a chat
+/// message than a piece of catalog content, so a plain delete is honest
+/// rather than a soft-delete nobody would ever look at.
+pub async fn delete_reply(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Path((_meal_id, review_id, reply_id)): Path<(i64, i64, i64)>,
+) -> Result<StatusCode, StatusCode> {
+    let deleted = sqlx::query("DELETE FROM review_replies WHERE id = $1 AND review_id = $2 AND user_id = $3")
+        .bind(reply_id)
+        .bind(review_id)
+        .bind(user.id)
+        .execute(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .rows_affected();
+
+    if deleted == 0 {
+        return Err(StatusCode::NOT_FOUND);
+    }
+    Ok(StatusCode::NO_CONTENT)
 }
 
 /// Toggle-only, like `edit_votes`: tapping again withdraws it. There's no

@@ -1,0 +1,154 @@
+.page {
+  max-width: 640px;
+  margin: 0 auto;
+  padding-top: 6px;
+  padding-bottom: 48px;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-top: 2px;
+}
+
+.backBtn {
+  width: 40px;
+  height: 40px;
+  flex: none;
+  border-radius: 13px;
+  border: 1.5px solid var(--border-card);
+  background: var(--surface-card);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--ink);
+}
+
+.title {
+  font-family: var(--font-display);
+  font-size: 24px;
+  color: var(--ink);
+  line-height: 1.1;
+}
+
+.subtitle {
+  margin-top: 2px;
+  font: 500 13px var(--font-ui);
+  color: var(--muted-2);
+}
+
+.newBtn {
+  margin-top: 18px;
+  width: 100%;
+  padding: 13px;
+  border-radius: 14px;
+  border: 1.5px dashed var(--border-card);
+  background: transparent;
+  color: var(--secondary);
+  font: 700 13.5px var(--font-ui);
+  cursor: pointer;
+}
+
+.newForm {
+  margin-top: 18px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.newInput {
+  flex: 1 1 200px;
+  min-width: 0;
+  border: 1.5px solid var(--border-card);
+  background: var(--surface-card);
+  border-radius: 12px;
+  padding: 11px 14px;
+  font: 500 14px var(--font-ui);
+  color: var(--ink);
+}
+.newInput:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.newSubmit,
+.newCancel {
+  border: none;
+  border-radius: 12px;
+  padding: 11px 16px;
+  font: 700 13px var(--font-ui);
+  cursor: pointer;
+  flex: none;
+}
+.newSubmit {
+  background: var(--accent);
+  color: #fff;
+}
+.newSubmit:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.newCancel {
+  background: var(--chip-bg);
+  color: var(--secondary);
+}
+
+.list {
+  margin-top: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 13px 14px;
+  border-radius: 16px;
+  border: 1px solid var(--border-hairline);
+  background: var(--surface-card);
+}
+
+.rowMain {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  padding: 0;
+}
+
+.rowName {
+  font: 700 14.5px var(--font-ui);
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rowCount {
+  flex: none;
+  font: 500 12px var(--font-ui);
+  color: var(--muted-2);
+}
+
+.deleteBtn {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border: none;
+  background: var(--chip-bg);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+}

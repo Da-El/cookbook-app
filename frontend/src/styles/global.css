@@ -40,6 +40,35 @@ input:focus, textarea:focus {
   border-color: var(--accent) !important;
 }
 
+/* A visible focus ring for every keyboard-reachable element, not just
+   inputs - most buttons in this app reset their own border/background, and
+   without this the browser's own default focus indicator is the only thing
+   standing between a keyboard user and "which control is active right
+   now." `:focus-visible` (not `:focus`) so a mouse click doesn't leave a
+   ring sitting on the page - only actual keyboard navigation does.
+   box-shadow rather than outline: several cards/chips here sit inside
+   `overflow: hidden`/`overflow-x: auto` containers that would clip a real
+   outline before it's ever seen. */
+:focus-visible {
+  outline: none;
+  /* Follows whatever border-radius the focused element already has - a
+     circular avatar button and a square card both get a ring that hugs
+     their own shape, not a fixed corner radius stamped over the top of it. */
+  box-shadow: 0 0 0 3px var(--bg-page), 0 0 0 5px var(--accent);
+}
+
+/* Respects the OS-level "reduce motion" preference site-wide in one place,
+   rather than hunting down every transition/animation individually across
+   component stylesheets and hoping none get missed later. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 img {
   max-width: 100%;
   display: block;

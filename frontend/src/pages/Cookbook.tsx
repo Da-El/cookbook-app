@@ -379,6 +379,9 @@ export function Cookbook() {
             { value: 'contributions', label: 'Contributions' },
           ]}
         />
+        <button className={styles.collectionsLink} onClick={() => navigate('/collections')}>
+          📁 Collections
+        </button>
       </div>
 
       <div className={styles.subTabs}>

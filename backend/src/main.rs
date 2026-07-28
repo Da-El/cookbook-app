@@ -1,5 +1,6 @@
 mod aliases;
 mod auth;
+mod collections;
 mod diet;
 mod email;
 mod guides;
@@ -60,6 +61,9 @@ async fn main() -> anyhow::Result<()> {
         .route("/health", get(health))
         .route("/auth/register", post(auth::register))
         .route("/auth/login", post(auth::login))
+        .route("/auth/2fa/verify", post(auth::verify_two_factor))
+        .route("/auth/2fa/enable", post(auth::enable_two_factor))
+        .route("/auth/2fa/disable", post(auth::disable_two_factor))
         .route("/auth/logout", post(auth::logout))
         .route("/auth/me", get(auth::me))
         .route("/auth/account", post(auth::update_account).delete(auth::delete_account))
@@ -101,6 +105,8 @@ async fn main() -> anyhow::Result<()> {
         .route("/meals/{id}/journal", get(meals::my_journal))
         .route("/meals/{id}/reviews", get(meals::meal_reviews))
         .route("/meals/{id}/reviews/{review_id}/helpful", post(meals::vote_review_helpful))
+        .route("/meals/{id}/reviews/{review_id}/replies", post(meals::create_reply))
+        .route("/meals/{id}/reviews/{review_id}/replies/{reply_id}", delete(meals::delete_reply))
         .route("/meals/{id}/revisions", get(meals::revisions))
         .route("/meals/{id}/revisions/{rev_id}/revert", post(meals::revert))
         .route("/meals/{id}/revisions/{rev_id}/vote", post(meals::vote_revision))
@@ -122,6 +128,11 @@ async fn main() -> anyhow::Result<()> {
         .route("/cookbook/edits", get(kitchen::my_edits))
         .route("/cookbook/ratings", get(kitchen::my_ratings))
         .route("/cookbook/votes", get(kitchen::my_votes))
+        // collections
+        .route("/collections", get(collections::list).post(collections::create))
+        .route("/collections/{id}", get(collections::detail).delete(collections::delete))
+        .route("/collections/{id}/meals", post(collections::add_meal))
+        .route("/collections/{id}/meals/{meal_id}", delete(collections::remove_meal))
         // import
         .route("/import/url", post(import::import_url))
         .route("/import/text", post(import::import_text))

@@ -1,0 +1,165 @@
+.page {
+  max-width: 720px;
+  margin: 0 auto;
+  padding-top: 6px;
+  padding-bottom: 48px;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-top: 2px;
+}
+
+.backBtn {
+  width: 40px;
+  height: 40px;
+  flex: none;
+  border-radius: 13px;
+  border: 1.5px solid var(--border-card);
+  background: var(--surface-card);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--ink);
+}
+
+.title {
+  font-family: var(--font-display);
+  font-size: 24px;
+  color: var(--ink);
+  line-height: 1.1;
+}
+
+.subtitle {
+  margin-top: 2px;
+  font: 500 13px var(--font-ui);
+  color: var(--muted-2);
+}
+
+.search {
+  margin-top: 18px;
+  position: relative;
+}
+
+.searchInput {
+  width: 100%;
+  border: 1.5px solid var(--border-card);
+  background: var(--surface-card);
+  border-radius: 12px;
+  padding: 12px 14px;
+  font: 500 14px var(--font-ui);
+  color: var(--ink);
+}
+.searchInput:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.matches {
+  margin-top: 6px;
+  border: 1px solid var(--border-hairline);
+  border-radius: 12px;
+  background: var(--surface-card);
+  overflow: hidden;
+}
+
+.matchRow {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: transparent;
+  padding: 10px 14px;
+  font: 500 13.5px var(--font-ui);
+  color: var(--ink);
+  cursor: pointer;
+}
+.matchRow:hover {
+  background: var(--bg-page);
+}
+
+.tableWrap {
+  margin-top: 20px;
+  overflow-x: auto;
+  border: 1px solid var(--border-hairline);
+  border-radius: 16px;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+.table th,
+.table td {
+  padding: 10px 14px;
+  text-align: center;
+  font: 500 13px var(--font-ui);
+  color: var(--body);
+  border-bottom: 1px solid var(--border-hairline);
+  white-space: nowrap;
+}
+
+.table tr:last-child td {
+  border-bottom: none;
+}
+
+.rowLabel {
+  text-align: left !important;
+  font: 700 12px var(--font-ui) !important;
+  color: var(--muted-2) !important;
+  text-transform: uppercase;
+  letter-spacing: .03em;
+  background: var(--bg-page);
+  position: sticky;
+  left: 0;
+}
+
+.colHead {
+  background: var(--bg-page);
+  padding: 10px 14px 8px !important;
+}
+
+.colName {
+  display: block;
+  border: none;
+  background: transparent;
+  font: 700 13.5px var(--font-ui);
+  color: var(--ink);
+  cursor: pointer;
+  padding: 0;
+}
+
+.removeBtn {
+  margin-top: 3px;
+  width: 20px;
+  height: 20px;
+  border: none;
+  background: var(--chip-bg);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.addColHead {
+  min-width: 40px;
+}
+
+.best {
+  color: var(--green-dark);
+  font-weight: 700;
+  background: var(--green-tint-2);
+}
+
+.dietCell {
+  font-size: 12px;
+  color: var(--secondary);
+  white-space: normal;
+  max-width: 160px;
+}

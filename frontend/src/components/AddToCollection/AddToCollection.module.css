@@ -1,0 +1,169 @@
+.trigger {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(20, 10, 4, .38);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.sheetScrim {
+  position: fixed;
+  inset: 0;
+  background: rgba(30, 20, 10, .32);
+  z-index: 48;
+}
+
+.sheet {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 0;
+  width: min(480px, 100%);
+  max-height: 70vh;
+  overflow-y: auto;
+  z-index: 49;
+  background: var(--surface-card);
+  border-radius: 22px 22px 0 0;
+  border: 1px solid var(--border-hairline);
+  padding: 16px 16px calc(18px + env(safe-area-inset-bottom, 0px));
+  box-shadow: 0 -18px 44px -20px rgba(30, 20, 10, .5);
+}
+
+@media (min-width: 900px) {
+  .sheet {
+    bottom: 40px;
+    border-radius: 22px;
+    max-height: 60vh;
+  }
+}
+
+.sheetHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.sheetTitle {
+  font-family: var(--font-display);
+  font-size: 19px;
+  color: var(--ink);
+}
+
+.closeBtn {
+  width: 30px;
+  height: 30px;
+  flex: none;
+  border-radius: 999px;
+  border: none;
+  background: var(--chip-bg);
+  color: var(--secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.empty {
+  color: var(--muted);
+  font: 400 13px var(--font-ui);
+  padding: 6px 0 4px;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  border: none;
+  background: transparent;
+  border-radius: 12px;
+  padding: 10px 8px;
+  cursor: pointer;
+  text-align: left;
+}
+.row:hover {
+  background: var(--bg-page);
+}
+
+.checkbox {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  border: 1.5px solid var(--border-card);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  color: #fff;
+}
+.rowOn .checkbox {
+  background: var(--green);
+  border-color: var(--green);
+}
+
+.rowName {
+  font: 600 14px var(--font-ui);
+  color: var(--ink);
+}
+
+.newBtn {
+  margin-top: 8px;
+  width: 100%;
+  padding: 10px;
+  border-radius: 12px;
+  border: 1.5px dashed var(--border-card);
+  background: transparent;
+  color: var(--secondary);
+  font: 700 12.5px var(--font-ui);
+  cursor: pointer;
+}
+
+.newForm {
+  margin-top: 8px;
+  display: flex;
+  gap: 8px;
+}
+
+.newInput {
+  flex: 1;
+  min-width: 0;
+  border: 1.5px solid var(--border-card);
+  background: var(--bg-page);
+  border-radius: 10px;
+  padding: 9px 12px;
+  font: 500 13.5px var(--font-ui);
+  color: var(--ink);
+}
+.newInput:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.newSubmit {
+  flex: none;
+  border: none;
+  border-radius: 10px;
+  padding: 9px 14px;
+  background: var(--accent);
+  color: #fff;
+  font: 700 12.5px var(--font-ui);
+  cursor: pointer;
+}
+.newSubmit:disabled {
+  opacity: 0.5;
+  cursor: default;
+}

@@ -1,0 +1,61 @@
+.page {
+  max-width: 860px;
+  margin: 0 auto;
+  padding-top: 6px;
+  padding-bottom: 48px;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-top: 2px;
+  margin-bottom: 18px;
+}
+
+.backBtn {
+  width: 40px;
+  height: 40px;
+  flex: none;
+  border-radius: 13px;
+  border: 1.5px solid var(--border-card);
+  background: var(--surface-card);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--ink);
+}
+
+.title {
+  font-family: var(--font-display);
+  font-size: 24px;
+  color: var(--ink);
+  line-height: 1.1;
+}
+
+.subtitle {
+  margin-top: 2px;
+  font: 500 13px var(--font-ui);
+  color: var(--muted-2);
+}
+
+.cardWrap {
+  position: relative;
+}
+
+.removeBtn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 26px;
+  height: 26px;
+  border: none;
+  background: rgba(20, 10, 4, .65);
+  color: #fff;
+  border-radius: 999px;
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  z-index: 2;
+}
