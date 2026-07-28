@@ -10,6 +10,22 @@
   gap: 16px;
 }
 
+.surpriseBtn {
+  padding: 9px 16px;
+  border-radius: 999px;
+  border: 1.5px solid var(--border-card);
+  background: var(--surface-card);
+  color: var(--secondary);
+  font: 700 12.5px var(--font-ui);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.surpriseBtn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
 .title {
   font-family: var(--font-display);
   font-size: 32px;

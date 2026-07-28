@@ -1,6 +1,7 @@
 import { useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '../api/client';
+import { useToast } from '../components/Toast/ToastContext';
 import { MealCard, MealGrid } from '../components/MealCard/MealCard';
 import { LoadingState, ErrorState } from '../components/PageState/PageState';
 import { EmptyLine } from '../components/Empty/Empty';
@@ -20,12 +21,16 @@ interface CollectionDetailData {
   id: number;
   name: string;
   meals: CollectionMeal[];
+  is_public: boolean;
+  is_mine: boolean;
+  owner_name: string;
 }
 
 export function CollectionDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const qc = useQueryClient();
+  const toast = useToast();
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['collection', id],
@@ -39,10 +44,20 @@ export function CollectionDetail() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['collection', id] }),
   });
 
+  const setVisibility = useMutation({
+    mutationFn: (isPublic: boolean) => api.post(`/collections/${id}/visibility`, { is_public: isPublic }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['collection', id] }),
+  });
+
+  function copyLink() {
+    navigator.clipboard.writeText(`${location.origin}/collections/${id}`);
+    toast('Link copied');
+  }
+
   return (
     <div className={styles.page}>
       <div className={styles.header}>
-        <button className={styles.backBtn} onClick={() => navigate('/collections')} aria-label="Back">
+        <button className={styles.backBtn} onClick={() => navigate(-1)} aria-label="Back">
           <ChevronLeft size={18} strokeWidth={2.2} />
         </button>
         <div>
@@ -50,10 +65,30 @@ export function CollectionDetail() {
           {data && (
             <p className={styles.subtitle}>
               {data.meals.length} meal{data.meals.length === 1 ? '' : 's'}
+              {!data.is_mine && ` · by ${data.owner_name}`}
             </p>
           )}
         </div>
       </div>
+
+      {data?.is_mine && (
+        <div className={styles.visibilityRow}>
+          <button
+            className={styles.visibilityBtn}
+            disabled={setVisibility.isPending}
+            onClick={() => setVisibility.mutate(!data.is_public)}
+          >
+            {data.is_public
+              ? '🌐 Public — any signed-in Cookbook user with the link can view'
+              : '🔒 Private — only you can see this'}
+          </button>
+          {data.is_public && (
+            <button className={styles.copyLinkBtn} onClick={copyLink}>
+              Copy link
+            </button>
+          )}
+        </div>
+      )}
 
       {isLoading && <LoadingState label="Loading collection…" />}
 
@@ -79,17 +114,19 @@ export function CollectionDetail() {
           {data.meals.map((m) => (
             <div key={m.id} className={styles.cardWrap}>
               <MealCard meal={m} />
-              <button
-                className={styles.removeBtn}
-                title="Remove from this collection"
-                aria-label="Remove from this collection"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  removeMeal.mutate(m.id);
-                }}
-              >
-                ×
-              </button>
+              {data.is_mine && (
+                <button
+                  className={styles.removeBtn}
+                  title="Remove from this collection"
+                  aria-label="Remove from this collection"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    removeMeal.mutate(m.id);
+                  }}
+                >
+                  ×
+                </button>
+              )}
             </div>
           ))}
         </MealGrid>

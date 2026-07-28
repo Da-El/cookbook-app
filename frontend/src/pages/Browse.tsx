@@ -196,12 +196,28 @@ export function Browse() {
   const setActive = tab === 'meals' ? setMealType : setCategory;
   const showChips = tab !== 'chefs';
 
+  const surpriseMe = useMutation({
+    mutationFn: () => api.get<MealRow>('/meals/random'),
+    onSuccess: (m) => navigate(`/meals/${m.id}`),
+  });
+
   return (
     <div className={styles.page}>
       {isDesktop ? (
         <div className={styles.headRow}>
           <h1 className={styles.title}>Browse</h1>
-          {toggle}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            {tab === 'meals' && (
+              <button
+                className={styles.surpriseBtn}
+                disabled={surpriseMe.isPending}
+                onClick={() => surpriseMe.mutate()}
+              >
+                🎲 Surprise me
+              </button>
+            )}
+            {toggle}
+          </div>
         </div>
       ) : (
         <>
@@ -215,6 +231,16 @@ export function Browse() {
               onChange={(e) => setSearch(e.target.value)}
             />
           </div>
+          {tab === 'meals' && (
+            <button
+              className={styles.surpriseBtn}
+              disabled={surpriseMe.isPending}
+              onClick={() => surpriseMe.mutate()}
+              style={{ marginTop: 10 }}
+            >
+              🎲 Surprise me
+            </button>
+          )}
           {toggle}
         </>
       )}

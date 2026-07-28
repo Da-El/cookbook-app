@@ -40,6 +40,34 @@
   color: var(--muted-2);
 }
 
+.visibilityRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 18px;
+}
+
+.visibilityBtn {
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1.5px solid var(--border-card);
+  background: var(--surface-card);
+  color: var(--secondary);
+  font: 700 12px var(--font-ui);
+  cursor: pointer;
+}
+
+.copyLinkBtn {
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: none;
+  background: var(--accent);
+  color: #fff;
+  font: 700 12px var(--font-ui);
+  cursor: pointer;
+}
+
 .cardWrap {
   position: relative;
 }

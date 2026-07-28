@@ -1,6 +1,7 @@
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::Json;
+use chrono::NaiveDate;
 use serde::{Deserialize, Serialize};
 
 use crate::auth::CurrentUser;
@@ -275,6 +276,72 @@ pub async fn counts(
     })))
 }
 
+#[derive(Serialize)]
+pub struct CookingStreak {
+    /// Consecutive days ending today or yesterday - a day missed today
+    /// doesn't zero this out until tomorrow arrives with still nothing
+    /// logged, so cooking again today still extends yesterday's count.
+    pub current: i32,
+    pub longest: i32,
+    pub cooked_today: bool,
+    pub total_days_cooked: i32,
+}
+
+/// Pure so it's unit-testable without a database: takes whatever distinct
+/// calendar days `meal_log` produced for a user (any order, duplicates
+/// tolerated) and today's date, returns the streak summary.
+fn compute_streak(mut days: Vec<NaiveDate>, today: NaiveDate) -> CookingStreak {
+    days.sort_unstable();
+    days.dedup();
+
+    let mut longest = 0i32;
+    let mut run = 0i32;
+    let mut prev: Option<NaiveDate> = None;
+    for &d in &days {
+        run = match prev {
+            Some(p) if d == p + chrono::Duration::days(1) => run + 1,
+            _ => 1,
+        };
+        longest = longest.max(run);
+        prev = Some(d);
+    }
+
+    let mut current = 0i32;
+    if let Some(&last) = days.last() {
+        if (today - last).num_days() <= 1 {
+            current = 1;
+            let mut i = days.len() - 1;
+            while i > 0 && days[i - 1] == days[i] - chrono::Duration::days(1) {
+                current += 1;
+                i -= 1;
+            }
+        }
+    }
+
+    CookingStreak {
+        current,
+        longest,
+        cooked_today: days.last() == Some(&today),
+        total_days_cooked: days.len() as i32,
+    }
+}
+
+pub async fn streak(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+) -> Result<Json<CookingStreak>, StatusCode> {
+    let days: Vec<NaiveDate> = sqlx::query_scalar(
+        "SELECT DISTINCT logged_at::date FROM meal_log WHERE user_id = $1",
+    )
+    .bind(user.id)
+    .fetch_all(&state.db)
+    .await
+    .map_err(db_err)?;
+
+    let today = chrono::Utc::now().date_naive();
+    Ok(Json(compute_streak(days, today)))
+}
+
 // ---------- the user's own contributions: reviews written, edits submitted ----------
 
 #[derive(Serialize, sqlx::FromRow)]
@@ -424,4 +491,68 @@ pub async fn my_votes(
     .await
     .map_err(db_err)?;
     Ok(Json(rows))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn date(y: i32, m: u32, d: u32) -> NaiveDate {
+        NaiveDate::from_ymd_opt(y, m, d).unwrap()
+    }
+
+    #[test]
+    fn no_history_is_a_zero_streak() {
+        let s = compute_streak(vec![], date(2026, 7, 28));
+        assert_eq!(s.current, 0);
+        assert_eq!(s.longest, 0);
+        assert!(!s.cooked_today);
+        assert_eq!(s.total_days_cooked, 0);
+    }
+
+    #[test]
+    fn cooking_today_extends_a_run_ending_yesterday() {
+        let days = vec![date(2026, 7, 26), date(2026, 7, 27), date(2026, 7, 28)];
+        let s = compute_streak(days, date(2026, 7, 28));
+        assert_eq!(s.current, 3);
+        assert_eq!(s.longest, 3);
+        assert!(s.cooked_today);
+    }
+
+    #[test]
+    fn missing_only_today_still_counts_yesterdays_run() {
+        // Last cooked yesterday, nothing logged yet today - streak stays
+        // alive (today isn't over), it just doesn't count today itself.
+        let days = vec![date(2026, 7, 25), date(2026, 7, 26), date(2026, 7, 27)];
+        let s = compute_streak(days, date(2026, 7, 28));
+        assert_eq!(s.current, 3);
+        assert!(!s.cooked_today);
+    }
+
+    #[test]
+    fn a_gap_of_two_or_more_days_zeroes_the_current_streak() {
+        let days = vec![date(2026, 7, 20), date(2026, 7, 21)];
+        let s = compute_streak(days, date(2026, 7, 28));
+        assert_eq!(s.current, 0);
+        assert_eq!(s.longest, 2, "longest streak from history is preserved even after it ends");
+    }
+
+    #[test]
+    fn longest_streak_can_be_in_the_past_while_current_is_shorter() {
+        let days = vec![
+            date(2026, 7, 1), date(2026, 7, 2), date(2026, 7, 3), date(2026, 7, 4), date(2026, 7, 5),
+            date(2026, 7, 27), date(2026, 7, 28),
+        ];
+        let s = compute_streak(days, date(2026, 7, 28));
+        assert_eq!(s.current, 2);
+        assert_eq!(s.longest, 5);
+    }
+
+    #[test]
+    fn duplicate_and_unsorted_days_are_normalized() {
+        let days = vec![date(2026, 7, 28), date(2026, 7, 27), date(2026, 7, 27), date(2026, 7, 26)];
+        let s = compute_streak(days, date(2026, 7, 28));
+        assert_eq!(s.current, 3);
+        assert_eq!(s.total_days_cooked, 3, "the repeated day collapses to one");
+    }
 }

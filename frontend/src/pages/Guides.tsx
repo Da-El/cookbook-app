@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '../api/client';
 import type { GuideDetail, GuideSummary } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
+import { useToast } from '../components/Toast/ToastContext';
 import { ChevronLeft } from '../components/Icon/Icon';
 import { LoadingState, ErrorState } from '../components/PageState/PageState';
 import { FlagButton } from '../components/Flag/FlagButton';
@@ -120,6 +121,7 @@ export function GuidePage() {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const { user } = useAuth();
+  const toast = useToast();
   const [editOpen, setEditOpen] = useState(false);
   const [draft, setDraft] = useState('');
   const [comment, setComment] = useState('');
@@ -158,6 +160,7 @@ export function GuidePage() {
       setComment('');
       qc.invalidateQueries({ queryKey: ['guide-comments', slug] });
     },
+    onError: (e) => toast(e instanceof ApiError ? e.message : 'Could not post that comment.'),
   });
 
   const deleteComment = useMutation({

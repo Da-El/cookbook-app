@@ -134,6 +134,17 @@
   white-space: nowrap;
 }
 
+.publicBadge {
+  margin-left: 7px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--green-tint);
+  color: var(--green);
+  font: 700 9.5px var(--font-ui);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
 .rowCount {
   flex: none;
   font: 500 12px var(--font-ui);

@@ -9,6 +9,7 @@ import { Segmented } from '../components/Segmented/Segmented';
 import { Avatar } from '../components/Avatar/Avatar';
 import { EmptyCard } from '../components/Empty/Empty';
 import { TodayNutrition } from '../components/TodayNutrition/TodayNutrition';
+import { FeaturedMeal } from '../components/FeaturedMeal/FeaturedMeal';
 import { HeartIcon, PlusIcon } from '../components/Icon/Icon';
 import { mealBackground } from '../lib/imagery';
 import styles from './Home.module.css';
@@ -308,6 +309,7 @@ export function Home() {
         )}
 
         <TodayNutrition />
+        <FeaturedMeal />
 
         {tab === 'following' ? (
           <>

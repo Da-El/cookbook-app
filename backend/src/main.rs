@@ -14,6 +14,7 @@ mod notify;
 mod nutrition;
 mod og;
 mod planner;
+mod ratelimit;
 mod search;
 mod seed;
 mod social;
@@ -103,6 +104,7 @@ async fn main() -> anyhow::Result<()> {
         // meals
         .route("/meals", get(meals::browse).post(meals::create))
         .route("/meals/filters", get(meals::filters))
+        .route("/meals/random", get(meals::random))
         .route("/meals/discover", get(meals::discover))
         .route("/meals/{id}", get(meals::detail).post(meals::update).delete(meals::delete))
         .route("/meals/{id}/fork", post(meals::fork))
@@ -132,6 +134,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/shopping/{id}/got-it", post(kitchen::shopping_got_it))
         // cookbook lists
         .route("/cookbook/counts", get(kitchen::counts))
+        .route("/cookbook/streak", get(kitchen::streak))
         .route("/cookbook/cooked", get(kitchen::cooked))
         .route("/cookbook/saved", get(kitchen::saved))
         .route("/cookbook/published", get(kitchen::published))
@@ -142,6 +145,7 @@ async fn main() -> anyhow::Result<()> {
         // collections
         .route("/collections", get(collections::list).post(collections::create))
         .route("/collections/{id}", get(collections::detail).delete(collections::delete))
+        .route("/collections/{id}/visibility", post(collections::set_visibility))
         .route("/collections/{id}/meals", post(collections::add_meal))
         .route("/collections/{id}/meals/{meal_id}", delete(collections::remove_meal))
         // import

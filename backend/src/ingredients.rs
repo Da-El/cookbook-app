@@ -772,6 +772,8 @@ pub async fn submit_review(
     Path(id): Path<i64>,
     Json(body): Json<ReviewSubmission>,
 ) -> Result<StatusCode, (StatusCode, Json<serde_json::Value>)> {
+    crate::ratelimit::check(&state.db, user.id, "ingredient_review", 30, 10).await?;
+
     if let Some(score) = body.score {
         if !(1..=10).contains(&score) {
             return Err(bad("Rating must be between 1 and 10."));

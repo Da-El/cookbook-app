@@ -1092,6 +1092,12 @@ pub struct RevisionRow {
     pub your_vote: Option<i16>,
     /// NULL alongside a NULL editor_id (former user) - nothing to badge.
     pub editor_tier: Option<String>,
+    /// The full state this revision recorded - see `snapshot_meal`. Sent
+    /// inline (not a separate per-revision endpoint) so the client can diff
+    /// any two rows it already has without another round trip; history
+    /// pages are small enough in practice (LIMIT 50 above) that this
+    /// doesn't need its own pagination.
+    pub snapshot: serde_json::Value,
 }
 
 #[derive(Serialize)]
@@ -1132,7 +1138,8 @@ pub async fn revisions(
                 (SELECT count(*) FROM revision_votes v WHERE v.revision_id = r.id) AS vote_count,
                 (SELECT v.value FROM revision_votes v
                   WHERE v.revision_id = r.id AND v.user_id = $2) AS your_vote,
-                CASE WHEN r.editor_id IS NULL THEN NULL ELSE contributor_tier(r.editor_id) END AS editor_tier
+                CASE WHEN r.editor_id IS NULL THEN NULL ELSE contributor_tier(r.editor_id) END AS editor_tier,
+                r.snapshot
          FROM meal_revisions r
          WHERE r.meal_id = $1
          ORDER BY r.created_at DESC LIMIT 50",
@@ -1843,6 +1850,10 @@ pub async fn create_reply(
     Path((meal_id, review_id)): Path<(i64, i64)>,
     Json(body): Json<NewReply>,
 ) -> Result<(StatusCode, Json<serde_json::Value>), (StatusCode, Json<serde_json::Value>)> {
+    // 20 replies/10 minutes is well above genuine conversation pace and
+    // tight enough to blunt a script.
+    crate::ratelimit::check(&state.db, user.id, "review_reply", 20, 10).await?;
+
     let text = body.body.trim();
     if text.is_empty() || text.chars().count() > 1000 {
         return Err(bad("Say something between 1 and 1000 characters."));
@@ -2048,6 +2059,62 @@ pub async fn vote_review_helpful(
     tx.commit().await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     Ok(Json(serde_json::json!({ "helpful_count": count, "your_helpful_vote": removed == 0 })))
+}
+
+#[derive(Deserialize)]
+pub struct RandomParams {
+    /// Skip this id - "surprise me again" shouldn't be able to hand back
+    /// the same recipe it just showed.
+    pub exclude: Option<i64>,
+    /// 0 for "surprise me" (any live public meal); >0 for "featured," which
+    /// wants a random pick that's at least been rated by someone rather
+    /// than pure chance on an unproven recipe.
+    pub min_rating_count: Option<i32>,
+}
+
+/// One random live public meal - `ORDER BY random()` on the meals table
+/// directly, not a client-side pick from a fetched batch, so the odds stay
+/// even across the whole catalog instead of whatever page happened to load.
+pub async fn random(
+    State(state): State<AppState>,
+    user: Option<CurrentUser>,
+    Query(p): Query<RandomParams>,
+) -> Result<Json<MealCard>, StatusCode> {
+    let viewer = user.map(|u| u.0.id);
+    let row = sqlx::query_as::<_, MealCard>(
+        concat!(
+        "SELECT m.id, m.name, m.author_id, u.display_name AS author_name, m.cuisine, m.meal_type,
+                m.time_minutes, m.rating::float8 AS rating, m.rating_count, m.photo_url,
+                COALESCE(m.have_count, 0) AS have_count, COALESCE(m.total_count, 0) AS total_count,
+                ", is_top_in_cuisine_sql!(), ", ", meal_diet_tags_sql!(), ", ", meal_difficulty_sql!(), "
+         FROM (
+           SELECT m.*,
+             (SELECT count(*) FROM meal_ingredients mi
+                WHERE mi.meal_id = m.id
+                  AND EXISTS (SELECT 1 FROM fridge_items f
+                              WHERE f.user_id = $1 AND f.ingredient_id = mi.ingredient_id)) AS have_count,
+             (SELECT count(*) FROM meal_ingredients mi WHERE mi.meal_id = m.id) AS total_count
+           FROM meals m
+           WHERE m.visibility = 'public' AND m.status = 'live'
+             AND ($2::bigint IS NULL OR m.id <> $2)
+             AND m.rating_count >= $3
+         ) m
+         JOIN users u ON u.id = m.author_id
+         ORDER BY random()
+         LIMIT 1"
+        ),
+    )
+    .bind(viewer)
+    .bind(p.exclude)
+    .bind(p.min_rating_count.unwrap_or(0))
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|e| {
+        tracing::error!("random meal failed: {e}");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+
+    row.map(Json).ok_or(StatusCode::NOT_FOUND)
 }
 
 pub async fn filters(State(state): State<AppState>) -> Json<serde_json::Value> {

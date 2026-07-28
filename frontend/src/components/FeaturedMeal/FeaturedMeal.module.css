@@ -1,0 +1,53 @@
+.card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 12px;
+  border-radius: 18px;
+  background: var(--surface-card);
+  border: 1px solid var(--border-hairline);
+  cursor: pointer;
+  text-align: left;
+  margin-bottom: 18px;
+}
+
+.photo {
+  width: 64px;
+  height: 64px;
+  border-radius: 14px;
+  flex: none;
+  box-shadow: var(--shadow-thumb);
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.eyebrow {
+  font: 700 10.5px var(--font-ui);
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.name {
+  font-family: var(--font-display);
+  font-size: 19px;
+  color: var(--ink);
+  line-height: 1.1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.meta {
+  font: 500 12px var(--font-ui);
+  color: var(--muted-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

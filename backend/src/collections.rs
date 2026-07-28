@@ -17,17 +17,17 @@ pub struct CollectionRow {
     /// picker elsewhere in the app can show what's already in each one
     /// without a second round trip per collection.
     pub meal_ids: Vec<i64>,
+    pub is_public: bool,
 }
 
-/// Always the caller's own - collections are private to their owner for
-/// now (see migration 0018), so there's no id-based lookup path here the
-/// way there is for a meal or ingredient page.
+/// Always the caller's own, public or private alike - this is the owner's
+/// management view, not the public-facing one (see `detail` for that).
 pub async fn list(
     State(state): State<AppState>,
     CurrentUser(user): CurrentUser,
 ) -> Result<Json<Vec<CollectionRow>>, StatusCode> {
     let rows = sqlx::query_as::<_, CollectionRow>(
-        "SELECT c.id, c.name, c.created_at,
+        "SELECT c.id, c.name, c.created_at, c.is_public,
                 count(i.meal_id) AS meal_count,
                 COALESCE(array_agg(i.meal_id) FILTER (WHERE i.meal_id IS NOT NULL), '{}') AS meal_ids
          FROM meal_collections c
@@ -71,6 +71,32 @@ pub async fn create(
     Ok((StatusCode::CREATED, Json(serde_json::json!({ "id": id }))))
 }
 
+#[derive(Deserialize)]
+pub struct SetVisibility {
+    pub is_public: bool,
+}
+
+pub async fn set_visibility(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Path(id): Path<i64>,
+    Json(body): Json<SetVisibility>,
+) -> Result<StatusCode, StatusCode> {
+    let updated = sqlx::query("UPDATE meal_collections SET is_public = $1 WHERE id = $2 AND user_id = $3")
+        .bind(body.is_public)
+        .bind(id)
+        .bind(user.id)
+        .execute(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .rows_affected();
+
+    if updated == 0 {
+        return Err(StatusCode::NOT_FOUND);
+    }
+    Ok(StatusCode::NO_CONTENT)
+}
+
 pub async fn delete(
     State(state): State<AppState>,
     CurrentUser(user): CurrentUser,
@@ -105,20 +131,40 @@ pub struct CollectionDetail {
     pub id: i64,
     pub name: String,
     pub meals: Vec<CollectionMeal>,
+    pub is_public: bool,
+    pub is_mine: bool,
+    pub owner_name: String,
 }
 
+/// Optional auth at the API level - the frontend router still gates every
+/// page but /legal behind sign-in, so "public" in practice means "any
+/// signed-in Cookbook user with the link," not the open internet. The API
+/// itself doesn't need to enforce that routing choice, so this stays
+/// permissive rather than baking the frontend's decision in twice. A
+/// private collection still 404s for everyone except its owner - same
+/// "don't even reveal it exists" choice the rest of this app makes for
+/// private content, rather than a 403 that confirms something is there.
 pub async fn detail(
     State(state): State<AppState>,
-    CurrentUser(user): CurrentUser,
+    viewer: Option<CurrentUser>,
     Path(id): Path<i64>,
 ) -> Result<Json<CollectionDetail>, StatusCode> {
-    let name: Option<String> = sqlx::query_scalar("SELECT name FROM meal_collections WHERE id = $1 AND user_id = $2")
-        .bind(id)
-        .bind(user.id)
-        .fetch_optional(&state.db)
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    let Some(name) = name else { return Err(StatusCode::NOT_FOUND) };
+    let viewer_id = viewer.map(|u| u.0.id);
+    let row: Option<(String, i64, bool, String)> = sqlx::query_as(
+        "SELECT c.name, c.user_id, c.is_public, u.display_name
+         FROM meal_collections c JOIN users u ON u.id = c.user_id
+         WHERE c.id = $1",
+    )
+    .bind(id)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let Some((name, owner_id, is_public, owner_name)) = row else { return Err(StatusCode::NOT_FOUND) };
+
+    let is_mine = viewer_id == Some(owner_id);
+    if !is_public && !is_mine {
+        return Err(StatusCode::NOT_FOUND);
+    }
 
     // A meal soft-deleted after being added just quietly drops out of the
     // list here - same "collections aren't the source of truth" reasoning
@@ -134,7 +180,7 @@ pub async fn detail(
     .await
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    Ok(Json(CollectionDetail { id, name, meals }))
+    Ok(Json(CollectionDetail { id, name, meals, is_public, is_mine, owner_name }))
 }
 
 #[derive(Deserialize)]

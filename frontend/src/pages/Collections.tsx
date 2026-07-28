@@ -13,6 +13,7 @@ interface CollectionRow {
   created_at: string;
   meal_count: number;
   meal_ids: number[];
+  is_public: boolean;
 }
 
 /**
@@ -98,7 +99,10 @@ export function Collections() {
           {collections.map((c) => (
             <div key={c.id} className={styles.row}>
               <button className={styles.rowMain} onClick={() => navigate(`/collections/${c.id}`)}>
-                <span className={styles.rowName}>{c.name}</span>
+                <span className={styles.rowName}>
+                  {c.name}
+                  {c.is_public && <span className={styles.publicBadge}>Public</span>}
+                </span>
                 <span className={styles.rowCount}>
                   {c.meal_count} meal{c.meal_count === 1 ? '' : 's'}
                 </span>

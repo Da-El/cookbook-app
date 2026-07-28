@@ -458,6 +458,8 @@ pub async fn create_comment(
     Path(slug): Path<String>,
     Json(body): Json<NewComment>,
 ) -> Result<(StatusCode, Json<serde_json::Value>), (StatusCode, Json<serde_json::Value>)> {
+    crate::ratelimit::check(&state.db, user.id, "guide_comment", 20, 10).await?;
+
     let text = body.body.trim();
     if text.is_empty() || text.chars().count() > 1000 {
         return Err(bad("Say something between 1 and 1000 characters."));

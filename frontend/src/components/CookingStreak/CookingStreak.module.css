@@ -1,0 +1,39 @@
+.card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 18px;
+  border-radius: 18px;
+  background: var(--amber-tint);
+  border: 1px solid var(--border-hairline);
+  margin-bottom: 18px;
+}
+
+.flame {
+  font-size: 26px;
+  line-height: 1;
+  flex: none;
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.headline {
+  font-family: var(--font-display);
+  font-size: 18px;
+  color: var(--ink);
+  line-height: 1.1;
+}
+
+.headlineNum {
+  color: var(--amber);
+}
+
+.sub {
+  font: 500 12px var(--font-ui);
+  color: var(--muted-2);
+}

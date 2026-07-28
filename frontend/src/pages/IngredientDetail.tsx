@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '../api/client';
 import type { IngredientDetail as Detail, Micros } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
+import { useToast } from '../components/Toast/ToastContext';
 import { ChevronLeft } from '../components/Icon/Icon';
 import {
   CategoryEditSection,
@@ -65,6 +66,7 @@ export function IngredientDetail() {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const { user } = useAuth();
+  const toast = useToast();
   const [note, setNote] = useState('');
   const [score, setScore] = useState<number | null>(null);
 
@@ -99,6 +101,7 @@ export function IngredientDetail() {
       qc.invalidateQueries({ queryKey: ['ingredient-reviews', id] });
       qc.invalidateQueries({ queryKey: ['ingredient', id] });
     },
+    onError: (e) => toast(e instanceof ApiError ? e.message : 'Could not save that.'),
   });
 
   const voteHelpful = useMutation({

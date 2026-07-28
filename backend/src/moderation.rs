@@ -30,6 +30,10 @@ pub async fn create_flag(
     CurrentUser(user): CurrentUser,
     Json(body): Json<NewFlag>,
 ) -> Result<StatusCode, (StatusCode, Json<serde_json::Value>)> {
+    // 20 flags/hour is generous for genuine moderation use and tight enough
+    // to blunt someone trying to bury the queue.
+    crate::ratelimit::check(&state.db, user.id, "flag", 20, 60).await?;
+
     if !CONTENT_TYPES.contains(&body.content_type.as_str()) {
         return Err(bad("That's not something that can be flagged."));
     }

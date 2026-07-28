@@ -10,6 +10,7 @@ import { useIsDesktop } from '../hooks/useMediaQuery';
 import { useToast } from '../components/Toast/ToastContext';
 import { Segmented } from '../components/Segmented/Segmented';
 import { Avatar } from '../components/Avatar/Avatar';
+import { CookingStreak } from '../components/CookingStreak/CookingStreak';
 import { MealCard, MealGrid } from '../components/MealCard/MealCard';
 import { EmptyCard, EmptyLine } from '../components/Empty/Empty';
 import { PencilIcon, SearchIcon } from '../components/Icon/Icon';
@@ -365,6 +366,8 @@ export function Cookbook() {
           </div>
         </div>
       </div>
+
+      <CookingStreak />
 
       <div className={styles.groupSwitch}>
         <Segmented
