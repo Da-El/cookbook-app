@@ -584,3 +584,68 @@ resolving correctly for both the top-level and nested case, and
 then the threaded UI (indentation, the "Replying to" pill, inline reply
 triggers at every depth, and delete) confirmed in a real two-user
 browser session.
+
+---
+
+## Batch 11 — Iterations 51–55
+
+**Commit:** local only — not pushed/deployed this batch, per standing
+instruction · **Migrations:** 0037–0040 · **Tests:** 61 backend, passing
+
+51. **2FA recovery codes** — email-code 2FA had no fallback if the inbox
+    behind it became unreachable. Enabling 2FA now mints ten one-time
+    recovery codes (`ABCDE-FGHIJ` format, ambiguous characters like
+    0/O and 1/I excluded), shown exactly once in a dismiss-only sheet;
+    `verify_two_factor` accepts one in place of the emailed code,
+    consuming it and resolving the notification recipient the same way
+    a correct code would. A "Regenerate" action in Settings discards
+    the old batch and mints a fresh one; disabling 2FA discards
+    whatever's left.
+52. **Guide bookmarking** — guides had no save-for-later the way meals
+    do. A `saved_guides` table plus a `toggle_save` mirroring
+    `meals::toggle_save`'s shape, a bookmark icon on the guide page,
+    and a "Saved (N)" filter chip on the guides list that only appears
+    once there's something to filter to.
+53. **Review photos** — a `photo_url` column on `reviews`, wired into
+    the same cook-with-a-note flow the "Nice — how'd it go?" prompt
+    already had, plus the review edit form. Unlike `score`'s
+    don't-touch-unless-included handling, `photo_url` always replaces
+    on edit - the edit form shows and resubmits the review's current
+    photo (or lack of one) every time, so there's no "wasn't part of
+    this edit" case to protect.
+54. **Meal plan entry reordering** — multiple entries can already share
+    a day and slot (two snacks), but their order was just insertion
+    order with no way to change it. A `position` column plus a
+    `POST /plan/{id}/move` endpoint that swaps position with the
+    adjacent sibling in the same day+slot group; a no-op (still 204)
+    at either edge so the frontend's up/down buttons don't need to
+    precompute whether a move is legal, just disable at the edges.
+55. **Saved filter presets** — Browse's meal filters (type, diet, sort,
+    difficulty, time, occasion) had no way to name and reapply a
+    combination. `localStorage`-backed, mirroring iteration 40's recent-
+    searches lib exactly (capped at 10, most-recent-first); "Save this
+    search" only appears once at least one filter is non-default, so
+    there's nothing to name at the default "everything" view.
+
+**Verified:** recovery codes' full lifecycle via curl - a code
+consuming correctly on login, a used code rejected on reuse, an
+unused-but-since-regenerated code rejected, regeneration blocked while
+2FA is off, and codes actually gone from the table after disabling -
+then the enable-time reveal sheet, the Settings "Regenerate" action,
+and a full password-then-recovery-code sign-in confirmed in the
+browser; guide bookmarking's toggle cycle and unauthenticated-request
+rejection via curl, then the save/unsave button and the list page's
+"Saved (N)" filter (including its count updating live) confirmed in
+the browser; review photos' storage, retrieval, and edit-time swap/
+clear all confirmed via curl against a real review, then the photo
+attach flow, the edit form correctly seeding the existing photo, and
+removal persisting after a reload all confirmed in the browser; plan
+entry reordering's swap-with-neighbor, both-edges-are-safe-no-ops,
+cross-user rejection (404), and invalid-direction rejection (400) all
+confirmed via curl against three real snack entries, then the ▲/▼
+buttons - including their disabled state at each edge of the group -
+confirmed in the browser; and saved filter presets' save/apply/delete
+cycle, including that applying a preset actually restores every
+filter's value and that the "Save this search" control only appears
+once a filter is non-default, confirmed in the browser with direct
+`localStorage` inspection alongside the UI.
