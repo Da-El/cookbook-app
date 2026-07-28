@@ -130,3 +130,57 @@ instruction) · **Migrations:** 0013–0016 · **Tests:** 53 backend, passing
 **Verified:** every new endpoint tested end-to-end against live data (curl +
 real browser UI, including a real OG-tag-injected page load and a genuine
 failed-then-successful login pair) before test-data cleanup.
+
+---
+
+## Batch 4 — Iterations 16–20
+
+**Commit:** `1e4b243` (local only — not pushed/deployed this batch, per standing
+instruction) · **Migrations:** 0017–0019 · **Tests:** 53 backend, passing
+
+16. **Review discussion threads** — an inline reply list under every review
+    (expand/collapse form, author-only delete), notifying the review's author
+    when someone replies. A genuine hard-delete, unlike everything else in this
+    app — a reply reads as closer to a chat message than catalog content, so it
+    doesn't need a revision trail.
+17. **Meal collections** — private, user-owned folders for organizing saved
+    recipes, separate from the single flat "saved" list. An `AddToCollection`
+    bottom-sheet picker on every meal page (with an inline "+ New collection"
+    that auto-adds the current meal), and a detail page reusing the same
+    `MealCard`/`MealGrid` components the rest of the app already uses.
+    Ownership is checked on every route — verified directly that another
+    user's request gets a 404, not a peek at someone else's collection.
+18. **Two-factor authentication** — an optional per-account email code
+    (10-minute expiry, 5-attempt cap, then the challenge is discarded and
+    treated as expired rather than "wrong code," to force a fresh login).
+    `login()` now returns either a normal profile or a `{two_factor_required,
+    challenge}` payload with no session cookie set until the code is
+    verified. A new durable sign-in log (separate from the existing
+    rate-limiting table, which clears on success) backs a "Recent sign-in
+    activity" section in Settings next to the 2FA toggle.
+19. **Ingredient comparison tool** — put up to three ingredients side by
+    side, with a shareable `?ids=` URL, full nutrition/micro/diet-flag rows,
+    and per-row highlighting of the best value (aware that "best" flips
+    direction — lower is better for calories/carbs/fat/sugar/sodium, higher
+    for protein/fiber/rating).
+20. **Accessibility + motion polish** — a reusable Escape-to-close hook wired
+    into every modal and sheet built this session (collection picker, plan
+    picker, account menu), a site-wide keyboard-only focus ring (`box-shadow`
+    so it isn't clipped by `overflow:hidden` containers and follows each
+    element's own border-radius instead of overriding it), a global
+    `prefers-reduced-motion` override, and a skip-to-content link on every
+    page.
+
+**Verified:** review replies, collections, and ingredient comparison tested
+end-to-end via curl and real browser UI (including the cross-user 404
+authorization boundary on collections). Two-factor auth tested via curl
+through the full challenge/verify/wrong-code/replay-rejection/max-attempts
+lockout sequence, then again through a real browser login. Accessibility
+work verified where the tooling allows it — Escape-to-close confirmed live
+on all three modals by dispatching real keydown events, and the
+`:focus-visible`/`prefers-reduced-motion` rules confirmed present and
+correctly parsed in the loaded stylesheet — but the automated browser pane
+in this environment reports `document.hasFocus() === false`, so the actual
+keyboard-driven focus ring couldn't be observed rendering; the CSS was
+instead hand-verified against the same clipping/border-radius pitfalls
+called out in Batch 1's onboarding a11y work.
