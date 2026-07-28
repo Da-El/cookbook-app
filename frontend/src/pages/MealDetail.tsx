@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '../api/client';
@@ -13,6 +13,7 @@ import { ReviewReplies } from '../components/ReviewReplies/ReviewReplies';
 import { AddToCollection } from '../components/AddToCollection/AddToCollection';
 import { mealBackground, ingredientBackground } from '../lib/imagery';
 import { pickImage } from '../lib/photo';
+import { addRecentlyViewed } from '../lib/recentlyViewed';
 import styles from './MealDetail.module.css';
 
 interface MealIngredient {
@@ -189,6 +190,18 @@ export function MealDetail() {
       return failureCount < 2;
     },
   });
+
+  useEffect(() => {
+    if (meal) {
+      addRecentlyViewed({
+        kind: 'meal',
+        id: meal.id,
+        name: meal.name,
+        subtitle: meal.cuisine,
+        photo_url: meal.photo_url,
+      });
+    }
+  }, [meal]);
 
   const { data: related = [] } = useQuery({
     queryKey: ['meals-related', meal?.cuisine, id],

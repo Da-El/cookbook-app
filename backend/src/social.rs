@@ -615,7 +615,7 @@ pub async fn chef_following(
     Ok(Json(rows))
 }
 
-async fn can_view(
+pub(crate) async fn can_view(
     state: &AppState,
     profile_id: i64,
     viewer: Option<CurrentUser>,
@@ -627,6 +627,7 @@ async fn can_view(
     let sql = match column {
         "vis_mine" => "SELECT vis_mine FROM users WHERE id = $1",
         "vis_made" => "SELECT vis_made FROM users WHERE id = $1",
+        "vis_plan" => "SELECT vis_plan FROM users WHERE id = $1",
         _ => "SELECT vis_want FROM users WHERE id = $1",
     };
     let visibility: Option<String> = sqlx::query_scalar(sql)
@@ -647,6 +648,7 @@ pub struct UpdateProfile {
     pub vis_made: Option<String>,
     pub vis_want: Option<String>,
     pub vis_fridge: Option<String>,
+    pub vis_plan: Option<String>,
     pub unit_system: Option<String>,
     /// `Some(None)` isn't representable with a plain `Option<i32>` field
     /// (COALESCE below can't distinguish "not sent" from "clear it"), so a
@@ -677,6 +679,7 @@ pub async fn update_profile(
            vis_made = COALESCE(NULLIF($7,''), vis_made),
            vis_want = COALESCE(NULLIF($8,''), vis_want),
            vis_fridge = COALESCE(NULLIF($9,''), vis_fridge),
+           vis_plan = COALESCE(NULLIF($15,''), vis_plan),
            unit_system = COALESCE(NULLIF($10,''), unit_system),
            goal_calories = CASE WHEN $11::int IS NULL THEN goal_calories WHEN $11 = 0 THEN NULL ELSE $11 END,
            goal_protein_g = CASE WHEN $12::int IS NULL THEN goal_protein_g WHEN $12 = 0 THEN NULL ELSE $12 END,
@@ -699,6 +702,7 @@ pub async fn update_profile(
     .bind(b.goal_protein_g)
     .bind(b.goal_carbs_g)
     .bind(b.goal_fat_g)
+    .bind(b.vis_plan.as_deref())
     .execute(&state.db)
     .await
     .map_err(|e| {

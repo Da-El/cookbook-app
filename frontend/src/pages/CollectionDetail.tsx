@@ -24,6 +24,8 @@ interface CollectionDetailData {
   is_public: boolean;
   is_mine: boolean;
   owner_name: string;
+  follower_count: number;
+  is_following: boolean;
 }
 
 export function CollectionDetail() {
@@ -49,6 +51,16 @@ export function CollectionDetail() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['collection', id] }),
   });
 
+  const follow = useMutation({
+    mutationFn: () => api.post<{ following: boolean }>(`/collections/${id}/follow`),
+    onSuccess: (res) => {
+      toast(res.following ? 'Following this collection' : 'Unfollowed');
+      qc.invalidateQueries({ queryKey: ['collection', id] });
+      qc.invalidateQueries({ queryKey: ['collections-followed'] });
+    },
+    onError: (e) => toast(e instanceof ApiError ? e.message : 'Could not update that.'),
+  });
+
   function copyLink() {
     navigator.clipboard.writeText(`${location.origin}/collections/${id}`);
     toast('Link copied');
@@ -66,10 +78,22 @@ export function CollectionDetail() {
             <p className={styles.subtitle}>
               {data.meals.length} meal{data.meals.length === 1 ? '' : 's'}
               {!data.is_mine && ` · by ${data.owner_name}`}
+              {data.follower_count > 0 &&
+                ` · ${data.follower_count} follower${data.follower_count === 1 ? '' : 's'}`}
             </p>
           )}
         </div>
       </div>
+
+      {data && !data.is_mine && (
+        <button
+          className={`${styles.followBtn} ${data.is_following ? styles.followBtnOn : ''}`}
+          disabled={follow.isPending}
+          onClick={() => follow.mutate()}
+        >
+          {data.is_following ? 'Following' : 'Follow this collection'}
+        </button>
+      )}
 
       {data?.is_mine && (
         <div className={styles.visibilityRow}>

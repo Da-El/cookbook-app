@@ -8,7 +8,7 @@ export interface UserProfile {
 
 export interface FlagRow {
   id: number;
-  content_type: 'meal_revision' | 'review' | 'ingredient_edit' | 'alias' | 'substitute' | 'guide_edit';
+  content_type: 'meal_revision' | 'review' | 'ingredient_edit' | 'alias' | 'substitute' | 'guide_edit' | 'user_profile';
   content_id: number;
   reason: string;
   flagged_by_name: string | null;
@@ -156,9 +156,12 @@ export interface GuideSummary {
   topic: string;
   minutes: number | null;
   helpful_count: number;
+  rating: number;
+  rating_count: number;
 }
 
 export interface GuideDetail extends GuideSummary {
   body: string;
   your_helpful_vote: boolean;
+  your_rating: number | null;
 }

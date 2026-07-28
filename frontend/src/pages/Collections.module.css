@@ -102,6 +102,13 @@
   gap: 9px;
 }
 
+.sectionTitle {
+  margin-top: 28px;
+  font-family: var(--font-display);
+  font-size: 19px;
+  color: var(--ink);
+}
+
 .row {
   display: flex;
   align-items: center;

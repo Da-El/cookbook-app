@@ -78,7 +78,14 @@ export function Guides() {
               <button key={g.slug} className={styles.card} onClick={() => navigate(`/guides/${g.slug}`)}>
                 <span className={styles.cardTitle}>{g.title}</span>
                 <span className={styles.cardSummary}>{g.summary}</span>
-                {g.minutes && <span className={styles.cardMeta}>{g.minutes} min read</span>}
+                {(g.minutes || g.rating_count > 0) && (
+                  <span className={styles.cardMeta}>
+                    {[
+                      g.minutes ? `${g.minutes} min read` : null,
+                      g.rating_count > 0 ? `★ ${g.rating.toFixed(1)}` : null,
+                    ].filter(Boolean).join(' · ')}
+                  </span>
+                )}
               </button>
             ))}
           </div>
@@ -179,6 +186,11 @@ export function GuidePage() {
     onSuccess: invalidate,
   });
 
+  const rate = useMutation({
+    mutationFn: (value: number) => api.post(`/guides/${slug}/rate`, { value }),
+    onSuccess: invalidate,
+  });
+
   const submitEdit = useMutation({
     mutationFn: (body: string) => api.post(`/guides/${slug}/edits`, { body }),
     onSuccess: invalidate,
@@ -241,6 +253,30 @@ export function GuidePage() {
           {guide.helpful_count > 0 ? ` · ${guide.helpful_count}` : ''}
         </button>
       </div>
+
+      {user && (
+        <div className={styles.rateBlock}>
+          <div className={styles.rateLabel}>
+            {guide.your_rating != null ? 'Tap to update your rating' : 'Rate this guide (1–10)'}
+            {guide.rating_count > 0 && (
+              <span className={styles.rateAvg}> · {guide.rating.toFixed(1)} avg ({guide.rating_count})</span>
+            )}
+          </div>
+          <div className={styles.rateRow} role="group" aria-label="Rate this guide from 1 to 10">
+            {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
+              <button
+                key={n}
+                className={`${styles.rateBtn} ${guide.your_rating != null && n <= guide.your_rating ? styles.rateBtnOn : ''}`}
+                onClick={() => rate.mutate(n)}
+                aria-label={`Rate ${n} out of 10`}
+                aria-pressed={guide.your_rating === n}
+              >
+                {n}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       <section className={styles.section}>
         <h2 className={styles.topic}>Discussion</h2>

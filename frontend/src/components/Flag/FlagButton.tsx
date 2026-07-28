@@ -4,7 +4,14 @@ import { api, ApiError } from '../../api/client';
 import { useToast } from '../Toast/ToastContext';
 import styles from './FlagButton.module.css';
 
-export type FlaggableType = 'meal_revision' | 'review' | 'ingredient_edit' | 'alias' | 'substitute' | 'guide_edit';
+export type FlaggableType =
+  | 'meal_revision'
+  | 'review'
+  | 'ingredient_edit'
+  | 'alias'
+  | 'substitute'
+  | 'guide_edit'
+  | 'user_profile';
 
 /**
  * A quiet "send this to a moderator" control, reused everywhere community
@@ -12,7 +19,17 @@ export type FlaggableType = 'meal_revision' | 'review' | 'ingredient_edit' | 'al
  * suggestions. Voting already surfaces "most people disagree" - this is for
  * the smaller set of cases that shouldn't wait on a vote count at all.
  */
-export function FlagButton({ contentType, contentId }: { contentType: FlaggableType; contentId: number }) {
+export function FlagButton({
+  contentType,
+  contentId,
+  label = '⚑ Flag',
+  placeholder = "What's wrong with this?",
+}: {
+  contentType: FlaggableType;
+  contentId: number;
+  label?: string;
+  placeholder?: string;
+}) {
   const toast = useToast();
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState('');
@@ -32,7 +49,7 @@ export function FlagButton({ contentType, contentId }: { contentType: FlaggableT
   if (!open) {
     return (
       <button type="button" className={styles.trigger} onClick={() => setOpen(true)} aria-label="Flag for moderator review">
-        ⚑ Flag
+        {label}
       </button>
     );
   }
@@ -43,7 +60,7 @@ export function FlagButton({ contentType, contentId }: { contentType: FlaggableT
         className={styles.input}
         value={reason}
         onChange={(e) => setReason(e.target.value)}
-        placeholder="What's wrong with this?"
+        placeholder={placeholder}
         maxLength={500}
         autoFocus
         onKeyDown={(e) => {

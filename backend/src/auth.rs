@@ -533,6 +533,7 @@ pub struct SettingsProfile {
     pub vis_made: String,
     pub vis_want: String,
     pub vis_fridge: String,
+    pub vis_plan: String,
     pub two_factor_enabled: bool,
     pub unit_system: String,
     pub goal_calories: Option<i32>,
@@ -546,9 +547,9 @@ pub async fn settings(
     CurrentUser(user): CurrentUser,
 ) -> Result<Json<SettingsProfile>, StatusCode> {
     #[allow(clippy::type_complexity)]
-    let row = sqlx::query_as::<_, (String, Option<String>, Option<String>, Vec<String>, String, String, String, String, bool, String, Option<i32>, Option<i32>, Option<i32>, Option<i32>)>(
+    let row = sqlx::query_as::<_, (String, Option<String>, Option<String>, Vec<String>, String, String, String, String, bool, String, Option<i32>, Option<i32>, Option<i32>, Option<i32>, String)>(
         "SELECT display_name, email, bio, diet_prefs, vis_mine, vis_made, vis_want, vis_fridge, two_factor_enabled, unit_system,
-                goal_calories, goal_protein_g, goal_carbs_g, goal_fat_g
+                goal_calories, goal_protein_g, goal_carbs_g, goal_fat_g, vis_plan
          FROM users WHERE id = $1",
     )
     .bind(user.id)
@@ -571,6 +572,7 @@ pub async fn settings(
         goal_protein_g: row.11,
         goal_carbs_g: row.12,
         goal_fat_g: row.13,
+        vis_plan: row.14,
     }))
 }
 

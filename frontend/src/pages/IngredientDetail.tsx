@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '../api/client';
@@ -19,6 +19,7 @@ import { LoadingState, ErrorState } from '../components/PageState/PageState';
 import { Avatar } from '../components/Avatar/Avatar';
 import { ContributorBadge, type ContributorTier } from '../components/ContributorBadge/ContributorBadge';
 import { ingredientBackground } from '../lib/imagery';
+import { addRecentlyViewed } from '../lib/recentlyViewed';
 import styles from './IngredientDetail.module.css';
 
 interface IngredientReview {
@@ -81,6 +82,18 @@ export function IngredientDetail() {
       return failureCount < 2;
     },
   });
+
+  useEffect(() => {
+    if (data) {
+      addRecentlyViewed({
+        kind: 'ingredient',
+        id: data.id,
+        name: data.name,
+        subtitle: data.category,
+        photo_url: data.photo_url,
+      });
+    }
+  }, [data]);
 
   const { data: usedIn = [] } = useQuery({
     queryKey: ['ingredient-used-in', id],

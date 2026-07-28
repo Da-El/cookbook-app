@@ -8,10 +8,11 @@ import { Avatar } from '../components/Avatar/Avatar';
 import { EmptyStatic } from '../components/Empty/Empty';
 import { ChevronLeft } from '../components/Icon/Icon';
 import { ContributorBadge, type ContributorTier } from '../components/ContributorBadge/ContributorBadge';
+import { FlagButton } from '../components/Flag/FlagButton';
 import { mealBackground } from '../lib/imagery';
 import styles from './ChefPage.module.css';
 
-type Tab = 'published' | 'cooked' | 'reviews';
+type Tab = 'published' | 'cooked' | 'reviews' | 'plan';
 
 interface ChefProfile {
   id: number;
@@ -43,6 +44,33 @@ interface ChefReview {
   score: number | null;
   note: string | null;
   cooked_at: string;
+}
+
+interface PlanEntry {
+  id: number;
+  plan_date: string;
+  slot: string;
+  meal_id: number;
+  meal_name: string;
+  cuisine: string;
+  time_minutes: number;
+  photo_url: string | null;
+  servings: number;
+  rating: number;
+}
+
+function planDateLabel(iso: string) {
+  return new Date(`${iso}T00:00:00`).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+}
+
+/** Today through six days out - "what this chef's cooking this week,"
+ * the same span the visitor's own Plan page defaults to. */
+function thisWeekRange() {
+  const from = new Date();
+  const to = new Date();
+  to.setDate(to.getDate() + 6);
+  const iso = (d: Date) => d.toISOString().slice(0, 10);
+  return { from: iso(from), to: iso(to) };
 }
 
 function relativeTime(iso: string) {
@@ -82,6 +110,15 @@ export function ChefPage() {
   const { data: reviews = [] } = useQuery({
     queryKey: ['chef-reviews', id],
     queryFn: () => api.get<ChefReview[]>(`/chefs/${id}/reviews`),
+    enabled: Boolean(id) && !chef?.is_blocked,
+  });
+
+  const { data: plan = [] } = useQuery({
+    queryKey: ['chef-plan', id],
+    queryFn: () => {
+      const { from, to } = thisWeekRange();
+      return api.get<PlanEntry[]>(`/chefs/${id}/plan?from=${from}&to=${to}`);
+    },
     enabled: Boolean(id) && !chef?.is_blocked,
   });
 
@@ -156,9 +193,18 @@ export function ChefPage() {
         </button>
       )}
 
-      <button className={styles.blockLink} onClick={() => block.mutate()}>
-        {chef.is_blocked ? 'Unblock this chef' : 'Block this chef'}
-      </button>
+      <div className={styles.safetyRow}>
+        <button className={styles.blockLink} onClick={() => block.mutate()}>
+          {chef.is_blocked ? 'Unblock this chef' : 'Block this chef'}
+        </button>
+        <span className={styles.safetySep}>·</span>
+        <FlagButton
+          contentType="user_profile"
+          contentId={chef.id}
+          label="⚑ Report profile"
+          placeholder="What's wrong with this profile?"
+        />
+      </div>
 
       {chef.is_blocked ? (
         <div className={styles.blockedBanner}>
@@ -168,15 +214,15 @@ export function ChefPage() {
       ) : (
         <>
           <div className={styles.tabs}>
-            {(['published', 'cooked', 'reviews'] as Tab[]).map((t) => (
+            {(['published', 'cooked', 'reviews', 'plan'] as Tab[]).map((t) => (
               <button
                 key={t}
                 className={`${styles.tab} ${tab === t ? styles.tabActive : ''}`}
                 onClick={() => setTab(t)}
               >
-                {t.charAt(0).toUpperCase() + t.slice(1)}
+                {t === 'plan' ? 'Plan' : t.charAt(0).toUpperCase() + t.slice(1)}
                 <span className={styles.tabCount}>
-                  {t === 'published' ? published.length : t === 'cooked' ? cooked.length : reviews.length}
+                  {t === 'published' ? published.length : t === 'cooked' ? cooked.length : t === 'reviews' ? reviews.length : plan.length}
                 </span>
               </button>
             ))}
@@ -242,6 +288,27 @@ export function ChefPage() {
         ) : (
           <div style={{ marginTop: 16 }}>
             <EmptyStatic>No public reviews yet.</EmptyStatic>
+          </div>
+        ))}
+
+      {tab === 'plan' &&
+        (plan.length > 0 ? (
+          <div className={styles.mealList}>
+            {plan.map((p) => (
+              <button key={p.id} className={styles.mealRow} onClick={() => navigate(`/meals/${p.meal_id}`)}>
+                <span className={styles.mealThumb} style={{ background: mealBackground(p.photo_url, p.cuisine) }} />
+                <span style={{ flex: 1, minWidth: 0 }}>
+                  <span className={styles.mealName} style={{ display: 'block' }}>{p.meal_name}</span>
+                  <span className={styles.mealSub} style={{ display: 'block' }}>
+                    {planDateLabel(p.plan_date)} · {p.slot.charAt(0).toUpperCase() + p.slot.slice(1)}
+                  </span>
+                </span>
+              </button>
+            ))}
+          </div>
+        ) : (
+          <div style={{ marginTop: 16 }}>
+            <EmptyStatic>Nothing planned this week — or their plan is private.</EmptyStatic>
           </div>
         ))}
         </>

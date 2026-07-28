@@ -10,6 +10,7 @@ import { Avatar } from '../components/Avatar/Avatar';
 import { EmptyCard } from '../components/Empty/Empty';
 import { TodayNutrition } from '../components/TodayNutrition/TodayNutrition';
 import { FeaturedMeal } from '../components/FeaturedMeal/FeaturedMeal';
+import { RecentlyViewed } from '../components/RecentlyViewed/RecentlyViewed';
 import { HeartIcon, PlusIcon } from '../components/Icon/Icon';
 import { mealBackground } from '../lib/imagery';
 import styles from './Home.module.css';
@@ -74,6 +75,7 @@ const ACTIVITY_GLYPH: Record<string, { glyph: string; bg: string }> = {
   content_removed: { glyph: '⚑', bg: 'var(--warn)' },
   flag_resolved: { glyph: '✓', bg: 'var(--muted)' },
   review_reply: { glyph: '💬', bg: 'var(--accent)' },
+  collection_meal_added: { glyph: '📁', bg: 'var(--accent)' },
 };
 
 function activityCopy(a: ActivityItem): string {
@@ -87,6 +89,7 @@ function activityCopy(a: ActivityItem): string {
     case 'content_removed': return 'A moderator removed something you posted';
     case 'flag_resolved': return 'A moderator resolved a flag you raised';
     case 'review_reply': return `${who} replied to your review`;
+    case 'collection_meal_added': return `${who} added a recipe to a collection you follow`;
     default: return 'New activity';
   }
 }
@@ -251,6 +254,7 @@ export function Home() {
               onClick={() => {
                 if (a.subject_type === 'meal' && a.subject_id) navigate(`/meals/${a.subject_id}`);
                 else if (a.subject_type === 'ingredient' && a.subject_id) navigate(`/ingredients/${a.subject_id}`);
+                else if (a.subject_type === 'collection' && a.subject_id) navigate(`/collections/${a.subject_id}`);
               }}
             >
               <span className={styles.activityGlyph} style={{ background: g.bg }}>{g.glyph}</span>
@@ -310,6 +314,7 @@ export function Home() {
 
         <TodayNutrition />
         <FeaturedMeal />
+        <RecentlyViewed />
 
         {tab === 'following' ? (
           <>

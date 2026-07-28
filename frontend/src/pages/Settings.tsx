@@ -64,6 +64,7 @@ interface SettingsProfile {
   vis_made: 'public' | 'private';
   vis_want: 'public' | 'private';
   vis_fridge: 'public' | 'private';
+  vis_plan: 'public' | 'private';
   two_factor_enabled: boolean;
   unit_system: 'as_written' | 'metric' | 'imperial';
   goal_calories: number | null;
@@ -78,11 +79,12 @@ const UNIT_SYSTEMS: ['as_written' | 'metric' | 'imperial', string][] = [
   ['imperial', 'Imperial'],
 ];
 
-const VIS_ROWS: [keyof Pick<SettingsProfile, 'vis_mine' | 'vis_made' | 'vis_want' | 'vis_fridge'>, string, string][] = [
+const VIS_ROWS: [keyof Pick<SettingsProfile, 'vis_mine' | 'vis_made' | 'vis_want' | 'vis_fridge' | 'vis_plan'>, string, string][] = [
   ['vis_mine', 'My recipes', 'Meals you’ve published'],
   ['vis_made', 'Meals I’ve made', 'Your public cooking log'],
   ['vis_want', 'Want to make', 'Your saved list'],
   ['vis_fridge', 'My fridge', 'What’s on hand'],
+  ['vis_plan', 'My meal plan', 'What you’re cooking this week — private by default'],
 ];
 
 export function Settings() {

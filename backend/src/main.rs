@@ -144,8 +144,10 @@ async fn main() -> anyhow::Result<()> {
         .route("/cookbook/votes", get(kitchen::my_votes))
         // collections
         .route("/collections", get(collections::list).post(collections::create))
+        .route("/collections/followed", get(collections::list_followed))
         .route("/collections/{id}", get(collections::detail).delete(collections::delete))
         .route("/collections/{id}/visibility", post(collections::set_visibility))
+        .route("/collections/{id}/follow", post(collections::toggle_follow))
         .route("/collections/{id}/meals", post(collections::add_meal))
         .route("/collections/{id}/meals/{meal_id}", delete(collections::remove_meal))
         // import
@@ -162,6 +164,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/guides", get(guides::list))
         .route("/guides/{slug}", get(guides::detail))
         .route("/guides/{slug}/helpful", post(guides::vote_helpful))
+        .route("/guides/{slug}/rate", post(guides::rate))
         .route("/guides/{slug}/related-meals", get(guides::related_meals))
         .route("/guides/{slug}/comments", get(guides::list_comments).post(guides::create_comment))
         .route("/guides/{slug}/comments/{comment_id}", delete(guides::delete_comment))
@@ -182,6 +185,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/chefs/{id}/published", get(social::chef_published))
         .route("/chefs/{id}/cooked", get(social::chef_cooked))
         .route("/chefs/{id}/reviews", get(social::chef_reviews))
+        .route("/chefs/{id}/plan", get(planner::chef_plan))
         .route("/chefs/{id}/followers", get(social::chef_followers))
         .route("/chefs/{id}/following", get(social::chef_following))
         .route("/profile", post(social::update_profile))

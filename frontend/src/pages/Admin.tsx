@@ -16,6 +16,7 @@ const TYPE_LABEL: Record<FlagRow['content_type'], string> = {
   alias: 'Alias',
   substitute: 'Substitute',
   guide_edit: 'Guide edit',
+  user_profile: 'Reported profile',
 };
 
 function relativeTime(iso: string) {
@@ -130,8 +131,14 @@ export function Admin() {
                 <button
                   type="button"
                   className={styles.removeBtn}
-                  disabled={resolve.isPending || !f.still_exists}
-                  title={!f.still_exists ? 'Already gone - nothing to remove' : undefined}
+                  disabled={resolve.isPending || !f.still_exists || f.content_type === 'user_profile'}
+                  title={
+                    f.content_type === 'user_profile'
+                      ? 'Reported accounts need manual follow-up - dismiss once handled'
+                      : !f.still_exists
+                        ? 'Already gone - nothing to remove'
+                        : undefined
+                  }
                   onClick={() => resolve.mutate({ id: f.id, resolution: 'removed' })}
                 >
                   Remove

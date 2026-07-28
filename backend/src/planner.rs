@@ -81,6 +81,38 @@ pub async fn list_plan(
     Ok(Json(rows))
 }
 
+/// A chef's plan, gated by their `vis_plan` setting - defaults to private
+/// (unlike vis_mine/vis_made/vis_want, which default public), since a
+/// schedule of what someone's cooking this week is a different kind of
+/// exposure than "here's what I've made." An invisible plan returns an
+/// empty list rather than 403/404, the same "don't distinguish private from
+/// empty" choice `chef_published`/`chef_cooked` already make in social.rs.
+pub async fn chef_plan(
+    State(state): State<AppState>,
+    viewer: Option<CurrentUser>,
+    Path(id): Path<i64>,
+    Query(p): Query<RangeParams>,
+) -> Result<Json<Vec<PlanEntry>>, StatusCode> {
+    checked_range(&p)?;
+    if !crate::social::can_view(&state, id, viewer, "vis_plan").await? {
+        return Ok(Json(vec![]));
+    }
+    let rows = sqlx::query_as::<_, PlanEntry>(
+        "SELECT e.id, e.plan_date, e.slot, e.meal_id, m.name AS meal_name, m.cuisine,
+                m.time_minutes, m.photo_url, e.servings, m.rating::float8 AS rating
+         FROM meal_plan_entries e JOIN meals m ON m.id = e.meal_id AND m.status = 'live'
+         WHERE e.user_id = $1 AND e.plan_date BETWEEN $2 AND $3
+         ORDER BY e.plan_date, e.id",
+    )
+    .bind(id)
+    .bind(p.from)
+    .bind(p.to)
+    .fetch_all(&state.db)
+    .await
+    .map_err(db_err)?;
+    Ok(Json(rows))
+}
+
 #[derive(Deserialize)]
 pub struct AddPlanEntry {
     pub plan_date: NaiveDate,

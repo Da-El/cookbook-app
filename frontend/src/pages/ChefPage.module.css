@@ -84,15 +84,27 @@
   border-color: var(--border-card);
 }
 
+.safetyRow {
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
 .blockLink {
-  display: block;
-  margin: 10px auto 0;
   padding: 4px;
   background: none;
   border: none;
   color: var(--muted-2);
   font: 600 12px var(--font-ui);
   cursor: pointer;
+}
+
+.safetySep {
+  color: var(--muted-4);
+  font-size: 12px;
 }
 
 .blockLink:hover {

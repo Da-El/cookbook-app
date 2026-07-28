@@ -168,6 +168,46 @@
   border-color: var(--green);
 }
 
+.rateBlock {
+  margin-top: 16px;
+}
+
+.rateLabel {
+  font: 700 11.5px var(--font-ui);
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: .05em;
+}
+
+.rateAvg {
+  color: var(--amber);
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.rateRow {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+  margin-top: 9px;
+}
+
+.rateBtn {
+  width: 29px;
+  height: 36px;
+  border-radius: 10px;
+  border: none;
+  background: var(--chip-bg);
+  color: var(--secondary);
+  font: 700 13px var(--font-ui);
+  cursor: pointer;
+}
+
+.rateBtnOn {
+  background: var(--amber);
+  color: #fff;
+}
+
 /* ---------- related meals ---------- */
 
 .relatedGrid {

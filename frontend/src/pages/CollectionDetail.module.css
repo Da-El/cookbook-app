@@ -68,6 +68,23 @@
   cursor: pointer;
 }
 
+.followBtn {
+  padding: 9px 16px;
+  border-radius: 999px;
+  border: 1.5px solid var(--accent);
+  background: var(--accent);
+  color: #fff;
+  font: 700 13px var(--font-ui);
+  cursor: pointer;
+  margin-bottom: 18px;
+}
+
+.followBtnOn {
+  background: var(--surface-card);
+  color: var(--ink);
+  border-color: var(--border-card);
+}
+
 .cardWrap {
   position: relative;
 }

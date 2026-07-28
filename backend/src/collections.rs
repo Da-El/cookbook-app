@@ -134,6 +134,10 @@ pub struct CollectionDetail {
     pub is_public: bool,
     pub is_mine: bool,
     pub owner_name: String,
+    pub follower_count: i64,
+    /// Always false for the owner - following your own collection is a
+    /// no-op the UI doesn't offer (see `toggle_follow`).
+    pub is_following: bool,
 }
 
 /// Optional auth at the API level - the frontend router still gates every
@@ -180,7 +184,104 @@ pub async fn detail(
     .await
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    Ok(Json(CollectionDetail { id, name, meals, is_public, is_mine, owner_name }))
+    let follower_count: i64 = sqlx::query_scalar("SELECT count(*) FROM collection_follows WHERE collection_id = $1")
+        .bind(id)
+        .fetch_one(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let is_following = match viewer_id {
+        Some(v) if !is_mine => {
+            sqlx::query_scalar(
+                "SELECT EXISTS (SELECT 1 FROM collection_follows WHERE collection_id = $1 AND user_id = $2)",
+            )
+            .bind(id)
+            .bind(v)
+            .fetch_one(&state.db)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        }
+        _ => false,
+    };
+
+    Ok(Json(CollectionDetail { id, name, meals, is_public, is_mine, owner_name, follower_count, is_following }))
+}
+
+/// Public collections the caller follows - the counterpart to `list()`'s
+/// "my own collections" view, for a "Following" section elsewhere in the
+/// Cookbook. Unlike `list()` this can't assume the viewer owns every row,
+/// so it carries `owner_name` the way `detail()` does.
+#[derive(Serialize, sqlx::FromRow)]
+pub struct FollowedCollectionRow {
+    pub id: i64,
+    pub name: String,
+    pub owner_name: String,
+    pub meal_count: i64,
+}
+
+pub async fn list_followed(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+) -> Result<Json<Vec<FollowedCollectionRow>>, StatusCode> {
+    let rows = sqlx::query_as::<_, FollowedCollectionRow>(
+        "SELECT c.id, c.name, u.display_name AS owner_name,
+                (SELECT count(*) FROM meal_collection_items i WHERE i.collection_id = c.id) AS meal_count
+         FROM collection_follows f
+         JOIN meal_collections c ON c.id = f.collection_id
+         JOIN users u ON u.id = c.user_id
+         WHERE f.user_id = $1 AND c.is_public = TRUE
+         ORDER BY f.created_at DESC",
+    )
+    .bind(user.id)
+    .fetch_all(&state.db)
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(Json(rows))
+}
+
+/// Author-only visibility is a separate switch from following: turning a
+/// collection private again doesn't un-follow anyone, it just means
+/// `detail()` (and thus `list_followed`'s `is_public = TRUE` filter) stops
+/// showing it to them until it's public again - same as a blocked/unfollowed
+/// meal author's existing content doesn't retroactively delete anything.
+pub async fn toggle_follow(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Path(id): Path<i64>,
+) -> Result<Json<serde_json::Value>, (StatusCode, Json<serde_json::Value>)> {
+    let row: Option<(i64, bool)> = sqlx::query_as("SELECT user_id, is_public FROM meal_collections WHERE id = $1")
+        .bind(id)
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|_| oops())?;
+    let Some((owner_id, is_public)) = row else {
+        return Err((StatusCode::NOT_FOUND, Json(serde_json::json!({ "error": "Collection not found." }))));
+    };
+    if owner_id == user.id {
+        return Err(bad("You can't follow your own collection."));
+    }
+    if !is_public {
+        return Err((StatusCode::NOT_FOUND, Json(serde_json::json!({ "error": "Collection not found." }))));
+    }
+
+    let deleted = sqlx::query("DELETE FROM collection_follows WHERE collection_id = $1 AND user_id = $2")
+        .bind(id)
+        .bind(user.id)
+        .execute(&state.db)
+        .await
+        .map_err(|_| oops())?
+        .rows_affected();
+
+    if deleted == 0 {
+        sqlx::query("INSERT INTO collection_follows (collection_id, user_id) VALUES ($1,$2) ON CONFLICT DO NOTHING")
+            .bind(id)
+            .bind(user.id)
+            .execute(&state.db)
+            .await
+            .map_err(|_| oops())?;
+    }
+
+    Ok(Json(serde_json::json!({ "following": deleted == 0 })))
 }
 
 #[derive(Deserialize)]
@@ -194,22 +295,66 @@ pub async fn add_meal(
     Path(id): Path<i64>,
     Json(body): Json<AddMeal>,
 ) -> Result<StatusCode, (StatusCode, Json<serde_json::Value>)> {
-    let owns: Option<i64> = sqlx::query_scalar("SELECT id FROM meal_collections WHERE id = $1 AND user_id = $2")
-        .bind(id)
-        .bind(user.id)
-        .fetch_optional(&state.db)
-        .await
-        .map_err(|_| oops())?;
-    if owns.is_none() {
+    let owned: Option<(String, bool)> =
+        sqlx::query_as("SELECT name, is_public FROM meal_collections WHERE id = $1 AND user_id = $2")
+            .bind(id)
+            .bind(user.id)
+            .fetch_optional(&state.db)
+            .await
+            .map_err(|_| oops())?;
+    let Some((collection_name, is_public)) = owned else {
         return Err((StatusCode::NOT_FOUND, Json(serde_json::json!({ "error": "Collection not found." }))));
-    }
+    };
 
-    sqlx::query("INSERT INTO meal_collection_items (collection_id, meal_id) VALUES ($1,$2) ON CONFLICT DO NOTHING")
-        .bind(id)
-        .bind(body.meal_id)
-        .execute(&state.db)
-        .await
-        .map_err(|_| oops())?;
+    let inserted = sqlx::query(
+        "INSERT INTO meal_collection_items (collection_id, meal_id) VALUES ($1,$2) ON CONFLICT DO NOTHING",
+    )
+    .bind(id)
+    .bind(body.meal_id)
+    .execute(&state.db)
+    .await
+    .map_err(|_| oops())?
+    .rows_affected()
+        > 0;
+
+    // Only a genuinely new addition to a public collection is worth telling
+    // followers about - a no-op re-add (already in the collection) or a
+    // private collection's followers (there are none, `toggle_follow`
+    // refuses those) never reaches here.
+    if inserted && is_public {
+        let meal_name: Option<String> = sqlx::query_scalar("SELECT name FROM meals WHERE id = $1")
+            .bind(body.meal_id)
+            .fetch_optional(&state.db)
+            .await
+            .map_err(|_| oops())?;
+        if let Some(meal_name) = meal_name {
+            let followers: Vec<i64> = sqlx::query_scalar("SELECT user_id FROM collection_follows WHERE collection_id = $1")
+                .bind(id)
+                .fetch_all(&state.db)
+                .await
+                .map_err(|_| oops())?;
+            for follower_id in followers {
+                sqlx::query(
+                    "INSERT INTO notifications (recipient_id, actor_id, type, subject_type, subject_id)
+                     VALUES ($1, $2, 'collection_meal_added', 'collection', $3)",
+                )
+                .bind(follower_id)
+                .bind(user.id)
+                .bind(id)
+                .execute(&state.db)
+                .await
+                .ok();
+                crate::notify::send_notification_email(
+                    &state.db,
+                    follower_id,
+                    "collection_meal_added",
+                    "New recipe in a collection you follow",
+                    &format!("\"{meal_name}\" was just added to \"{collection_name}\" on Cookbook."),
+                )
+                .await;
+            }
+        }
+    }
 
     Ok(StatusCode::NO_CONTENT)
 }

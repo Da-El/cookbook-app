@@ -1674,29 +1674,45 @@ pub(crate) async fn upsert_rating(
     .bind(user_id).bind(subject_type).bind(subject_id).bind(value)
     .execute(&mut **tx).await.ok();
 
-    if subject_type == "meal" {
-        sqlx::query(
-            "UPDATE meals SET
-               rating = COALESCE((SELECT round(avg(value)::numeric,1) FROM ratings
-                                  WHERE subject_type='meal' AND subject_id=$1), 0),
-               rating_count = (SELECT count(*) FROM ratings WHERE subject_type='meal' AND subject_id=$1)
-             WHERE id = $1",
-        )
-        .bind(subject_id).execute(&mut **tx).await.ok();
-        // Every meal, not just this one: a new rating moves the site-wide
-        // prior, and a prior that has moved leaves every other ranked_score
-        // describing a world that no longer exists.
-        sqlx::query("SELECT recompute_meal_rankings()").execute(&mut **tx).await.ok();
-    } else {
-        sqlx::query(
-            "UPDATE ingredients SET
-               rating = COALESCE((SELECT round(avg(value)::numeric,1) FROM ratings
-                                  WHERE subject_type='ingredient' AND subject_id=$1), 0),
-               rating_count = (SELECT count(*) FROM ratings WHERE subject_type='ingredient' AND subject_id=$1)
-             WHERE id = $1",
-        )
-        .bind(subject_id).execute(&mut **tx).await.ok();
-        sqlx::query("SELECT recompute_ingredient_rankings()").execute(&mut **tx).await.ok();
+    match subject_type {
+        "meal" => {
+            sqlx::query(
+                "UPDATE meals SET
+                   rating = COALESCE((SELECT round(avg(value)::numeric,1) FROM ratings
+                                      WHERE subject_type='meal' AND subject_id=$1), 0),
+                   rating_count = (SELECT count(*) FROM ratings WHERE subject_type='meal' AND subject_id=$1)
+                 WHERE id = $1",
+            )
+            .bind(subject_id).execute(&mut **tx).await.ok();
+            // Every meal, not just this one: a new rating moves the site-wide
+            // prior, and a prior that has moved leaves every other ranked_score
+            // describing a world that no longer exists.
+            sqlx::query("SELECT recompute_meal_rankings()").execute(&mut **tx).await.ok();
+        }
+        "guide" => {
+            // No ranking recompute - guides are deliberately never re-sorted
+            // by rating (see guides.rs's top-of-file doc comment), so there's
+            // no ranked_score-style prior for a new vote to move.
+            sqlx::query(
+                "UPDATE guides SET
+                   rating = COALESCE((SELECT round(avg(value)::numeric,1) FROM ratings
+                                      WHERE subject_type='guide' AND subject_id=$1), 0),
+                   rating_count = (SELECT count(*) FROM ratings WHERE subject_type='guide' AND subject_id=$1)
+                 WHERE id = $1",
+            )
+            .bind(subject_id).execute(&mut **tx).await.ok();
+        }
+        _ => {
+            sqlx::query(
+                "UPDATE ingredients SET
+                   rating = COALESCE((SELECT round(avg(value)::numeric,1) FROM ratings
+                                      WHERE subject_type='ingredient' AND subject_id=$1), 0),
+                   rating_count = (SELECT count(*) FROM ratings WHERE subject_type='ingredient' AND subject_id=$1)
+                 WHERE id = $1",
+            )
+            .bind(subject_id).execute(&mut **tx).await.ok();
+            sqlx::query("SELECT recompute_ingredient_rankings()").execute(&mut **tx).await.ok();
+        }
     }
 }
 

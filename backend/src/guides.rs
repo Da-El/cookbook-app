@@ -24,6 +24,8 @@ pub struct GuideSummary {
     pub topic: String,
     pub minutes: Option<i32>,
     pub helpful_count: i32,
+    pub rating: f64,
+    pub rating_count: i32,
 }
 
 #[derive(Serialize, sqlx::FromRow)]
@@ -37,11 +39,15 @@ pub struct GuideDetail {
     pub minutes: Option<i32>,
     pub helpful_count: i32,
     pub your_helpful_vote: bool,
+    pub rating: f64,
+    pub rating_count: i32,
+    pub your_rating: Option<i16>,
 }
 
 pub async fn list(State(state): State<AppState>) -> Result<Json<Vec<GuideSummary>>, StatusCode> {
     let rows = sqlx::query_as::<_, GuideSummary>(
-        "SELECT id, slug, title, summary, topic, minutes, helpful_count
+        "SELECT id, slug, title, summary, topic, minutes, helpful_count,
+                rating::float8 AS rating, rating_count
          FROM guides ORDER BY topic, position, title",
     )
     .fetch_all(&state.db)
@@ -62,7 +68,9 @@ pub async fn detail(
     sqlx::query_as::<_, GuideDetail>(
         "SELECT id, slug, title, summary, body, topic, minutes, helpful_count,
                 EXISTS (SELECT 1 FROM guide_votes v
-                        WHERE v.guide_id = guides.id AND v.user_id = $2) AS your_helpful_vote
+                        WHERE v.guide_id = guides.id AND v.user_id = $2) AS your_helpful_vote,
+                rating::float8 AS rating, rating_count,
+                (SELECT value FROM ratings WHERE subject_type='guide' AND subject_id=guides.id AND user_id=$2) AS your_rating
          FROM guides WHERE slug = $1",
     )
     .bind(&slug)
@@ -72,6 +80,34 @@ pub async fn detail(
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
     .map(Json)
     .ok_or(StatusCode::NOT_FOUND)
+}
+
+#[derive(Deserialize)]
+pub struct RateGuide {
+    pub value: i16,
+}
+
+pub async fn rate(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Path(slug): Path<String>,
+    Json(body): Json<RateGuide>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    if !(1..=10).contains(&body.value) {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+    let guide_id: Option<i64> = sqlx::query_scalar("SELECT id FROM guides WHERE slug = $1")
+        .bind(&slug)
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let Some(guide_id) = guide_id else { return Err(StatusCode::NOT_FOUND) };
+
+    let mut tx = state.db.begin().await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    crate::meals::upsert_rating(&mut tx, user.id, "guide", guide_id, body.value).await;
+    tx.commit().await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    Ok(Json(serde_json::json!({ "rated": body.value })))
 }
 
 /// Toggle-only, identical shape to a review's helpful vote (migration 0008).

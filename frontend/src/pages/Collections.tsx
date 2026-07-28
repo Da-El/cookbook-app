@@ -16,6 +16,13 @@ interface CollectionRow {
   is_public: boolean;
 }
 
+interface FollowedCollectionRow {
+  id: number;
+  name: string;
+  owner_name: string;
+  meal_count: number;
+}
+
 /**
  * The user's own named lists of meals - Saved/Cooked/Published are fixed,
  * single-purpose buckets; a collection is whatever shape a person actually
@@ -30,6 +37,11 @@ export function Collections() {
   const { data: collections, isLoading } = useQuery({
     queryKey: ['collections'],
     queryFn: () => api.get<CollectionRow[]>('/collections'),
+  });
+
+  const { data: followed = [] } = useQuery({
+    queryKey: ['collections-followed'],
+    queryFn: () => api.get<FollowedCollectionRow[]>('/collections/followed'),
   });
 
   const create = useMutation({
@@ -120,6 +132,24 @@ export function Collections() {
             </div>
           ))}
         </div>
+      )}
+
+      {followed.length > 0 && (
+        <>
+          <h2 className={styles.sectionTitle}>Following</h2>
+          <div className={styles.list}>
+            {followed.map((c) => (
+              <div key={c.id} className={styles.row}>
+                <button className={styles.rowMain} onClick={() => navigate(`/collections/${c.id}`)}>
+                  <span className={styles.rowName}>{c.name}</span>
+                  <span className={styles.rowCount}>
+                    {c.meal_count} meal{c.meal_count === 1 ? '' : 's'} · by {c.owner_name}
+                  </span>
+                </button>
+              </div>
+            ))}
+          </div>
+        </>
       )}
     </div>
   );

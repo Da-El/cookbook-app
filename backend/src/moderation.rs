@@ -11,8 +11,11 @@ use crate::{guides, ingredients, meals};
 /// Every kind of community content that can be flagged. Kept as one list
 /// here (mirroring the migration's CHECK constraint) rather than importing
 /// it from six different modules, so the valid set is visible in one place.
-const CONTENT_TYPES: [&str; 6] =
-    ["meal_revision", "review", "ingredient_edit", "alias", "substitute", "guide_edit"];
+/// "user_profile" is the odd one out - `content_id` is a user id, not a
+/// piece of content, and reports it (harassment, a fake account, spam
+/// posted as their bio) rather than any single edit or review of theirs.
+const CONTENT_TYPES: [&str; 7] =
+    ["meal_revision", "review", "ingredient_edit", "alias", "substitute", "guide_edit", "user_profile"];
 
 #[derive(Deserialize)]
 pub struct NewFlag {
@@ -36,6 +39,9 @@ pub async fn create_flag(
 
     if !CONTENT_TYPES.contains(&body.content_type.as_str()) {
         return Err(bad("That's not something that can be flagged."));
+    }
+    if body.content_type == "user_profile" && body.content_id == user.id {
+        return Err(bad("You can't report your own profile."));
     }
     let reason = body.reason.trim();
     if reason.is_empty() || reason.chars().count() > 500 {
@@ -208,6 +214,17 @@ async fn describe(state: &AppState, content_type: &str, content_id: i64) -> (Str
                     (preview, Some(format!("/guides/{slug}")), true)
                 }
                 None => ("This suggested edit no longer exists.".into(), None, false),
+            }
+        }
+        "user_profile" => {
+            let name: Option<String> = sqlx::query_scalar("SELECT display_name FROM users WHERE id = $1")
+                .bind(content_id)
+                .fetch_optional(&state.db)
+                .await
+                .unwrap_or(None);
+            match name {
+                Some(name) => (format!("Reported profile: {name}"), Some(format!("/chefs/{content_id}")), true),
+                None => ("This account no longer exists.".into(), None, false),
             }
         }
         _ => ("Unrecognized content.".into(), None, false),

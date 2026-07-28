@@ -19,6 +19,7 @@ pub const NOTIFICATION_TYPES: &[(&str, &str, &str)] = &[
     ("review_reply", "Review replies", "When someone replies to your review"),
     ("content_removed", "Content removed", "When a moderator removes something you made"),
     ("flag_resolved", "Flag resolved", "When a flag you filed gets resolved"),
+    ("collection_meal_added", "Collection updates", "When a collection you follow gets a new recipe"),
 ];
 
 /// Best-effort: checks this recipient's opt-in for `kind`, and if it's on,
