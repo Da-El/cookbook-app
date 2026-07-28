@@ -3,6 +3,7 @@ import { useMutation } from '@tanstack/react-query';
 import { Card } from '../components/Card/Card';
 import { Button } from '../components/Button/Button';
 import { Input } from '../components/Input/Input';
+import { PasswordStrength } from '../components/PasswordStrength/PasswordStrength';
 import { useAuth } from '../auth/AuthContext';
 import { api } from '../api/client';
 import styles from './Auth.module.css';
@@ -206,6 +207,7 @@ export function Auth() {
                 minLength={isSignup ? 8 : undefined}
                 required
               />
+              {isSignup && <PasswordStrength password={password} />}
 
               {!isSignup && (
                 <button type="button" className={styles.forgotLink} onClick={() => switchMode('forgot')}>

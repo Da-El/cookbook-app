@@ -6,6 +6,7 @@ import { useAuth } from '../auth/AuthContext';
 import { useColorScheme, type ColorScheme } from '../theme/ColorSchemeContext';
 import { ChevronLeft } from '../components/Icon/Icon';
 import { RecoveryCodes } from '../components/RecoveryCodes/RecoveryCodes';
+import { PasswordStrength } from '../components/PasswordStrength/PasswordStrength';
 import styles from './Settings.module.css';
 
 const DIET_PREFS = ['Vegetarian', 'Vegan', 'Pescatarian', 'Gluten-free', 'Dairy-free', 'Nut-free'];
@@ -364,6 +365,7 @@ export function Settings() {
             placeholder="Leave blank to keep your current password"
             autoComplete="new-password"
           />
+          <PasswordStrength password={newPassword} />
         </div>
         {needsCurrentPassword && (
           <div className={styles.field}>

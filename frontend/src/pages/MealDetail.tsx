@@ -291,6 +291,11 @@ export function MealDetail() {
     onSuccess: invalidateMeal,
   });
 
+  const unrate = useMutation({
+    mutationFn: () => api.del(`/meals/${id}/rate`),
+    onSuccess: invalidateMeal,
+  });
+
   const addMissing = useMutation({
     mutationFn: (ids: number[]) => api.post('/shopping/many', { ingredient_ids: ids }),
     onSuccess: () => {
@@ -602,7 +607,12 @@ export function MealDetail() {
         )}
 
         {meal.your_rating != null && (
-          <div className={styles.yourRatingPill}>You: {meal.your_rating}/10</div>
+          <div className={styles.yourRatingPill}>
+            You: {meal.your_rating}/10
+            <button className={styles.yourRatingRemove} onClick={() => unrate.mutate()}>
+              Remove
+            </button>
+          </div>
         )}
         <div className={styles.rateLabel}>
           {meal.your_rating != null ? 'Tap to update your rating' : 'Rate this meal (1–10)'}

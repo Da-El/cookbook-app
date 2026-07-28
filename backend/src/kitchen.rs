@@ -184,6 +184,20 @@ pub async fn shopping_remove(
     Ok(StatusCode::NO_CONTENT)
 }
 
+/// Empties the whole list in one call - for after a real shopping trip,
+/// where removing twenty rows one at a time is the kind of busywork this
+/// app shouldn't be asking for. A no-op (still 204) on an already-empty
+/// list rather than a 404, same as clearing an empty inbox isn't an error.
+pub async fn shopping_clear(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+) -> Result<StatusCode, StatusCode> {
+    sqlx::query("DELETE FROM shopping_items WHERE user_id=$1")
+        .bind(user.id)
+        .execute(&state.db).await.map_err(db_err)?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
 /// "Got it ✓" - moves a shopping row into the fridge in one step.
 pub async fn shopping_got_it(
     State(state): State<AppState>,

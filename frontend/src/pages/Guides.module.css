@@ -87,6 +87,20 @@
   margin-bottom: 10px;
 }
 
+.topicHeadRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.topicProgress {
+  font: 700 11px var(--font-ui);
+  color: var(--green);
+  white-space: nowrap;
+  margin-bottom: 10px;
+}
+
 .list {
   display: flex;
   flex-direction: column;
@@ -111,6 +125,13 @@
   font-size: 18px;
   color: var(--ink);
   line-height: 1.2;
+}
+
+.cardDone {
+  margin-left: 8px;
+  color: var(--green);
+  font-size: 15px;
+  vertical-align: middle;
 }
 
 .cardSummary {
@@ -180,6 +201,23 @@
 
 .bullets li {
   margin-bottom: 8px;
+}
+
+.markReadBtn {
+  margin-top: 16px;
+  padding: 10px 16px;
+  border-radius: 999px;
+  border: 1.5px solid var(--border-card);
+  background: var(--surface-card);
+  color: var(--secondary);
+  font: 700 13px var(--font-ui);
+  cursor: pointer;
+}
+
+.markReadBtnOn {
+  background: var(--green);
+  color: #fff;
+  border-color: var(--green);
 }
 
 /* ---------- helpful vote ---------- */

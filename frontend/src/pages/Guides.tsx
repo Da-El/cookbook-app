@@ -88,27 +88,40 @@ export function Guides() {
         <p className={styles.cardSummary}>No saved guides yet.</p>
       )}
 
-      {topics.map(({ topic, items }) => (
-        <section key={topic} className={styles.section}>
-          <h2 className={styles.topic}>{topic}</h2>
-          <div className={styles.list}>
-            {items.map((g) => (
-              <button key={g.slug} className={styles.card} onClick={() => navigate(`/guides/${g.slug}`)}>
-                <span className={styles.cardTitle}>{g.title}</span>
-                <span className={styles.cardSummary}>{g.summary}</span>
-                {(g.minutes || g.rating_count > 0) && (
-                  <span className={styles.cardMeta}>
-                    {[
-                      g.minutes ? `${g.minutes} min read` : null,
-                      g.rating_count > 0 ? `★ ${g.rating.toFixed(1)}` : null,
-                    ].filter(Boolean).join(' · ')}
+      {topics.map(({ topic, items }) => {
+        const doneCount = items.filter((g) => g.is_completed).length;
+        return (
+          <section key={topic} className={styles.section}>
+            <div className={styles.topicHeadRow}>
+              <h2 className={styles.topic}>{topic}</h2>
+              {user && doneCount > 0 && (
+                <span className={styles.topicProgress}>
+                  {doneCount}/{items.length} read
+                </span>
+              )}
+            </div>
+            <div className={styles.list}>
+              {items.map((g) => (
+                <button key={g.slug} className={styles.card} onClick={() => navigate(`/guides/${g.slug}`)}>
+                  <span className={styles.cardTitle}>
+                    {g.title}
+                    {g.is_completed && <span className={styles.cardDone}>✓</span>}
                   </span>
-                )}
-              </button>
-            ))}
-          </div>
-        </section>
-      ))}
+                  <span className={styles.cardSummary}>{g.summary}</span>
+                  {(g.minutes || g.rating_count > 0) && (
+                    <span className={styles.cardMeta}>
+                      {[
+                        g.minutes ? `${g.minutes} min read` : null,
+                        g.rating_count > 0 ? `★ ${g.rating.toFixed(1)}` : null,
+                      ].filter(Boolean).join(' · ')}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+          </section>
+        );
+      })}
     </div>
   );
 }
@@ -209,8 +222,18 @@ export function GuidePage() {
     onSuccess: invalidate,
   });
 
+  const toggleComplete = useMutation({
+    mutationFn: () => api.post(`/guides/${slug}/complete`),
+    onSuccess: invalidate,
+  });
+
   const rate = useMutation({
     mutationFn: (value: number) => api.post(`/guides/${slug}/rate`, { value }),
+    onSuccess: invalidate,
+  });
+
+  const unrate = useMutation({
+    mutationFn: () => api.del(`/guides/${slug}/rate`),
     onSuccess: invalidate,
   });
 
@@ -277,6 +300,16 @@ export function GuidePage() {
         <GuideBody body={guide.body} />
       </article>
 
+      {user && (
+        <button
+          className={`${styles.markReadBtn} ${guide.is_completed ? styles.markReadBtnOn : ''}`}
+          onClick={() => toggleComplete.mutate()}
+          aria-pressed={guide.is_completed}
+        >
+          {guide.is_completed ? '✓ Read' : 'Mark as read'}
+        </button>
+      )}
+
       <div className={styles.helpfulRow}>
         <button
           className={`${styles.helpfulBtn} ${guide.your_helpful_vote ? styles.helpfulBtnOn : ''}`}
@@ -309,6 +342,11 @@ export function GuidePage() {
               </button>
             ))}
           </div>
+          {guide.your_rating != null && (
+            <button className={styles.editDeleteBtn} style={{ marginTop: 8 }} onClick={() => unrate.mutate()}>
+              Remove your rating
+            </button>
+          )}
         </div>
       )}
 

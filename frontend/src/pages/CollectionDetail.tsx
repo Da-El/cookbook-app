@@ -46,6 +46,12 @@ export function CollectionDetail() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['collection', id] }),
   });
 
+  const moveMeal = useMutation({
+    mutationFn: ({ mealId, direction }: { mealId: number; direction: 'up' | 'down' }) =>
+      api.post(`/collections/${id}/meals/${mealId}/move`, { direction }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['collection', id] }),
+  });
+
   const setVisibility = useMutation({
     mutationFn: (isPublic: boolean) => api.post(`/collections/${id}/visibility`, { is_public: isPublic }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['collection', id] }),
@@ -135,21 +141,47 @@ export function CollectionDetail() {
 
       {data && data.meals.length > 0 && (
         <MealGrid>
-          {data.meals.map((m) => (
+          {data.meals.map((m, i) => (
             <div key={m.id} className={styles.cardWrap}>
               <MealCard meal={m} />
               {data.is_mine && (
-                <button
-                  className={styles.removeBtn}
-                  title="Remove from this collection"
-                  aria-label="Remove from this collection"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    removeMeal.mutate(m.id);
-                  }}
-                >
-                  ×
-                </button>
+                <>
+                  <div className={styles.reorderOverlay}>
+                    <button
+                      className={styles.reorderBtn}
+                      disabled={i === 0 || moveMeal.isPending}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        moveMeal.mutate({ mealId: m.id, direction: 'up' });
+                      }}
+                      aria-label={`Move ${m.name} earlier in this collection`}
+                    >
+                      ▲
+                    </button>
+                    <button
+                      className={styles.reorderBtn}
+                      disabled={i === data.meals.length - 1 || moveMeal.isPending}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        moveMeal.mutate({ mealId: m.id, direction: 'down' });
+                      }}
+                      aria-label={`Move ${m.name} later in this collection`}
+                    >
+                      ▼
+                    </button>
+                  </div>
+                  <button
+                    className={styles.removeBtn}
+                    title="Remove from this collection"
+                    aria-label="Remove from this collection"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      removeMeal.mutate(m.id);
+                    }}
+                  >
+                    ×
+                  </button>
+                </>
               )}
             </div>
           ))}

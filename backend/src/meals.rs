@@ -1762,6 +1762,23 @@ pub async fn rate(
     Ok(Json(serde_json::json!({ "rated": body.value })))
 }
 
+/// Withdraws your rating rather than just changing its value - for "I don't
+/// actually have an opinion on this anymore" without picking a number that
+/// still counts as one.
+pub async fn unrate(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Path(id): Path<i64>,
+) -> Result<StatusCode, StatusCode> {
+    let mut tx = state.db.begin().await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let removed = remove_rating(&mut tx, user.id, "meal", id).await;
+    tx.commit().await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    if !removed {
+        return Err(StatusCode::NOT_FOUND);
+    }
+    Ok(StatusCode::NO_CONTENT)
+}
+
 /// Writes the user's rating then recomputes the subject's cached average.
 pub(crate) async fn upsert_rating(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
@@ -1778,6 +1795,34 @@ pub(crate) async fn upsert_rating(
     .bind(user_id).bind(subject_type).bind(subject_id).bind(value)
     .execute(&mut **tx).await.ok();
 
+    recompute_rating_cache(tx, subject_type, subject_id).await;
+}
+
+/// Withdraws the user's rating entirely (as opposed to changing its value)
+/// then recomputes the subject's cached average the same way a new rating
+/// would - a delete that leaves `rating`/`rating_count` stale would quietly
+/// keep counting a vote nobody's standing behind anymore.
+pub(crate) async fn remove_rating(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    user_id: i64,
+    subject_type: &str,
+    subject_id: i64,
+) -> bool {
+    let deleted = sqlx::query(
+        "DELETE FROM ratings WHERE user_id = $1 AND subject_type = $2 AND subject_id = $3",
+    )
+    .bind(user_id).bind(subject_type).bind(subject_id)
+    .execute(&mut **tx).await.ok()
+    .map(|r| r.rows_affected() > 0)
+    .unwrap_or(false);
+
+    if deleted {
+        recompute_rating_cache(tx, subject_type, subject_id).await;
+    }
+    deleted
+}
+
+async fn recompute_rating_cache(tx: &mut sqlx::Transaction<'_, sqlx::Postgres>, subject_type: &str, subject_id: i64) {
     match subject_type {
         "meal" => {
             sqlx::query(

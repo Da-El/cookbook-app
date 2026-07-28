@@ -542,6 +542,59 @@
   flex: none;
 }
 
+.clearListBtn {
+  margin: 10px 0 14px;
+  padding: 8px 15px;
+  border-radius: 999px;
+  border: 1.5px solid var(--border-card);
+  background: var(--surface-card);
+  color: var(--secondary);
+  font: 700 12.5px var(--font-ui);
+  cursor: pointer;
+}
+
+.confirmCard {
+  margin: 10px 0 14px;
+  padding: 14px;
+  border-radius: 14px;
+  background: var(--danger-bg);
+  border: 1px solid var(--danger);
+}
+
+.confirmText {
+  color: var(--ink);
+  font: 400 13px var(--font-ui);
+  line-height: 1.4;
+  margin: 0 0 10px;
+}
+
+.confirmRow {
+  display: flex;
+  gap: 8px;
+}
+
+.confirmCancel {
+  flex: 1;
+  padding: 9px;
+  border-radius: 10px;
+  border: 1.5px solid var(--border-card);
+  background: var(--surface-card);
+  color: var(--ink);
+  font: 700 12.5px var(--font-ui);
+  cursor: pointer;
+}
+
+.confirmDelete {
+  flex: 1;
+  padding: 9px;
+  border-radius: 10px;
+  border: none;
+  background: var(--danger);
+  color: #fff;
+  font: 700 12.5px var(--font-ui);
+  cursor: pointer;
+}
+
 .removeX {
   width: 29px;
   height: 29px;

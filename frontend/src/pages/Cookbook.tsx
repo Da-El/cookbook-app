@@ -263,6 +263,16 @@ export function Cookbook() {
     },
   });
 
+  const [confirmClear, setConfirmClear] = useState(false);
+  const clearList = useMutation({
+    mutationFn: () => api.del('/shopping/clear'),
+    onSuccess: () => {
+      setConfirmClear(false);
+      toast('Shopping list cleared');
+      invalidateKitchen();
+    },
+  });
+
   if (!user) return null;
 
   const inList = (id: number) => items.some((i) => i.ingredient_id === id);
@@ -637,6 +647,28 @@ export function Cookbook() {
                 );
               })}
             </div>
+          )}
+
+          {tab === 'shopping' && items.length > 0 && (
+            !confirmClear ? (
+              <button className={styles.clearListBtn} onClick={() => setConfirmClear(true)}>
+                Clear list
+              </button>
+            ) : (
+              <div className={styles.confirmCard}>
+                <p className={styles.confirmText}>
+                  Removes all {items.length} item{items.length === 1 ? '' : 's'} from your shopping list.
+                </p>
+                <div className={styles.confirmRow}>
+                  <button className={styles.confirmCancel} onClick={() => setConfirmClear(false)}>
+                    Cancel
+                  </button>
+                  <button className={styles.confirmDelete} onClick={() => clearList.mutate()}>
+                    {clearList.isPending ? 'Clearing…' : 'Clear list'}
+                  </button>
+                </div>
+              </div>
+            )
           )}
 
           {items.length > 0 ? (

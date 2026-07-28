@@ -177,7 +177,7 @@ pub async fn detail(
         "SELECT m.id, m.name, m.cuisine, m.time_minutes, m.rating::float8 AS rating, m.photo_url
          FROM meal_collection_items i JOIN meals m ON m.id = i.meal_id
          WHERE i.collection_id = $1 AND m.status = 'live'
-         ORDER BY i.added_at DESC",
+         ORDER BY i.position, i.meal_id",
     )
     .bind(id)
     .fetch_all(&state.db)
@@ -306,8 +306,12 @@ pub async fn add_meal(
         return Err((StatusCode::NOT_FOUND, Json(serde_json::json!({ "error": "Collection not found." }))));
     };
 
+    // Lands after every existing meal in the collection, same appending
+    // logic as `planner::add_plan_entry`'s position assignment.
     let inserted = sqlx::query(
-        "INSERT INTO meal_collection_items (collection_id, meal_id) VALUES ($1,$2) ON CONFLICT DO NOTHING",
+        "INSERT INTO meal_collection_items (collection_id, meal_id, position)
+         VALUES ($1,$2, COALESCE((SELECT max(position) + 1 FROM meal_collection_items WHERE collection_id = $1), 0))
+         ON CONFLICT DO NOTHING",
     )
     .bind(id)
     .bind(body.meal_id)
@@ -379,6 +383,73 @@ pub async fn remove_meal(
     if deleted == 0 {
         return Err(StatusCode::NOT_FOUND);
     }
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[derive(Deserialize)]
+pub struct MoveMeal {
+    pub direction: String,
+}
+
+/// Owner-only reorder within a collection - swaps position with the
+/// adjacent sibling, same shape as `planner::move_plan_entry`. A no-op
+/// (still 204) at either edge of the list.
+pub async fn move_meal(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Path((id, meal_id)): Path<(i64, i64)>,
+    Json(b): Json<MoveMeal>,
+) -> Result<StatusCode, StatusCode> {
+    if b.direction != "up" && b.direction != "down" {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+
+    let mut tx = state.db.begin().await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let position: Option<i32> = sqlx::query_scalar(
+        "SELECT i.position FROM meal_collection_items i JOIN meal_collections c ON c.id = i.collection_id
+         WHERE i.collection_id = $1 AND i.meal_id = $2 AND c.user_id = $3",
+    )
+    .bind(id)
+    .bind(meal_id)
+    .bind(user.id)
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let Some(position) = position else { return Err(StatusCode::NOT_FOUND) };
+
+    let neighbor_sql = if b.direction == "up" {
+        "SELECT meal_id, position FROM meal_collection_items
+         WHERE collection_id = $1 AND position < $2 ORDER BY position DESC LIMIT 1"
+    } else {
+        "SELECT meal_id, position FROM meal_collection_items
+         WHERE collection_id = $1 AND position > $2 ORDER BY position ASC LIMIT 1"
+    };
+    let neighbor: Option<(i64, i32)> = sqlx::query_as(neighbor_sql)
+        .bind(id)
+        .bind(position)
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    if let Some((neighbor_meal_id, neighbor_position)) = neighbor {
+        sqlx::query("UPDATE meal_collection_items SET position = $1 WHERE collection_id = $2 AND meal_id = $3")
+            .bind(neighbor_position)
+            .bind(id)
+            .bind(meal_id)
+            .execute(&mut *tx)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        sqlx::query("UPDATE meal_collection_items SET position = $1 WHERE collection_id = $2 AND meal_id = $3")
+            .bind(position)
+            .bind(id)
+            .bind(neighbor_meal_id)
+            .execute(&mut *tx)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    }
+
+    tx.commit().await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(StatusCode::NO_CONTENT)
 }
 

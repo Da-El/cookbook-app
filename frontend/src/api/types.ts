@@ -160,6 +160,7 @@ export interface GuideSummary {
   rating: number;
   rating_count: number;
   is_saved: boolean;
+  is_completed: boolean;
 }
 
 export interface GuideDetail extends GuideSummary {

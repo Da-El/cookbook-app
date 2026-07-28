@@ -27,6 +27,7 @@ pub struct GuideSummary {
     pub rating: f64,
     pub rating_count: i32,
     pub is_saved: bool,
+    pub is_completed: bool,
 }
 
 #[derive(Serialize, sqlx::FromRow)]
@@ -44,6 +45,7 @@ pub struct GuideDetail {
     pub rating_count: i32,
     pub your_rating: Option<i16>,
     pub is_saved: bool,
+    pub is_completed: bool,
 }
 
 pub async fn list(
@@ -55,7 +57,9 @@ pub async fn list(
         "SELECT id, slug, title, summary, topic, minutes, helpful_count,
                 rating::float8 AS rating, rating_count,
                 EXISTS (SELECT 1 FROM saved_guides sg
-                        WHERE sg.guide_id = guides.id AND sg.user_id = $1) AS is_saved
+                        WHERE sg.guide_id = guides.id AND sg.user_id = $1) AS is_saved,
+                EXISTS (SELECT 1 FROM guide_progress gp
+                        WHERE gp.guide_id = guides.id AND gp.user_id = $1) AS is_completed
          FROM guides ORDER BY topic, position, title",
     )
     .bind(viewer)
@@ -81,7 +85,9 @@ pub async fn detail(
                 rating::float8 AS rating, rating_count,
                 (SELECT value FROM ratings WHERE subject_type='guide' AND subject_id=guides.id AND user_id=$2) AS your_rating,
                 EXISTS (SELECT 1 FROM saved_guides sg
-                        WHERE sg.guide_id = guides.id AND sg.user_id = $2) AS is_saved
+                        WHERE sg.guide_id = guides.id AND sg.user_id = $2) AS is_saved,
+                EXISTS (SELECT 1 FROM guide_progress gp
+                        WHERE gp.guide_id = guides.id AND gp.user_id = $2) AS is_completed
          FROM guides WHERE slug = $1",
     )
     .bind(&slug)
@@ -129,6 +135,44 @@ pub async fn toggle_save(
     Ok(Json(serde_json::json!({ "saved": deleted == 0 })))
 }
 
+/// Distinct from `toggle_save`: saving is "I want to come back to this,"
+/// completing is "I've actually read this" - a syllabus checkbox rather
+/// than a bookmark, which is why the list groups guides by topic and can
+/// show "N of M read" per topic from this flag.
+pub async fn toggle_complete(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Path(slug): Path<String>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    let guide_id: Option<i64> = sqlx::query_scalar("SELECT id FROM guides WHERE slug = $1")
+        .bind(&slug)
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let Some(guide_id) = guide_id else {
+        return Err(StatusCode::NOT_FOUND);
+    };
+
+    let deleted = sqlx::query("DELETE FROM guide_progress WHERE user_id=$1 AND guide_id=$2")
+        .bind(user.id)
+        .bind(guide_id)
+        .execute(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .rows_affected();
+
+    if deleted == 0 {
+        sqlx::query("INSERT INTO guide_progress (user_id, guide_id) VALUES ($1,$2) ON CONFLICT DO NOTHING")
+            .bind(user.id)
+            .bind(guide_id)
+            .execute(&state.db)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    }
+
+    Ok(Json(serde_json::json!({ "completed": deleted == 0 })))
+}
+
 #[derive(Deserialize)]
 pub struct RateGuide {
     pub value: i16,
@@ -155,6 +199,27 @@ pub async fn rate(
     tx.commit().await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     Ok(Json(serde_json::json!({ "rated": body.value })))
+}
+
+pub async fn unrate(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Path(slug): Path<String>,
+) -> Result<StatusCode, StatusCode> {
+    let guide_id: Option<i64> = sqlx::query_scalar("SELECT id FROM guides WHERE slug = $1")
+        .bind(&slug)
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let Some(guide_id) = guide_id else { return Err(StatusCode::NOT_FOUND) };
+
+    let mut tx = state.db.begin().await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let removed = crate::meals::remove_rating(&mut tx, user.id, "guide", guide_id).await;
+    tx.commit().await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    if !removed {
+        return Err(StatusCode::NOT_FOUND);
+    }
+    Ok(StatusCode::NO_CONTENT)
 }
 
 /// Toggle-only, identical shape to a review's helpful vote (migration 0008).
