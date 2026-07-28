@@ -84,6 +84,11 @@
   color: var(--amber);
 }
 
+.dietTag {
+  color: var(--green);
+  font-weight: 700;
+}
+
 /* Corner badge used on the Cookbook grid (Cooked / Saved / Yours). */
 .badge {
   position: absolute;

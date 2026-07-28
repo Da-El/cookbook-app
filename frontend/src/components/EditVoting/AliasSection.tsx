@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../api/client';
+import { FlagButton } from '../Flag/FlagButton';
 import styles from './EditVoting.module.css';
 
 interface AliasRow {
@@ -120,7 +121,7 @@ export function AliasSection({ ingredientId }: { ingredientId: number }) {
                   ▼
                 </button>
               </div>
-              {row.is_mine && (
+              {row.is_mine ? (
                 <button
                   className={styles.deleteBtn}
                   title="Withdraw your suggestion"
@@ -132,6 +133,8 @@ export function AliasSection({ ingredientId }: { ingredientId: number }) {
                 >
                   ×
                 </button>
+              ) : (
+                <FlagButton contentType="alias" contentId={row.id} />
               )}
             </div>
           ))}

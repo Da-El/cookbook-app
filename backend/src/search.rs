@@ -72,11 +72,21 @@ pub struct IngredientHit {
     pub match_kind: String,
 }
 
+#[derive(Serialize, sqlx::FromRow)]
+pub struct GuideHit {
+    pub slug: String,
+    pub title: String,
+    pub summary: String,
+    pub topic: String,
+    pub helpful_count: i32,
+}
+
 #[derive(Serialize)]
 pub struct SearchResults {
     pub query: String,
     pub meals: Vec<MealHit>,
     pub ingredients: Vec<IngredientHit>,
+    pub guides: Vec<GuideHit>,
 }
 
 /// Turns typed text into a prefix-matching tsquery.
@@ -119,7 +129,7 @@ pub async fn search(
     let limit = p.limit.unwrap_or(30).clamp(1, 100);
 
     let Some(tsq) = to_prefix_query(raw) else {
-        return Ok(Json(SearchResults { query: raw.into(), meals: vec![], ingredients: vec![] }));
+        return Ok(Json(SearchResults { query: raw.into(), meals: vec![], ingredients: vec![], guides: vec![] }));
     };
 
     let meals = search_meals(&state, &tsq, raw, viewer, limit).await.map_err(|e| {
@@ -130,8 +140,29 @@ pub async fn search(
         tracing::error!("ingredient search failed: {e}");
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
+    let guides = search_guides(&state, &tsq, limit).await.map_err(|e| {
+        tracing::error!("guide search failed: {e}");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
 
-    Ok(Json(SearchResults { query: raw.into(), meals, ingredients }))
+    Ok(Json(SearchResults { query: raw.into(), meals, ingredients, guides }))
+}
+
+/// No trigram fallback here, unlike meals/ingredients - with only a handful
+/// of guides, a fuzzy match would surface an unrelated guide over showing
+/// nothing, and "no results" is the more honest answer for a small catalog.
+pub async fn search_guides(state: &AppState, tsq: &str, limit: i64) -> Result<Vec<GuideHit>, sqlx::Error> {
+    sqlx::query_as::<_, GuideHit>(
+        "SELECT slug, title, summary, topic, helpful_count
+         FROM guides
+         WHERE search_vector @@ to_tsquery('english', $1)
+         ORDER BY ts_rank_cd(search_vector, to_tsquery('english', $1)) DESC, helpful_count DESC
+         LIMIT $2",
+    )
+    .bind(tsq)
+    .bind(limit)
+    .fetch_all(&state.db)
+    .await
 }
 
 pub async fn search_meals(

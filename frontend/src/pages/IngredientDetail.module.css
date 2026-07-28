@@ -60,6 +60,12 @@
   font-weight: 700;
 }
 
+.dietFlag {
+  background: var(--green-tint);
+  color: var(--green);
+  font-weight: 700;
+}
+
 .desc {
   margin-top: 14px;
   color: var(--secondary);

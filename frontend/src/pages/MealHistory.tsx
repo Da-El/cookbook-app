@@ -5,6 +5,7 @@ import { useAuth } from '../auth/AuthContext';
 import { useToast } from '../components/Toast/ToastContext';
 import { ChevronLeft } from '../components/Icon/Icon';
 import { EmptyLine } from '../components/Empty/Empty';
+import { FlagButton } from '../components/Flag/FlagButton';
 import styles from './MealHistory.module.css';
 
 interface Revision {
@@ -173,6 +174,8 @@ export function MealHistory() {
                 <span className={styles.voteCount}>
                   {r.vote_count} vote{r.vote_count === 1 ? '' : 's'}
                 </span>
+
+                {(!user || r.editor_id !== user.id) && <FlagButton contentType="meal_revision" contentId={r.id} />}
 
                 {isAuthor && history!.is_live && r.kind !== 'deleted' && r.kind !== 'restored' && (
                   <button

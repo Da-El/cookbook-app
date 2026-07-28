@@ -36,6 +36,10 @@ pub struct PlanEntry {
     pub time_minutes: i32,
     pub photo_url: Option<String>,
     pub servings: i32,
+    /// Surfaced so a planned week shows what you're actually committing to
+    /// cook, not just a name - a 9.2 and a 4.1 read very differently next to
+    /// each other even before you open either recipe.
+    pub rating: f64,
 }
 
 #[derive(Deserialize)]
@@ -63,7 +67,7 @@ pub async fn list_plan(
     checked_range(&p)?;
     let rows = sqlx::query_as::<_, PlanEntry>(
         "SELECT e.id, e.plan_date, e.slot, e.meal_id, m.name AS meal_name, m.cuisine,
-                m.time_minutes, m.photo_url, e.servings
+                m.time_minutes, m.photo_url, e.servings, m.rating::float8 AS rating
          FROM meal_plan_entries e JOIN meals m ON m.id = e.meal_id AND m.status = 'live'
          WHERE e.user_id = $1 AND e.plan_date BETWEEN $2 AND $3
          ORDER BY e.plan_date, e.id",
@@ -120,6 +124,56 @@ pub async fn remove_plan_entry(
         .execute(&state.db)
         .await
         .map_err(db_err)?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[derive(Deserialize)]
+pub struct UpdatePlanEntry {
+    /// Swap in a different recipe for this same slot, without a delete-then-
+    /// recreate that would lose its place if the day gets reordered around it.
+    pub meal_id: Option<i64>,
+    pub servings: Option<i32>,
+    /// Move the entry to a different day and/or slot - the same "edit in
+    /// place" idea applied to when it's cooked rather than what's cooked.
+    pub plan_date: Option<NaiveDate>,
+    pub slot: Option<String>,
+}
+
+pub async fn update_plan_entry(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Path(id): Path<i64>,
+    Json(b): Json<UpdatePlanEntry>,
+) -> Result<StatusCode, StatusCode> {
+    if let Some(slot) = &b.slot {
+        if !SLOTS.contains(&slot.as_str()) {
+            return Err(StatusCode::BAD_REQUEST);
+        }
+    }
+    let servings = b.servings.map(|s| s.clamp(1, 50));
+
+    let updated = sqlx::query(
+        "UPDATE meal_plan_entries SET
+           meal_id = COALESCE($3, meal_id),
+           servings = COALESCE($4, servings),
+           plan_date = COALESCE($5, plan_date),
+           slot = COALESCE($6, slot)
+         WHERE id = $1 AND user_id = $2",
+    )
+    .bind(id)
+    .bind(user.id)
+    .bind(b.meal_id)
+    .bind(servings)
+    .bind(b.plan_date)
+    .bind(&b.slot)
+    .execute(&state.db)
+    .await
+    .map_err(db_err)?
+    .rows_affected();
+
+    if updated == 0 {
+        return Err(StatusCode::NOT_FOUND);
+    }
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -332,11 +386,14 @@ pub async fn grocery_list(
         })
         .collect();
 
-    // Shared ingredients first: they're the reason to plan a week at once.
+    // Category first, so the list reads like the aisles of a store rather
+    // than jumping between produce and dairy from one line to the next;
+    // shared ingredients (the reason to plan a week at once, not a day at a
+    // time) still surface first within each aisle.
     items.sort_by(|a, b| {
-        b.meal_count
-            .cmp(&a.meal_count)
-            .then(a.category.cmp(&b.category))
+        a.category
+            .cmp(&b.category)
+            .then(b.meal_count.cmp(&a.meal_count))
             .then(a.name.to_lowercase().cmp(&b.name.to_lowercase()))
     });
 

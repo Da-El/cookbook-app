@@ -34,6 +34,7 @@ pub struct UserProfile {
     pub email: String,
     pub display_name: String,
     pub has_onboarded: bool,
+    pub is_admin: bool,
 }
 
 pub struct CurrentUser(pub UserProfile);
@@ -46,8 +47,8 @@ impl FromRequestParts<AppState> for CurrentUser {
         let token = jar.get(SESSION_COOKIE).ok_or(StatusCode::UNAUTHORIZED)?.value();
         let hash = hash_token(token);
 
-        let row = sqlx::query_as::<_, (i64, Option<String>, String, bool)>(
-            "SELECT u.id, u.email, u.display_name, u.has_onboarded
+        let row = sqlx::query_as::<_, (i64, Option<String>, String, bool, bool)>(
+            "SELECT u.id, u.email, u.display_name, u.has_onboarded, u.is_admin
              FROM sessions s JOIN users u ON u.id = s.user_id
              WHERE s.token_hash = $1 AND s.expires_at > now()",
         )
@@ -68,7 +69,26 @@ impl FromRequestParts<AppState> for CurrentUser {
             email: row.1.unwrap_or_default(),
             display_name: row.2,
             has_onboarded: row.3,
+            is_admin: row.4,
         }))
+    }
+}
+
+/// Like `CurrentUser`, but rejects with 403 unless the account is an admin.
+/// A separate extractor rather than an `if !user.is_admin` check inlined in
+/// every moderation handler, so "this route is admin-only" is visible in its
+/// signature and can't be forgotten.
+pub struct AdminUser(pub UserProfile);
+
+impl FromRequestParts<AppState> for AdminUser {
+    type Rejection = StatusCode;
+
+    async fn from_request_parts(parts: &mut Parts, state: &AppState) -> Result<Self, Self::Rejection> {
+        let CurrentUser(user) = CurrentUser::from_request_parts(parts, state).await?;
+        if !user.is_admin {
+            return Err(StatusCode::FORBIDDEN);
+        }
+        Ok(AdminUser(user))
     }
 }
 
@@ -230,7 +250,9 @@ pub async fn register(
 
     Ok((
         jar.add(session_cookie(token, state.secure_cookies)),
-        Json(UserProfile { id: user_id, email, display_name, has_onboarded: false }),
+        // A brand-new registration is never an admin - that flag is only
+        // ever set by hand (migration 0012) for the one trusted account.
+        Json(UserProfile { id: user_id, email, display_name, has_onboarded: false, is_admin: false }),
     ))
 }
 
@@ -259,8 +281,8 @@ pub async fn login(
         ));
     }
 
-    let row = sqlx::query_as::<_, (i64, Option<String>, String, bool, Option<String>)>(
-        "SELECT id, email, display_name, has_onboarded, password_hash FROM users WHERE lower(email) = $1",
+    let row = sqlx::query_as::<_, (i64, Option<String>, String, bool, bool, Option<String>)>(
+        "SELECT id, email, display_name, has_onboarded, is_admin, password_hash FROM users WHERE lower(email) = $1",
     )
     .bind(&email)
     .fetch_optional(&state.db)
@@ -271,7 +293,7 @@ pub async fn login(
     // so this endpoint can't be used to enumerate registered accounts.
     let invalid = || err(StatusCode::UNAUTHORIZED, "Incorrect email or password.");
 
-    let Some((id, stored_email, display_name, has_onboarded, Some(password_hash))) = row else {
+    let Some((id, stored_email, display_name, has_onboarded, is_admin, Some(password_hash))) = row else {
         record_attempt(&state, &email).await;
         return Err(invalid());
     };
@@ -299,6 +321,7 @@ pub async fn login(
             email: stored_email.unwrap_or(email),
             display_name,
             has_onboarded,
+            is_admin,
         }),
     ))
 }

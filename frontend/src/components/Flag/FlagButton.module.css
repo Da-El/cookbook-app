@@ -1,0 +1,63 @@
+.trigger {
+  border: none;
+  background: transparent;
+  color: var(--muted-3);
+  font-size: 12px;
+  font-family: var(--font-ui);
+  cursor: pointer;
+  padding: 3px 6px;
+  border-radius: 6px;
+  white-space: nowrap;
+  transition: color 0.15s, background 0.15s;
+}
+.trigger:hover {
+  color: var(--warn);
+  background: var(--warn-border);
+}
+
+.form {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.input {
+  flex: 1 1 160px;
+  min-width: 0;
+  border: 1px solid var(--warn-border);
+  background: var(--surface-card);
+  border-radius: 8px;
+  padding: 5px 9px;
+  font-size: 12.5px;
+  font-family: var(--font-ui);
+  color: var(--ink);
+}
+.input:focus {
+  outline: 2px solid var(--warn);
+  outline-offset: 1px;
+}
+
+.submit,
+.cancel {
+  border: none;
+  border-radius: 8px;
+  padding: 5px 10px;
+  font-size: 12px;
+  font-family: var(--font-ui);
+  font-weight: 600;
+  cursor: pointer;
+  flex: none;
+}
+.submit {
+  background: var(--warn);
+  color: #fff;
+}
+.submit:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.cancel {
+  background: var(--chip-bg);
+  color: var(--secondary);
+}

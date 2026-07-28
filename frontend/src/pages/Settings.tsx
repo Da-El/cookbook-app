@@ -173,6 +173,15 @@ export function Settings() {
         <h1 className={styles.title}>Settings</h1>
       </div>
 
+      {user.is_admin && (
+        <div className={styles.section}>
+          <div className={styles.sectionTitle}>Moderation</div>
+          <button className={styles.saveBtn} onClick={() => navigate('/admin')}>
+            Open moderation queue
+          </button>
+        </div>
+      )}
+
       <div className={styles.section}>
         <div className={styles.sectionTitle}>Profile</div>
         <div className={styles.field}>

@@ -129,3 +129,37 @@ pub async fn seed_ingredients(db: &PgPool) -> anyhow::Result<()> {
     tracing::info!("seeded {count} ingredients from USDA FoodData Central (Foundation Foods)");
     Ok(())
 }
+
+/// Computes diet_flags for any ingredient that doesn't have them yet - not
+/// gated on "ingredients table is empty" like `seed_ingredients`, since this
+/// needs to also backfill a catalog that was seeded before diet_flags
+/// existed. Only touches rows still at the empty-array default: a real
+/// computed result is never actually empty for real food, so that's a safe
+/// "not yet computed" sentinel, and it means a community edit (which
+/// materializes into this same column) is never silently overwritten by a
+/// later restart.
+pub async fn backfill_diet_flags(db: &PgPool) -> anyhow::Result<()> {
+    let rows: Vec<(i64, String, String, Option<String>)> = sqlx::query_as(
+        "SELECT id, name, category, food_group FROM ingredients WHERE diet_flags = '{}'",
+    )
+    .fetch_all(db)
+    .await?;
+
+    if rows.is_empty() {
+        return Ok(());
+    }
+
+    let mut tx = db.begin().await?;
+    for (id, name, category, food_group) in &rows {
+        let flags = crate::diet::compute_diet_flags(name, category, food_group.as_deref());
+        sqlx::query("UPDATE ingredients SET diet_flags = $1 WHERE id = $2")
+            .bind(&flags)
+            .bind(id)
+            .execute(&mut *tx)
+            .await?;
+    }
+    tx.commit().await?;
+
+    tracing::info!("computed diet_flags for {} ingredients", rows.len());
+    Ok(())
+}

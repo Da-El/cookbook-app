@@ -1,0 +1,150 @@
+.page {
+  max-width: 640px;
+  margin: 0 auto;
+  padding-top: 6px;
+  padding-bottom: 48px;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-top: 2px;
+}
+
+.backBtn {
+  width: 40px;
+  height: 40px;
+  flex: none;
+  border-radius: 13px;
+  border: 1.5px solid var(--border-card);
+  background: var(--surface-card);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--ink);
+}
+
+.title {
+  font-family: var(--font-display);
+  font-size: 24px;
+  color: var(--ink);
+  line-height: 1.1;
+}
+
+.subtitle {
+  margin-top: 2px;
+  font: 500 13px var(--font-ui);
+  color: var(--muted-2);
+}
+
+.list {
+  margin-top: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.row {
+  padding: 13px 14px;
+  border-radius: 16px;
+  border: 1px solid var(--warn-border);
+  background: var(--surface-card);
+}
+
+.rowHead {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.typePill {
+  font: 700 10.5px var(--font-ui);
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: #FBEFE0;
+  color: var(--warn);
+}
+
+.time {
+  color: var(--muted-3);
+  font: 500 11.5px var(--font-ui);
+}
+
+.reason {
+  margin-top: 8px;
+  color: var(--ink);
+  font: 600 14px var(--font-ui);
+  line-height: 1.4;
+  font-style: italic;
+}
+
+.byline {
+  margin-top: 3px;
+  color: var(--muted-2);
+  font: 500 11.5px var(--font-ui);
+}
+
+.contentPreview {
+  margin-top: 9px;
+  padding: 9px 11px;
+  border-radius: 11px;
+  background: var(--bg-page);
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.summary {
+  color: var(--secondary);
+  font: 500 12.5px var(--font-ui);
+  line-height: 1.45;
+}
+
+.gone {
+  color: var(--muted-3);
+  font: 500 12.5px var(--font-ui);
+  font-style: italic;
+}
+
+.viewLink {
+  flex: none;
+  color: var(--accent);
+  font: 700 12px var(--font-ui);
+  white-space: nowrap;
+}
+
+.actions {
+  margin-top: 11px;
+  display: flex;
+  gap: 8px;
+}
+
+.removeBtn,
+.dismissBtn {
+  padding: 8px 14px;
+  border-radius: 999px;
+  font: 700 12px var(--font-ui);
+  cursor: pointer;
+  border: 1.5px solid transparent;
+}
+.removeBtn:disabled,
+.dismissBtn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.removeBtn {
+  background: var(--warn);
+  color: #fff;
+}
+
+.dismissBtn {
+  background: var(--surface-card);
+  border-color: var(--border-card);
+  color: var(--secondary);
+}

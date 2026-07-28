@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api/client';
-import type { GroceryList, PlanEntry, PlanSlot, PlanSuggestion } from '../api/types';
+import type { GroceryItem, GroceryList, PlanEntry, PlanSlot, PlanSuggestion } from '../api/types';
 import type { CookbookMealLite } from '../api/types';
 import { Segmented } from '../components/Segmented/Segmented';
 import { EmptyLine } from '../components/Empty/Empty';
@@ -26,6 +26,22 @@ function isoDate(d: Date): string {
   return local.toISOString().slice(0, 10);
 }
 
+/** Groups already-category-sorted items into consecutive runs, preserving the
+ * server's order within each - a re-sort here would fight the "shared items
+ * first within the aisle" ordering the backend already computed. */
+function groceryByAisle(items: GroceryItem[]): [string, GroceryItem[]][] {
+  const groups: [string, GroceryItem[]][] = [];
+  for (const item of items) {
+    const last = groups[groups.length - 1];
+    if (last && last[0] === item.category) {
+      last[1].push(item);
+    } else {
+      groups.push([item.category, [item]]);
+    }
+  }
+  return groups;
+}
+
 function startOfWeek(base: Date): Date {
   const d = new Date(base);
   // Monday-first: getDay() is 0 for Sunday, which should close a week, not open one.
@@ -42,7 +58,10 @@ export function Plan() {
 
   const [weekOffset, setWeekOffset] = useState(0);
   const [view, setView] = useState<View>('week');
-  const [picking, setPicking] = useState<{ date: string; slot: PlanSlot } | null>(null);
+  // `swapId` set means this sheet is replacing an existing entry's meal
+  // in place rather than adding a new one - same picker UI, different action
+  // on click, so a swap doesn't need its own dialog built from scratch.
+  const [picking, setPicking] = useState<{ date: string; slot: PlanSlot; swapId?: number } | null>(null);
 
   const weekStart = useMemo(() => {
     const d = startOfWeek(new Date());
@@ -115,6 +134,15 @@ export function Plan() {
   const removeEntry = useMutation({
     mutationFn: (id: number) => api.del(`/plan/${id}`),
     onSuccess: invalidate,
+  });
+
+  const updateEntry = useMutation({
+    mutationFn: ({ id, ...patch }: { id: number; meal_id?: number; servings?: number }) =>
+      api.post(`/plan/${id}`, patch),
+    onSuccess: () => {
+      setPicking(null);
+      invalidate();
+    },
   });
 
   const [ticked, setTicked] = useState<Set<string>>(new Set());
@@ -205,16 +233,27 @@ export function Plan() {
                                 <span className={styles.plannedMeta}>
                                   {e.time_minutes} min
                                   {e.servings > 1 && ` · ${e.servings} servings`}
+                                  {e.rating > 0 && ` · ★${e.rating.toFixed(1)}`}
                                 </span>
                               </span>
                             </button>
-                            <button
-                              className={styles.plannedX}
-                              onClick={() => removeEntry.mutate(e.id)}
-                              aria-label={`Remove ${e.meal_name}`}
-                            >
-                              ×
-                            </button>
+                            <div className={styles.plannedActions}>
+                              <button
+                                className={styles.plannedSwap}
+                                onClick={() => setPicking({ date: iso, slot, swapId: e.id })}
+                                aria-label={`Swap ${e.meal_name} for a different recipe`}
+                                title="Swap for a different recipe"
+                              >
+                                ⇄
+                              </button>
+                              <button
+                                className={styles.plannedX}
+                                onClick={() => removeEntry.mutate(e.id)}
+                                aria-label={`Remove ${e.meal_name}`}
+                              >
+                                ×
+                              </button>
+                            </div>
                           </div>
                         ))}
                         <button
@@ -278,36 +317,44 @@ export function Plan() {
                 </span>
               </div>
 
-              <div className={styles.groceryList}>
-                {grocery.items.map((it) => (
-                  <label key={it.key} className={styles.groceryRow}>
-                    <input
-                      type="checkbox"
-                      className={styles.check}
-                      checked={ticked.has(it.key)}
-                      onChange={() => toggleTick(it.key)}
-                    />
-                    <span
-                      className={styles.groceryThumb}
-                      style={{ background: ingredientBackground(null, it.category) }}
-                    />
-                    <span style={{ flex: 1, minWidth: 0 }}>
-                      <span className={styles.groceryName}>
-                        {it.name}
-                        {it.in_fridge && <span className={styles.haveChip}>in your fridge</span>}
-                        {it.meal_count > 1 && (
-                          <span className={styles.sharedChip}>×{it.meal_count} meals</span>
-                        )}
-                      </span>
-                      <span className={styles.groceryMeta}>
-                        {it.total_label ?? (it.unquantified.join(', ') || '—')}
-                        {it.total_label && it.unquantified.length > 0 && ` · ${it.unquantified.join(', ')}`}
-                      </span>
-                      <span className={styles.groceryFrom}>{it.from_meals.join(' · ')}</span>
-                    </span>
-                  </label>
-                ))}
-              </div>
+              {/* Grouped by aisle (the server already sorts items this way)
+                  rather than one flat list - a store trip means walking
+                  produce, then dairy, then pantry, not bouncing between them. */}
+              {groceryByAisle(grocery.items).map(([category, items]) => (
+                <div key={category} className={styles.aisleGroup}>
+                  <div className={styles.aisleLabel}>{category}</div>
+                  <div className={styles.groceryList}>
+                    {items.map((it) => (
+                      <label key={it.key} className={styles.groceryRow}>
+                        <input
+                          type="checkbox"
+                          className={styles.check}
+                          checked={ticked.has(it.key)}
+                          onChange={() => toggleTick(it.key)}
+                        />
+                        <span
+                          className={styles.groceryThumb}
+                          style={{ background: ingredientBackground(null, it.category) }}
+                        />
+                        <span style={{ flex: 1, minWidth: 0 }}>
+                          <span className={styles.groceryName}>
+                            {it.name}
+                            {it.in_fridge && <span className={styles.haveChip}>in your fridge</span>}
+                            {it.meal_count > 1 && (
+                              <span className={styles.sharedChip}>×{it.meal_count} meals</span>
+                            )}
+                          </span>
+                          <span className={styles.groceryMeta}>
+                            {it.total_label ?? (it.unquantified.join(', ') || '—')}
+                            {it.total_label && it.unquantified.length > 0 && ` · ${it.unquantified.join(', ')}`}
+                          </span>
+                          <span className={styles.groceryFrom}>{it.from_meals.join(' · ')}</span>
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              ))}
 
               <button
                 className={styles.pushBtn}
@@ -333,7 +380,9 @@ export function Plan() {
           <div className={styles.sheet}>
             <div className={styles.sheetHead}>
               <span className={styles.sheetTitle}>
-                Add to {SLOT_LABEL[picking.slot].toLowerCase()}
+                {picking.swapId
+                  ? `Swap this ${SLOT_LABEL[picking.slot].toLowerCase()} for…`
+                  : `Add to ${SLOT_LABEL[picking.slot].toLowerCase()}`}
               </span>
               <button className={styles.sheetClose} onClick={() => setPicking(null)} aria-label="Close">
                 ×
@@ -346,7 +395,9 @@ export function Plan() {
                     key={m.id}
                     className={styles.pickRow}
                     onClick={() =>
-                      addEntry.mutate({ plan_date: picking.date, slot: picking.slot, meal_id: m.id })
+                      picking.swapId
+                        ? updateEntry.mutate({ id: picking.swapId, meal_id: m.id })
+                        : addEntry.mutate({ plan_date: picking.date, slot: picking.slot, meal_id: m.id })
                     }
                   >
                     <span

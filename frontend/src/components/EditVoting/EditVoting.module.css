@@ -71,6 +71,12 @@
   cursor: pointer;
 }
 
+.chipOn {
+  background: var(--ink);
+  color: #fff;
+  border-color: var(--ink);
+}
+
 .list {
   margin-top: 10px;
   display: flex;

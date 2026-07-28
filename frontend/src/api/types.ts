@@ -3,6 +3,19 @@ export interface UserProfile {
   email: string;
   display_name: string;
   has_onboarded: boolean;
+  is_admin: boolean;
+}
+
+export interface FlagRow {
+  id: number;
+  content_type: 'meal_revision' | 'review' | 'ingredient_edit' | 'alias' | 'substitute' | 'guide_edit';
+  content_id: number;
+  reason: string;
+  flagged_by_name: string | null;
+  created_at: string;
+  summary: string;
+  link: string | null;
+  still_exists: boolean;
 }
 
 export interface IngredientSummary {
@@ -13,6 +26,9 @@ export interface IngredientSummary {
   food_subgroup: string | null;
   rating: number;
   rating_count: number;
+  /// Heuristic, community-editable - see backend/src/diet.rs. Empty means
+  /// "not yet tagged," not "compatible with nothing."
+  diet_flags: string[];
 }
 
 export interface Micros {
@@ -88,6 +104,7 @@ export interface PlanEntry {
   time_minutes: number;
   photo_url: string | null;
   servings: number;
+  rating: number;
 }
 
 export interface GroceryItem {
@@ -138,8 +155,10 @@ export interface GuideSummary {
   summary: string;
   topic: string;
   minutes: number | null;
+  helpful_count: number;
 }
 
 export interface GuideDetail extends GuideSummary {
   body: string;
+  your_helpful_vote: boolean;
 }

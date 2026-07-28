@@ -7,6 +7,7 @@ import { useToast } from '../components/Toast/ToastContext';
 import { ChevronLeft, CameraIcon, ShareIcon, PlayIcon, PencilIcon } from '../components/Icon/Icon';
 import { Avatar } from '../components/Avatar/Avatar';
 import { LoadingState, ErrorState } from '../components/PageState/PageState';
+import { FlagButton } from '../components/Flag/FlagButton';
 import { mealBackground, ingredientBackground } from '../lib/imagery';
 import { pickImage } from '../lib/photo';
 import styles from './MealDetail.module.css';
@@ -74,6 +75,7 @@ interface MealDetailData {
   source_name: string | null;
   nutrition: MealNutrition;
   rating_distribution: RatingDistribution;
+  diet_tags: string[];
 }
 
 /** Mirrors the server's units::format_amount: "2", "1.5", never "2.4999999". */
@@ -341,6 +343,16 @@ export function MealDetail() {
         <span>{meal.time_minutes} min</span>
         <span>Serves {meal.serves ?? '4'}</span>
       </div>
+
+      {meal.diet_tags.length > 0 && (
+        <div className={styles.dietRow}>
+          {meal.diet_tags.map((t) => (
+            <span key={t} className={styles.dietBadge}>
+              {t.charAt(0).toUpperCase() + t.slice(1)}
+            </span>
+          ))}
+        </div>
+      )}
 
       <button className={styles.authorChip} onClick={() => navigate(`/chefs/${meal.author_id}`)}>
         <span
@@ -653,14 +665,17 @@ export function MealDetail() {
                   {!r.is_current_version && (
                     <span className={styles.reviewStale}>Written about an earlier version of this recipe</span>
                   )}
-                  <button
-                    className={`${styles.helpfulBtn} ${r.your_helpful_vote ? styles.helpfulBtnOn : ''}`}
-                    onClick={() => voteHelpful.mutate(r.id)}
-                    aria-pressed={r.your_helpful_vote}
-                    aria-label={r.your_helpful_vote ? 'Remove helpful vote' : 'Mark this review as helpful'}
-                  >
-                    👍 Helpful{r.helpful_count > 0 ? ` (${r.helpful_count})` : ''}
-                  </button>
+                  <span className={styles.reviewActions}>
+                    <button
+                      className={`${styles.helpfulBtn} ${r.your_helpful_vote ? styles.helpfulBtnOn : ''}`}
+                      onClick={() => voteHelpful.mutate(r.id)}
+                      aria-pressed={r.your_helpful_vote}
+                      aria-label={r.your_helpful_vote ? 'Remove helpful vote' : 'Mark this review as helpful'}
+                    >
+                      👍 Helpful{r.helpful_count > 0 ? ` (${r.helpful_count})` : ''}
+                    </button>
+                    {user && r.user_id !== user.id && <FlagButton contentType="review" contentId={r.id} />}
+                  </span>
                 </span>
               </div>
             ))}

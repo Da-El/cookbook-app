@@ -14,6 +14,9 @@ pub struct IngredientSummary {
     pub food_subgroup: Option<String>,
     pub rating: f64,
     pub rating_count: i32,
+    /// Heuristic, community-editable - see diet.rs. Empty means "not yet
+    /// tagged," not "compatible with nothing."
+    pub diet_flags: Vec<String>,
 }
 
 #[derive(Serialize)]
@@ -65,7 +68,7 @@ pub async fn list(
 
     let rows = sqlx::query_as::<_, IngredientSummary>(
         "SELECT id, name, category, food_group, food_subgroup,
-                rating::float8 AS rating, rating_count
+                rating::float8 AS rating, rating_count, diet_flags
          FROM ingredients i
          WHERE ($1::text IS NULL OR name ILIKE '%' || $1 || '%'
                 -- An endorsed alias counts as a name match too, so searching
@@ -187,9 +190,15 @@ pub async fn create(
 
     let mut tx = state.db.begin().await.map_err(|_| oops())?;
 
+    // Computed at creation, not left for the next server restart's backfill
+    // to pick up - a user-submitted ingredient has no `food_group` (that's a
+    // USDA-only field), so this is name+category only, an even rougher
+    // guess than the catalog's own heuristic.
+    let diet_flags = crate::diet::compute_diet_flags(name, body.category.trim(), None);
+
     let id: i64 = sqlx::query_scalar(
-        "INSERT INTO ingredients (name, category, description, photo_url, author_id, rating, rating_count)
-         VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id",
+        "INSERT INTO ingredients (name, category, description, photo_url, author_id, rating, rating_count, diet_flags)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id",
     )
     .bind(name)
     .bind(body.category.trim())
@@ -198,6 +207,7 @@ pub async fn create(
     .bind(user.id)
     .bind(body.rating.map(f64::from).unwrap_or(0.0))
     .bind(i32::from(body.rating.is_some()))
+    .bind(&diet_flags)
     .fetch_one(&mut *tx)
     .await
     .map_err(|e| {
@@ -239,7 +249,7 @@ pub async fn create(
     Ok((StatusCode::CREATED, Json(CreateIngredientResponse { id: Some(id), close_match: None })))
 }
 
-const EDIT_FIELDS: [&str; 4] = ["description", "category", "photo", "nutrition"];
+const EDIT_FIELDS: [&str; 5] = ["description", "category", "photo", "nutrition", "diet_flags"];
 
 #[derive(Deserialize)]
 pub struct SubmitEdit {
@@ -257,6 +267,15 @@ pub async fn submit_edit(
 ) -> Result<StatusCode, (StatusCode, Json<serde_json::Value>)> {
     if !EDIT_FIELDS.contains(&body.field.as_str()) {
         return Err(bad("Not something you can edit."));
+    }
+    if body.field == "diet_flags" {
+        let valid = body
+            .value
+            .as_array()
+            .is_some_and(|a| a.iter().all(|v| v.as_str().is_some_and(|s| crate::diet::ALL_DIET_FLAGS.contains(&s))));
+        if !valid {
+            return Err(bad("Not a recognized diet tag."));
+        }
     }
 
     let mut tx = state.db.begin().await.map_err(|_| oops())?;
@@ -426,7 +445,7 @@ pub async fn vote_edit(
 /// already ordered that way - mirrors the prototype's pickWinner exactly.
 /// Applies the result onto the materialized ingredients/ingredient_nutrition
 /// columns that every other endpoint reads.
-async fn apply_winner(
+pub(crate) async fn apply_winner(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     ingredient_id: i64,
     field: &str,
@@ -454,6 +473,16 @@ async fn apply_winner(
             }
             "photo" => {
                 sqlx::query("UPDATE ingredients SET photo_url = NULL WHERE id = $1")
+                    .bind(ingredient_id)
+                    .execute(&mut **tx)
+                    .await?;
+            }
+            "diet_flags" => {
+                // No proposal left to fall back to - clearing to empty is
+                // honest (no claim at all) rather than resurrecting the
+                // original heuristic guess, which the community may have
+                // specifically voted away from.
+                sqlx::query("UPDATE ingredients SET diet_flags = '{}' WHERE id = $1")
                     .bind(ingredient_id)
                     .execute(&mut **tx)
                     .await?;
@@ -518,6 +547,17 @@ async fn apply_winner(
             .execute(&mut **tx)
             .await?;
         }
+        "diet_flags" => {
+            let flags: Vec<String> = value
+                .as_array()
+                .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+                .unwrap_or_default();
+            sqlx::query("UPDATE ingredients SET diet_flags = $1 WHERE id = $2")
+                .bind(&flags)
+                .bind(ingredient_id)
+                .execute(&mut **tx)
+                .await?;
+        }
         _ => {}
     }
     Ok(())
@@ -577,9 +617,9 @@ pub async fn detail(
     State(state): State<AppState>,
     Path(id): Path<i64>,
 ) -> Result<Json<IngredientDetail>, StatusCode> {
-    let row = sqlx::query_as::<_, (i64, String, String, Option<String>, Option<String>, f64, i32, String, Option<String>)>(
+    let row = sqlx::query_as::<_, (i64, String, String, Option<String>, Option<String>, f64, i32, String, Option<String>, Vec<String>)>(
         "SELECT id, name, category, food_group, food_subgroup,
-                rating::float8, rating_count, description, photo_url
+                rating::float8, rating_count, description, photo_url, diet_flags
          FROM ingredients WHERE id = $1",
     )
     .bind(id)
@@ -633,6 +673,7 @@ pub async fn detail(
             food_subgroup: row.4,
             rating: row.5,
             rating_count: row.6,
+            diet_flags: row.9,
         },
         description: row.7,
         photo_url: row.8,

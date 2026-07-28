@@ -1,16 +1,19 @@
 mod aliases;
 mod auth;
+mod diet;
 mod guides;
 mod import;
 mod ingredients;
 mod kitchen;
 mod meals;
+mod moderation;
 mod nutrition;
 mod planner;
 mod search;
 mod seed;
 mod social;
 mod state;
+mod substitutes;
 mod units;
 
 use axum::{
@@ -37,6 +40,7 @@ async fn main() -> anyhow::Result<()> {
     sqlx::migrate!().run(&state.db).await?;
     seed::seed_ingredients(&state.db).await?;
     seed::seed_guides(&state.db).await?;
+    seed::backfill_diet_flags(&state.db).await?;
 
     let api = Router::new()
         .route("/health", get(health))
@@ -64,6 +68,9 @@ async fn main() -> anyhow::Result<()> {
         .route("/ingredients/{id}/aliases", get(aliases::list).post(aliases::create))
         .route("/ingredients/{id}/aliases/{alias_id}/vote", post(aliases::vote))
         .route("/ingredients/{id}/aliases/{alias_id}", delete(aliases::withdraw))
+        .route("/ingredients/{id}/substitutes", get(substitutes::list).post(substitutes::create))
+        .route("/ingredients/{id}/substitutes/{sub_id}/vote", post(substitutes::vote))
+        .route("/ingredients/{id}/substitutes/{sub_id}", delete(substitutes::withdraw))
         // search
         .route("/search", get(search::search))
         // meals
@@ -105,13 +112,18 @@ async fn main() -> anyhow::Result<()> {
         .route("/import/capabilities", get(import::capabilities))
         // meal planning
         .route("/plan", get(planner::list_plan).post(planner::add_plan_entry))
-        .route("/plan/{id}", delete(planner::remove_plan_entry))
+        .route("/plan/{id}", post(planner::update_plan_entry).delete(planner::remove_plan_entry))
         .route("/plan/grocery", get(planner::grocery_list))
         .route("/plan/grocery/push", post(planner::push_to_shopping))
         .route("/plan/suggestions", get(planner::suggestions))
         // guides
         .route("/guides", get(guides::list))
         .route("/guides/{slug}", get(guides::detail))
+        .route("/guides/{slug}/helpful", post(guides::vote_helpful))
+        .route("/guides/{slug}/related-meals", get(guides::related_meals))
+        .route("/guides/{slug}/edits", get(guides::list_edits).post(guides::submit_edit))
+        .route("/guides/{slug}/edits/{edit_id}", delete(guides::delete_edit))
+        .route("/guides/{slug}/edits/{edit_id}/vote", post(guides::vote_edit))
         // social
         .route("/feed", get(social::feed))
         .route("/activity", get(social::activity).post(social::mark_activity_seen))
@@ -126,6 +138,10 @@ async fn main() -> anyhow::Result<()> {
         .route("/profile", post(social::update_profile))
         .route("/profile/theme", get(social::my_theme))
         .route("/profile/customize", post(social::update_customize))
+        // moderation
+        .route("/flags", post(moderation::create_flag))
+        .route("/admin/flags", get(moderation::list_flags))
+        .route("/admin/flags/{id}/resolve", post(moderation::resolve_flag))
         .with_state(state);
 
     let mut app = Router::new().nest("/api", api);

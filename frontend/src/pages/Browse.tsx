@@ -15,6 +15,9 @@ import styles from './Browse.module.css';
 
 const MEAL_TYPES = ['All', 'Breakfast', 'Lunch', 'Dinner', 'Dessert', 'Snack'];
 const ING_CATEGORIES = ['All', 'Vegetable', 'Fruit', 'Herb', 'Aromatic', 'Protein', 'Dairy', 'Grain', 'Pantry'];
+// Labels match Settings.tsx's diet-preference chips; the lowercase form is
+// what the backend's diet_flags/diet_tags actually store.
+const DIET_CHIPS = ['All', 'Vegetarian', 'Vegan', 'Pescatarian', 'Gluten-free', 'Dairy-free', 'Nut-free'];
 const SORTS: [string, string][] = [
   ['top', 'Top rated'],
   ['canmake', 'Can make'],
@@ -34,9 +37,17 @@ interface IngredientHit extends IngredientSummary {
   matched_alias?: string | null;
 }
 
+interface GuideHit {
+  slug: string;
+  title: string;
+  summary: string;
+  topic: string;
+}
+
 interface SearchResults {
   meals: MealRow[];
   ingredients: IngredientHit[];
+  guides: GuideHit[];
 }
 
 export function Browse() {
@@ -50,6 +61,7 @@ export function Browse() {
   // Each tab keeps its own filter so switching doesn't strand an invalid value.
   const [mealType, setMealType] = useState('All');
   const [category, setCategory] = useState('All');
+  const [diet, setDiet] = useState('All');
   const [sort, setSort] = useState('top');
 
   // The desktop topbar searches by pushing ?q=, so mirror it into local state.
@@ -70,10 +82,11 @@ export function Browse() {
   });
 
   const { data: browseMeals = [], isLoading: browseMealsLoading } = useQuery({
-    queryKey: ['meals', mealType, sort],
+    queryKey: ['meals', mealType, diet, sort],
     queryFn: () => {
       const q = new URLSearchParams();
       if (mealType !== 'All') q.set('meal_type', mealType);
+      if (diet !== 'All') q.set('diet', diet.toLowerCase());
       q.set('sort', sort);
       return api.get<MealRow[]>(`/meals?${q}`);
     },
@@ -96,13 +109,18 @@ export function Browse() {
   // apply them client-side on the (already small, already-fetched) result
   // set rather than losing the chip once someone starts typing.
   const meals = trimmedSearch
-    ? (searchResults?.meals ?? []).filter((m) => mealType === 'All' || m.meal_type === mealType)
+    ? (searchResults?.meals ?? []).filter(
+        (m) =>
+          (mealType === 'All' || m.meal_type === mealType) &&
+          (diet === 'All' || (m.diet_tags ?? []).includes(diet.toLowerCase())),
+      )
     : browseMeals;
   const ingredients = trimmedSearch
     ? (searchResults?.ingredients ?? []).filter((i) => category === 'All' || i.category === category)
     : browseIngredients;
   const mealsLoading = trimmedSearch ? searchLoading : browseMealsLoading;
   const ingLoading = trimmedSearch ? searchLoading : browseIngLoading;
+  const guideHits = trimmedSearch ? searchResults?.guides ?? [] : [];
 
   const { data: chefs = [], isLoading: chefsLoading } = useQuery({
     queryKey: ['chefs-search', search],
@@ -184,6 +202,20 @@ export function Browse() {
         </div>
       )}
 
+      {tab === 'meals' && (
+        <div className={`${styles.chipRow} hscroll`}>
+          {DIET_CHIPS.map((d) => (
+            <button
+              key={d}
+              className={`${styles.chip} ${diet === d ? styles.chipActive : ''}`}
+              onClick={() => setDiet(d)}
+            >
+              {d}
+            </button>
+          ))}
+        </div>
+      )}
+
       {tab === 'meals' && !trimmedSearch && (
         <div className={styles.sortRow}>
           {SORTS.map(([value, label]) => (
@@ -216,13 +248,28 @@ export function Browse() {
           )
         )
       ) : tab === 'meals' ? (
-        meals.length > 0 ? (
-          <MealGrid>
-            {meals.map((m) => <MealCard key={m.id} meal={m} />)}
-          </MealGrid>
-        ) : (
-          !mealsLoading && <EmptyLine roomy>No meals match. Try another filter.</EmptyLine>
-        )
+        <>
+          {guideHits.length > 0 && (
+            <div className={styles.guideStrip}>
+              <span className={styles.guideStripLabel}>From the guides</span>
+              {guideHits.map((g) => (
+                <button key={g.slug} className={styles.guideHit} onClick={() => navigate(`/guides/${g.slug}`)}>
+                  <span className={styles.guideHitTitle}>{g.title}</span>
+                  <span className={styles.guideHitSummary}>{g.summary}</span>
+                </button>
+              ))}
+            </div>
+          )}
+          {meals.length > 0 ? (
+            <MealGrid>
+              {meals.map((m) => <MealCard key={m.id} meal={m} />)}
+            </MealGrid>
+          ) : (
+            !mealsLoading && guideHits.length === 0 && (
+              <EmptyLine roomy>No meals match. Try another filter.</EmptyLine>
+            )
+          )}
+        </>
       ) : ingredients.length > 0 ? (
         <div className={styles.ingList}>
           {ingredients.map((i) => (

@@ -25,6 +25,11 @@ pub struct MealCard {
     /// enough ratings to trust - visible proof the Bayesian ranking is doing
     /// something, not just an invisible sort tweak.
     pub is_top_in_cuisine: bool,
+    /// Diets every catalog-matched ingredient supports - a free-text or
+    /// unmatched line neither confirms nor rules one out, so it's simply not
+    /// counted (same "don't claim more than is known" rule nutrition.rs
+    /// uses). Empty when nothing is matched yet, not "compatible with nothing."
+    pub diet_tags: Vec<String>,
 }
 
 /// Appended to a `MealCard`-shaped SELECT: true only for the single meal in
@@ -44,11 +49,37 @@ macro_rules! is_top_in_cuisine_sql {
     };
 }
 
+/// Appended alongside `is_top_in_cuisine_sql!`: the diet tags every
+/// catalog-matched ingredient in the meal shares. Requires at least one
+/// matched ingredient (an all-unmatched recipe claims nothing, rather than
+/// vacuously "compatible with every diet" because there's nothing to
+/// disqualify it).
+macro_rules! meal_diet_tags_sql {
+    () => {
+        "(SELECT COALESCE(array_agg(d ORDER BY d), '{}')
+            FROM unnest(ARRAY['vegetarian','vegan','pescatarian','gluten-free','dairy-free','nut-free']) d
+            WHERE EXISTS (
+                    SELECT 1 FROM meal_ingredients mi3
+                    WHERE mi3.meal_id = m.id AND mi3.ingredient_id IS NOT NULL
+                  )
+              AND NOT EXISTS (
+                    SELECT 1 FROM meal_ingredients mi2
+                    JOIN ingredients i2 ON i2.id = mi2.ingredient_id
+                    WHERE mi2.meal_id = m.id AND mi2.ingredient_id IS NOT NULL
+                      AND NOT (d = ANY(i2.diet_flags))
+                  )
+          ) AS diet_tags"
+    };
+}
+
 #[derive(Deserialize)]
 pub struct BrowseParams {
     pub search: Option<String>,
     pub cuisine: Option<String>,
     pub meal_type: Option<String>,
+    /// One of diet.rs's ALL_DIET_FLAGS, e.g. "vegan" - single-select, like
+    /// cuisine/meal_type, not a set (mirrors the chip-row filter UI).
+    pub diet: Option<String>,
     /// "top" (default) | "canmake" | "fastest"
     pub sort: Option<String>,
 }
@@ -72,7 +103,7 @@ pub async fn browse(
         "SELECT m.id, m.name, m.author_id, u.display_name AS author_name, m.cuisine, m.meal_type,
                 m.time_minutes, m.rating::float8 AS rating, m.rating_count, m.photo_url,
                 COALESCE(m.have_count, 0) AS have_count, COALESCE(m.total_count, 0) AS total_count,
-                ", is_top_in_cuisine_sql!(), "
+                ", is_top_in_cuisine_sql!(), ", ", meal_diet_tags_sql!(), "
          FROM (
            SELECT m.*,
              (SELECT count(*) FROM meal_ingredients mi
@@ -85,6 +116,13 @@ pub async fn browse(
              AND ($2::text IS NULL OR m.name ILIKE '%' || $2 || '%')
              AND ($3::text IS NULL OR m.cuisine = $3)
              AND ($4::text IS NULL OR m.meal_type = $4)
+             AND ($6::text IS NULL OR NOT EXISTS (
+                   SELECT 1 FROM meal_ingredients mi2
+                   JOIN ingredients i2 ON i2.id = mi2.ingredient_id
+                   WHERE mi2.meal_id = m.id AND mi2.ingredient_id IS NOT NULL
+                     AND NOT ($6 = ANY(i2.diet_flags))
+                 ) AND EXISTS (SELECT 1 FROM meal_ingredients mi3
+                                WHERE mi3.meal_id = m.id AND mi3.ingredient_id IS NOT NULL))
          ) m
          JOIN users u ON u.id = m.author_id
          ORDER BY
@@ -100,6 +138,7 @@ pub async fn browse(
         .bind(p.cuisine.as_deref().filter(|s| !s.is_empty()))
         .bind(p.meal_type.as_deref().filter(|s| !s.is_empty()))
         .bind(sort)
+        .bind(p.diet.as_deref().filter(|s| !s.is_empty()))
         .fetch_all(&state.db)
         .await
         .map_err(|e| {
@@ -206,7 +245,7 @@ pub async fn detail(
                      AND EXISTS (SELECT 1 FROM fridge_items f
                                  WHERE f.user_id = $2 AND f.ingredient_id = mi.ingredient_id)) AS have_count,
                 (SELECT count(*) FROM meal_ingredients mi WHERE mi.meal_id = m.id) AS total_count,
-                ", is_top_in_cuisine_sql!(), "
+                ", is_top_in_cuisine_sql!(), ", ", meal_diet_tags_sql!(), "
          FROM meals m JOIN users u ON u.id = m.author_id
          WHERE m.id = $1 AND m.status = 'live'"
     ))
@@ -331,7 +370,7 @@ pub async fn discover(
                         m.rating_count, m.photo_url, \
                         COALESCE(m.have_count, 0) AS have_count, \
                         COALESCE(m.total_count, 0) AS total_count, \
-                        ", is_top_in_cuisine_sql!(), " \
+                        ", is_top_in_cuisine_sql!(), ", ", meal_diet_tags_sql!(), " \
                  FROM ( \
                    SELECT m.*, \
                      (SELECT count(*) FROM meal_ingredients mi \
@@ -392,6 +431,47 @@ pub async fn discover(
         Vec::new()
     };
 
+    // Settings/onboarding have collected diet_prefs since the very first
+    // migration; this is the first thing that actually reads it back. Empty
+    // for a viewer with no diet_prefs set, or signed out - a shelf claiming
+    // "for your diet" with no diet on file would be a lie, not a feature.
+    let for_diet = if let Some(uid) = viewer {
+        let prefs: Option<Vec<String>> =
+            sqlx::query_scalar("SELECT diet_prefs FROM users WHERE id = $1")
+                .bind(uid)
+                .fetch_optional(&state.db)
+                .await
+                .unwrap_or(None);
+        let prefs: Vec<String> = prefs.unwrap_or_default().iter().map(|p| p.to_lowercase()).collect();
+        if prefs.is_empty() {
+            Vec::new()
+        } else {
+            // `diet_tags` in the SELECT list is a computed expression, not a
+            // real column, so it isn't visible to this same-level WHERE -
+            // this re-derives the same "every ingredient supports every
+            // requested diet" check directly against m.id instead.
+            sqlx::query_as::<_, MealCard>(shelf_sql!(
+                "WHERE NOT EXISTS (
+                   SELECT 1 FROM unnest($2::text[]) d
+                   WHERE NOT EXISTS (SELECT 1 FROM meal_ingredients mi3
+                                      WHERE mi3.meal_id = m.id AND mi3.ingredient_id IS NOT NULL)
+                      OR EXISTS (SELECT 1 FROM meal_ingredients mi2
+                                 JOIN ingredients i2 ON i2.id = mi2.ingredient_id
+                                 WHERE mi2.meal_id = m.id AND mi2.ingredient_id IS NOT NULL
+                                   AND NOT (d = ANY(i2.diet_flags)))
+                 )
+                 ORDER BY m.ranked_score DESC LIMIT 12"
+            ))
+            .bind(viewer)
+            .bind(&prefs)
+            .fetch_all(&state.db)
+            .await
+            .unwrap_or_default()
+        }
+    } else {
+        Vec::new()
+    };
+
     let mut sections = Vec::new();
     if !ready.is_empty() {
         sections.push(DiscoverSection {
@@ -399,6 +479,14 @@ pub async fn discover(
             title: "Nearly in reach".into(),
             subtitle: "You already have most of what these need.".into(),
             meals: ready,
+        });
+    }
+    if !for_diet.is_empty() {
+        sections.push(DiscoverSection {
+            key: "for_diet".into(),
+            title: "For your diet".into(),
+            subtitle: "Matches every preference on your profile.".into(),
+            meals: for_diet,
         });
     }
     if !top.is_empty() {
@@ -1049,52 +1137,43 @@ pub async fn vote_revision(
     })))
 }
 
-/// Author-only: restore the meal to how it looked in a given revision. The
-/// current state is snapshotted first, so a revert is itself revertible.
-pub async fn revert(
-    State(state): State<AppState>,
-    CurrentUser(user): CurrentUser,
-    Path((id, rev_id)): Path<(i64, i64)>,
-) -> Result<StatusCode, (StatusCode, Json<serde_json::Value>)> {
-    let mut tx = state.db.begin().await.map_err(|_| oops())?;
-
-    let author: Option<i64> =
-        sqlx::query_scalar("SELECT author_id FROM meals WHERE id=$1 AND status='live' FOR UPDATE")
-            .bind(id)
-            .fetch_optional(&mut *tx)
-            .await
-            .map_err(|_| oops())?;
-    if author != Some(user.id) {
-        return Err((
-            StatusCode::FORBIDDEN,
-            Json(serde_json::json!({ "error": "Only the author can revert this meal." })),
-        ));
-    }
-
+/// Core of a revert, shared by the author-facing handler below and
+/// moderation's "remove this revision" action (`moderation.rs`): restores
+/// `id`'s live row (and its ingredient lines) to how `meal_revisions` row
+/// `rev_id` snapshotted it, first snapshotting the pre-revert state as a new
+/// revision of its own so a revert is itself revertible. Authorization is
+/// the caller's job - this only cares whether the revision exists.
+///
+/// Returns `Ok(false)` if `rev_id` doesn't belong to `id`, so the caller can
+/// turn that into a 404 (or, for moderation, just log and move on).
+pub(crate) async fn revert_to_revision(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    id: i64,
+    rev_id: i64,
+    actor_id: i64,
+    actor_name: &str,
+    note: &str,
+) -> Result<bool, sqlx::Error> {
     let snap: Option<serde_json::Value> =
         sqlx::query_scalar("SELECT snapshot FROM meal_revisions WHERE id=$1 AND meal_id=$2")
             .bind(rev_id)
             .bind(id)
-            .fetch_optional(&mut *tx)
-            .await
-            .map_err(|_| oops())?;
+            .fetch_optional(&mut **tx)
+            .await?;
     let Some(snap) = snap else {
-        return Err((StatusCode::NOT_FOUND, Json(serde_json::json!({ "error": "Revision not found." }))));
+        return Ok(false);
     };
 
-    let current = snapshot_meal(&mut tx, id).await.map_err(|_| oops())?;
-    write_revision(&mut tx, id, user.id, &user.display_name, current, "reverted to earlier version", "revert")
-        .await
-        .map_err(|_| oops())?;
+    let current = snapshot_meal(tx, id).await?;
+    write_revision(tx, id, actor_id, actor_name, current, note, "revert").await?;
 
     // A page that keeps getting reverted is unstable - that's a ranking
     // signal (iteration 3), not just history trivia, so it's tracked on the
     // meal row where ranking queries can read it cheaply.
     sqlx::query("UPDATE meals SET revert_count = revert_count + 1, last_reverted_at = now() WHERE id = $1")
         .bind(id)
-        .execute(&mut *tx)
-        .await
-        .map_err(|_| oops())?;
+        .execute(&mut **tx)
+        .await?;
 
     let s = |k: &str| snap.get(k).and_then(|v| v.as_str()).map(str::to_string);
     let steps: Vec<String> = snap
@@ -1118,15 +1197,13 @@ pub async fn revert(
     .bind(s("photo_url"))
     .bind(s("visibility").unwrap_or_else(|| "public".into()))
     .bind(id)
-    .execute(&mut *tx)
-    .await
-    .map_err(|_| oops())?;
+    .execute(&mut **tx)
+    .await?;
 
     sqlx::query("DELETE FROM meal_ingredients WHERE meal_id=$1")
         .bind(id)
-        .execute(&mut *tx)
-        .await
-        .map_err(|_| oops())?;
+        .execute(&mut **tx)
+        .await?;
 
     if let Some(ings) = snap.get("ingredients").and_then(|v| v.as_array()) {
         for (idx, ing) in ings.iter().enumerate() {
@@ -1141,10 +1218,41 @@ pub async fn revert(
             .bind(ing.get("unit").and_then(|v| v.as_str()))
             .bind(ing.get("note").and_then(|v| v.as_str()))
             .bind(idx as i32)
-            .execute(&mut *tx)
+            .execute(&mut **tx)
+            .await?;
+        }
+    }
+
+    Ok(true)
+}
+
+/// Author-only: restore the meal to how it looked in a given revision. The
+/// current state is snapshotted first, so a revert is itself revertible.
+pub async fn revert(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Path((id, rev_id)): Path<(i64, i64)>,
+) -> Result<StatusCode, (StatusCode, Json<serde_json::Value>)> {
+    let mut tx = state.db.begin().await.map_err(|_| oops())?;
+
+    let author: Option<i64> =
+        sqlx::query_scalar("SELECT author_id FROM meals WHERE id=$1 AND status='live' FOR UPDATE")
+            .bind(id)
+            .fetch_optional(&mut *tx)
             .await
             .map_err(|_| oops())?;
-        }
+    if author != Some(user.id) {
+        return Err((
+            StatusCode::FORBIDDEN,
+            Json(serde_json::json!({ "error": "Only the author can revert this meal." })),
+        ));
+    }
+
+    let found = revert_to_revision(&mut tx, id, rev_id, user.id, &user.display_name, "reverted to earlier version")
+        .await
+        .map_err(|_| oops())?;
+    if !found {
+        return Err((StatusCode::NOT_FOUND, Json(serde_json::json!({ "error": "Revision not found." }))));
     }
 
     tx.commit().await.map_err(|_| oops())?;

@@ -145,3 +145,168 @@
 .bullets li {
   margin-bottom: 8px;
 }
+
+/* ---------- helpful vote ---------- */
+
+.helpfulRow {
+  margin-top: 18px;
+}
+
+.helpfulBtn {
+  padding: 10px 16px;
+  border-radius: 999px;
+  border: 1.5px solid var(--border-card);
+  background: var(--surface-card);
+  color: var(--secondary);
+  font: 700 13px var(--font-ui);
+  cursor: pointer;
+}
+
+.helpfulBtnOn {
+  background: var(--green-tint);
+  color: var(--green);
+  border-color: var(--green);
+}
+
+/* ---------- related meals ---------- */
+
+.relatedGrid {
+  margin-top: 10px;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+
+.relatedCard {
+  border: none;
+  background: none;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+}
+
+.relatedPhoto {
+  height: 90px;
+  border-radius: 14px;
+  box-shadow: var(--shadow-thumb);
+}
+
+.relatedName {
+  display: block;
+  margin-top: 6px;
+  font: 600 13px var(--font-ui);
+  color: var(--ink);
+}
+
+/* ---------- guide editing ---------- */
+
+.editHeadRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.suggestBtn {
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1.5px solid var(--border-card);
+  background: var(--surface-card);
+  color: var(--accent-dark);
+  font: 700 11.5px var(--font-ui);
+  cursor: pointer;
+}
+
+.editForm {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.editTextarea {
+  padding: 12px 14px;
+  border: 1.5px solid var(--border-card);
+  border-radius: 14px;
+  background: var(--surface-card);
+  font: 400 14px var(--font-ui);
+  color: var(--ink);
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.editSubmit {
+  align-self: flex-start;
+  padding: 10px 18px;
+  border: none;
+  border-radius: 12px;
+  background: var(--ink);
+  color: #fff;
+  font: 700 12.5px var(--font-ui);
+  cursor: pointer;
+}
+
+.editList {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.editRow {
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: var(--surface-card);
+  border: 1px solid var(--border-hairline);
+}
+
+.editRowWinner {
+  border-color: var(--green);
+  background: var(--green-tint);
+}
+
+.editRowMeta {
+  font: 600 11px var(--font-ui);
+  color: var(--muted-2);
+  text-transform: uppercase;
+  letter-spacing: .03em;
+}
+
+.editRowBody {
+  margin-top: 6px;
+  color: var(--body);
+  font: 400 13.5px var(--font-ui);
+  line-height: 1.5;
+}
+
+.editRowActions {
+  margin-top: 8px;
+  display: flex;
+  gap: 8px;
+}
+
+.editVoteBtn {
+  padding: 6px 11px;
+  border-radius: 999px;
+  border: 1.5px solid var(--border-card);
+  background: var(--surface-card);
+  color: var(--secondary);
+  font: 700 12px var(--font-ui);
+  cursor: pointer;
+}
+
+.editVoteBtnOn {
+  background: var(--green);
+  color: #fff;
+  border-color: var(--green);
+}
+
+.editDeleteBtn {
+  padding: 6px 11px;
+  border-radius: 999px;
+  border: none;
+  background: var(--chip-bg);
+  color: var(--muted);
+  font: 700 12px var(--font-ui);
+  cursor: pointer;
+}

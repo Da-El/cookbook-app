@@ -16,6 +16,19 @@ export interface MealCardData {
   /// because its displayed number is higher. Optional: only the handful of
   /// endpoints that already compute ranked_score set it.
   is_top_in_cuisine?: boolean;
+  /// Diets every catalog-matched ingredient supports (see backend/src/diet.rs).
+  diet_tags?: string[];
+}
+
+/// vegan implies vegetarian implies pescatarian in how diet.rs tags
+/// ingredients, so showing all three that are present would just repeat the
+/// same claim at decreasing strength - one badge, the strongest true one.
+function headlineDiet(tags: string[] | undefined): string | null {
+  if (!tags) return null;
+  if (tags.includes('vegan')) return 'Vegan';
+  if (tags.includes('vegetarian')) return 'Vegetarian';
+  if (tags.includes('pescatarian')) return 'Pescatarian';
+  return null;
 }
 
 export function MealGrid({ children }: { children: React.ReactNode }) {
@@ -34,6 +47,7 @@ export function MealCard({
   const navigate = useNavigate();
   const canMake =
     (meal.total_count ?? 0) > 0 && meal.have_count === meal.total_count;
+  const diet = headlineDiet(meal.diet_tags);
 
   return (
     <button className={styles.card} onClick={() => navigate(`/meals/${meal.id}`)}>
@@ -59,6 +73,12 @@ export function MealCard({
           <>
             <span>·</span>
             <span className={styles.rating}>★{meal.rating.toFixed(1)}</span>
+          </>
+        )}
+        {diet && (
+          <>
+            <span>·</span>
+            <span className={styles.dietTag}>{diet}</span>
           </>
         )}
       </div>

@@ -168,6 +168,26 @@
   margin-top: 1px;
 }
 
+.plannedActions {
+  display: flex;
+  flex: none;
+  gap: 4px;
+}
+
+.plannedSwap {
+  width: 22px;
+  height: 22px;
+  flex: none;
+  border: none;
+  background: var(--chip-bg);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+}
+
 .plannedX {
   width: 22px;
   height: 22px;
@@ -270,8 +290,23 @@
   font-weight: 700;
 }
 
-.groceryList {
+.aisleGroup {
+  margin-top: 18px;
+}
+
+.aisleGroup:first-of-type {
   margin-top: 14px;
+}
+
+.aisleLabel {
+  font: 700 11px var(--font-ui);
+  color: var(--muted-2);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  margin-bottom: 7px;
+}
+
+.groceryList {
   display: flex;
   flex-direction: column;
   gap: 7px;

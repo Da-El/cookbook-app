@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../api/client';
 import { pickImage } from '../../lib/photo';
+import { FlagButton } from '../Flag/FlagButton';
 import styles from './EditVoting.module.css';
 
 interface EditRow {
@@ -17,6 +18,16 @@ interface EditRow {
 }
 
 const CATEGORIES = ['Vegetable', 'Fruit', 'Herb', 'Aromatic', 'Protein', 'Dairy', 'Grain', 'Pantry'];
+// Lowercase-hyphenated, matching backend/src/diet.rs's ALL_DIET_FLAGS exactly
+// (the wire value); the label shown to people is Title Case.
+const DIET_FLAGS: [string, string][] = [
+  ['vegetarian', 'Vegetarian'],
+  ['vegan', 'Vegan'],
+  ['pescatarian', 'Pescatarian'],
+  ['gluten-free', 'Gluten-free'],
+  ['dairy-free', 'Dairy-free'],
+  ['nut-free', 'Nut-free'],
+];
 
 function useEdits(ingredientId: number, field: string) {
   const qc = useQueryClient();
@@ -148,7 +159,11 @@ export function TextEditSection({
                 )}
               </span>
               <VoteButton row={row} onVote={() => vote.mutate(row.id)} />
-              {row.is_mine && <DeleteButton onDelete={() => del.mutate(row.id)} />}
+              {row.is_mine ? (
+                <DeleteButton onDelete={() => del.mutate(row.id)} />
+              ) : (
+                <FlagButton contentType="ingredient_edit" contentId={row.id} />
+              )}
             </div>
           ))}
         </div>
@@ -194,7 +209,93 @@ export function CategoryEditSection({ ingredientId }: { ingredientId: number }) 
             <div key={row.id} className={`${styles.row} ${i === 0 ? styles.rowWinner : ''}`}>
               <span className={styles.rowValue}>{String(row.value)}</span>
               <VoteButton row={row} onVote={() => vote.mutate(row.id)} />
-              {row.is_mine && <DeleteButton onDelete={() => del.mutate(row.id)} />}
+              {row.is_mine ? (
+                <DeleteButton onDelete={() => del.mutate(row.id)} />
+              ) : (
+                <FlagButton contentType="ingredient_edit" contentId={row.id} />
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function describeDietFlags(value: unknown): string {
+  if (!Array.isArray(value) || value.length === 0) return 'No diet tags';
+  const labels = new Map(DIET_FLAGS);
+  return value.map((v) => labels.get(String(v)) ?? String(v)).join(', ');
+}
+
+/**
+ * Suggest-and-vote for diet compatibility - unlike Category (pick one), this
+ * proposes a whole tag set at once, since "vegan" and "gluten-free" are
+ * independent claims that both need to be right together, not two separate
+ * single-value edits racing each other.
+ */
+export function DietFlagsEditSection({ ingredientId }: { ingredientId: number }) {
+  const { edits, submit, vote, del } = useEdits(ingredientId, 'diet_flags');
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState<string[]>([]);
+
+  function toggle(flag: string) {
+    setDraft((d) => (d.includes(flag) ? d.filter((f) => f !== flag) : [...d, flag]));
+  }
+
+  return (
+    <div className={styles.section}>
+      <div className={styles.headRow}>
+        <span className={styles.headLabel}>Diet</span>
+        <button
+          className={styles.suggestBtn}
+          onClick={() => {
+            setOpen((v) => !v);
+            setDraft([]);
+          }}
+        >
+          {open ? 'Cancel' : 'Suggest tags'}
+        </button>
+      </div>
+
+      {open && (
+        <div className={styles.form}>
+          <div className={styles.chipForm}>
+            {DIET_FLAGS.map(([flag, label]) => (
+              <button
+                key={flag}
+                className={`${styles.chip} ${draft.includes(flag) ? styles.chipOn : ''}`}
+                aria-pressed={draft.includes(flag)}
+                onClick={() => toggle(flag)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <button
+            className={styles.formSubmit}
+            style={{ marginTop: 8 }}
+            onClick={() => {
+              submit.mutate(draft);
+              setOpen(false);
+            }}
+          >
+            Submit
+          </button>
+        </div>
+      )}
+
+      {edits.length > 0 && (
+        <div className={styles.list}>
+          {edits.map((row, i) => (
+            <div key={row.id} className={`${styles.row} ${i === 0 ? styles.rowWinner : ''}`}>
+              <span className={styles.rowValue}>{describeDietFlags(row.value)}</span>
+              <VoteButton row={row} onVote={() => vote.mutate(row.id)} />
+              {row.is_mine ? (
+                <DeleteButton onDelete={() => del.mutate(row.id)} />
+              ) : (
+                <FlagButton contentType="ingredient_edit" contentId={row.id} />
+              )}
             </div>
           ))}
         </div>
@@ -304,7 +405,11 @@ export function NutritionEditSection({ ingredientId }: { ingredientId: number })
             <div key={row.id} className={`${styles.row} ${i === 0 ? styles.rowWinner : ''}`}>
               <span className={styles.rowValue}>{describeNutrition(row.value as NutritionValue)}</span>
               <VoteButton row={row} onVote={() => vote.mutate(row.id)} />
-              {row.is_mine && <DeleteButton onDelete={() => del.mutate(row.id)} />}
+              {row.is_mine ? (
+                <DeleteButton onDelete={() => del.mutate(row.id)} />
+              ) : (
+                <FlagButton contentType="ingredient_edit" contentId={row.id} />
+              )}
             </div>
           ))}
         </div>
@@ -338,7 +443,11 @@ export function PhotoEditSection({ ingredientId }: { ingredientId: number }) {
               >
                 <span className={styles.photoVotes}>{row.voted_by_me ? '✓ ' : ''}{row.votes}</span>
               </button>
-              {row.is_mine && <DeleteButton onDelete={() => del.mutate(row.id)} />}
+              {row.is_mine ? (
+                <DeleteButton onDelete={() => del.mutate(row.id)} />
+              ) : (
+                <FlagButton contentType="ingredient_edit" contentId={row.id} />
+              )}
             </div>
           ))}
         </div>

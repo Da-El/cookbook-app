@@ -112,6 +112,43 @@
 
 /* ---------- ingredient rows ---------- */
 
+.guideStrip {
+  margin-top: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.guideStripLabel {
+  font: 700 11px var(--font-ui);
+  color: var(--muted-2);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+}
+
+.guideHit {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid var(--border-hairline);
+  background: var(--surface-card);
+  cursor: pointer;
+  text-align: left;
+}
+
+.guideHitTitle {
+  font: 700 14px var(--font-ui);
+  color: var(--ink);
+}
+
+.guideHitSummary {
+  margin-top: 2px;
+  font: 400 12.5px var(--font-ui);
+  color: var(--secondary);
+}
+
 .ingList {
   margin-top: 12px;
   display: flex;

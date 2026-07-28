@@ -1,9 +1,30 @@
+import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
-import { api } from '../api/client';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { api, ApiError } from '../api/client';
 import type { GuideDetail, GuideSummary } from '../api/types';
 import { ChevronLeft } from '../components/Icon/Icon';
+import { LoadingState, ErrorState } from '../components/PageState/PageState';
+import { FlagButton } from '../components/Flag/FlagButton';
+import { mealBackground } from '../lib/imagery';
 import styles from './Guides.module.css';
+
+interface RelatedMeal {
+  id: number;
+  name: string;
+  cuisine: string;
+  photo_url: string | null;
+}
+
+interface GuideEditRow {
+  id: number;
+  body: string;
+  author_name: string | null;
+  author_id: number | null;
+  votes: number;
+  voted_by_me: boolean;
+  is_mine: boolean;
+}
 
 export function Guides() {
   const navigate = useNavigate();
@@ -80,14 +101,77 @@ function GuideBody({ body }: { body: string }) {
 export function GuidePage() {
   const { slug } = useParams();
   const navigate = useNavigate();
+  const qc = useQueryClient();
+  const [editOpen, setEditOpen] = useState(false);
+  const [draft, setDraft] = useState('');
 
-  const { data: guide, isLoading } = useQuery({
+  const { data: guide, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['guide', slug],
     queryFn: () => api.get<GuideDetail>(`/guides/${slug}`),
     enabled: Boolean(slug),
+    retry: (failureCount, err) => {
+      if (err instanceof ApiError) return false;
+      return failureCount < 2;
+    },
   });
 
-  if (isLoading || !guide) return null;
+  const { data: related = [] } = useQuery({
+    queryKey: ['guide-related', slug],
+    queryFn: () => api.get<RelatedMeal[]>(`/guides/${slug}/related-meals`),
+    enabled: Boolean(slug),
+  });
+
+  const { data: edits = [] } = useQuery({
+    queryKey: ['guide-edits', slug],
+    queryFn: () => api.get<GuideEditRow[]>(`/guides/${slug}/edits`),
+    enabled: Boolean(slug),
+  });
+
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: ['guide', slug] });
+    qc.invalidateQueries({ queryKey: ['guide-edits', slug] });
+    qc.invalidateQueries({ queryKey: ['guides'] });
+  };
+
+  const voteHelpful = useMutation({
+    mutationFn: () => api.post(`/guides/${slug}/helpful`),
+    onSuccess: invalidate,
+  });
+
+  const submitEdit = useMutation({
+    mutationFn: (body: string) => api.post(`/guides/${slug}/edits`, { body }),
+    onSuccess: invalidate,
+  });
+
+  const voteEdit = useMutation({
+    mutationFn: (editId: number) => api.post(`/guides/${slug}/edits/${editId}/vote`),
+    onSuccess: invalidate,
+  });
+
+  const deleteEdit = useMutation({
+    mutationFn: (editId: number) => api.del(`/guides/${slug}/edits/${editId}`),
+    onSuccess: invalidate,
+  });
+
+  if (isLoading) return <LoadingState label="Loading guide…" />;
+  if (isError || !guide) {
+    const notFound = error instanceof ApiError && error.status === 404;
+    return notFound ? (
+      <ErrorState
+        title="This guide isn't here"
+        text="It may have been removed, or the link is wrong."
+        actionLabel="All guides"
+        onAction={() => navigate('/guides')}
+      />
+    ) : (
+      <ErrorState
+        title="Couldn't load this guide"
+        text="The connection may have dropped. Try again."
+        actionLabel="Try again"
+        onAction={() => refetch()}
+      />
+    );
+  }
 
   return (
     <div className={styles.page}>
@@ -105,6 +189,97 @@ export function GuidePage() {
       <article className={styles.article}>
         <GuideBody body={guide.body} />
       </article>
+
+      <div className={styles.helpfulRow}>
+        <button
+          className={`${styles.helpfulBtn} ${guide.your_helpful_vote ? styles.helpfulBtnOn : ''}`}
+          onClick={() => voteHelpful.mutate()}
+          aria-pressed={guide.your_helpful_vote}
+        >
+          👍 {guide.your_helpful_vote ? 'Marked helpful' : 'Was this helpful?'}
+          {guide.helpful_count > 0 ? ` · ${guide.helpful_count}` : ''}
+        </button>
+      </div>
+
+      {related.length > 0 && (
+        <section className={styles.section}>
+          <h2 className={styles.topic}>Try it in a recipe</h2>
+          <div className={styles.relatedGrid}>
+            {related.map((m) => (
+              <button key={m.id} className={styles.relatedCard} onClick={() => navigate(`/meals/${m.id}`)}>
+                <div className={styles.relatedPhoto} style={{ background: mealBackground(m.photo_url, m.cuisine) }} />
+                <span className={styles.relatedName}>{m.name}</span>
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
+
+      <section className={styles.section}>
+        <div className={styles.editHeadRow}>
+          <h2 className={styles.topic}>Suggest an improvement</h2>
+          <button
+            className={styles.suggestBtn}
+            onClick={() => {
+              setEditOpen((v) => !v);
+              setDraft(guide.body);
+            }}
+          >
+            {editOpen ? 'Cancel' : 'Edit this guide'}
+          </button>
+        </div>
+
+        {editOpen && (
+          <div className={styles.editForm}>
+            <textarea
+              className={styles.editTextarea}
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              rows={8}
+            />
+            <button
+              className={styles.editSubmit}
+              onClick={() => {
+                if (!draft.trim()) return;
+                submitEdit.mutate(draft.trim());
+                setEditOpen(false);
+              }}
+            >
+              Submit
+            </button>
+          </div>
+        )}
+
+        {edits.length > 0 && (
+          <div className={styles.editList}>
+            {edits.map((e, i) => (
+              <div key={e.id} className={`${styles.editRow} ${i === 0 ? styles.editRowWinner : ''}`}>
+                <span className={styles.editRowMeta}>
+                  {e.author_name ?? 'a former user'} · {e.votes} vote{e.votes === 1 ? '' : 's'}
+                  {i === 0 ? ' · live now' : ''}
+                </span>
+                <p className={styles.editRowBody}>{e.body}</p>
+                <div className={styles.editRowActions}>
+                  <button
+                    className={`${styles.editVoteBtn} ${e.voted_by_me ? styles.editVoteBtnOn : ''}`}
+                    onClick={() => voteEdit.mutate(e.id)}
+                    aria-pressed={e.voted_by_me}
+                  >
+                    {e.voted_by_me ? '✓' : '△'} {e.votes}
+                  </button>
+                  {e.is_mine ? (
+                    <button className={styles.editDeleteBtn} onClick={() => deleteEdit.mutate(e.id)}>
+                      Withdraw
+                    </button>
+                  ) : (
+                    <FlagButton contentType="guide_edit" contentId={e.id} />
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
     </div>
   );
 }

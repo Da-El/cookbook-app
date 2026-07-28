@@ -5,11 +5,13 @@ import type { IngredientDetail as Detail, Micros } from '../api/types';
 import { ChevronLeft } from '../components/Icon/Icon';
 import {
   CategoryEditSection,
+  DietFlagsEditSection,
   NutritionEditSection,
   PhotoEditSection,
   TextEditSection,
 } from '../components/EditVoting/EditVoting';
 import { AliasSection } from '../components/EditVoting/AliasSection';
+import { SubstituteSection } from '../components/EditVoting/SubstituteSection';
 import { LoadingState, ErrorState } from '../components/PageState/PageState';
 import { ingredientBackground } from '../lib/imagery';
 import styles from './IngredientDetail.module.css';
@@ -94,6 +96,16 @@ export function IngredientDetail() {
         {n && <span className={`${styles.tag} ${styles.source}`}>{n.source}</span>}
       </div>
 
+      {data.diet_flags.length > 0 && (
+        <div className={styles.chips} style={{ marginTop: 6 }}>
+          {data.diet_flags.map((f) => (
+            <span key={f} className={`${styles.tag} ${styles.dietFlag}`}>
+              {f.charAt(0).toUpperCase() + f.slice(1)}
+            </span>
+          ))}
+        </div>
+      )}
+
       {data.description ? (
         <p className={styles.desc}>{data.description}</p>
       ) : (
@@ -111,9 +123,11 @@ export function IngredientDetail() {
           placeholder="Rewrite the description…"
         />
         <CategoryEditSection ingredientId={data.id} />
+        <DietFlagsEditSection ingredientId={data.id} />
         <PhotoEditSection ingredientId={data.id} />
         <NutritionEditSection ingredientId={data.id} />
         <AliasSection ingredientId={data.id} />
+        <SubstituteSection ingredientId={data.id} />
       </div>
 
       {n && (
