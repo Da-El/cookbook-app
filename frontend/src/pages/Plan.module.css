@@ -168,6 +168,35 @@
   margin-top: 1px;
 }
 
+.plannedReorder {
+  display: flex;
+  flex-direction: column;
+  flex: none;
+  gap: 2px;
+}
+
+.plannedReorderBtn {
+  width: 16px;
+  height: 15px;
+  flex: none;
+  border: none;
+  background: var(--chip-bg);
+  border-radius: 4px;
+  color: var(--muted);
+  font-size: 8px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.plannedReorderBtn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
 .plannedActions {
   display: flex;
   flex: none;

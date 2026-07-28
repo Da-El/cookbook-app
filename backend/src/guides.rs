@@ -26,6 +26,7 @@ pub struct GuideSummary {
     pub helpful_count: i32,
     pub rating: f64,
     pub rating_count: i32,
+    pub is_saved: bool,
 }
 
 #[derive(Serialize, sqlx::FromRow)]
@@ -42,14 +43,22 @@ pub struct GuideDetail {
     pub rating: f64,
     pub rating_count: i32,
     pub your_rating: Option<i16>,
+    pub is_saved: bool,
 }
 
-pub async fn list(State(state): State<AppState>) -> Result<Json<Vec<GuideSummary>>, StatusCode> {
+pub async fn list(
+    State(state): State<AppState>,
+    user: Option<CurrentUser>,
+) -> Result<Json<Vec<GuideSummary>>, StatusCode> {
+    let viewer = user.map(|u| u.0.id);
     let rows = sqlx::query_as::<_, GuideSummary>(
         "SELECT id, slug, title, summary, topic, minutes, helpful_count,
-                rating::float8 AS rating, rating_count
+                rating::float8 AS rating, rating_count,
+                EXISTS (SELECT 1 FROM saved_guides sg
+                        WHERE sg.guide_id = guides.id AND sg.user_id = $1) AS is_saved
          FROM guides ORDER BY topic, position, title",
     )
+    .bind(viewer)
     .fetch_all(&state.db)
     .await
     .map_err(|e| {
@@ -70,7 +79,9 @@ pub async fn detail(
                 EXISTS (SELECT 1 FROM guide_votes v
                         WHERE v.guide_id = guides.id AND v.user_id = $2) AS your_helpful_vote,
                 rating::float8 AS rating, rating_count,
-                (SELECT value FROM ratings WHERE subject_type='guide' AND subject_id=guides.id AND user_id=$2) AS your_rating
+                (SELECT value FROM ratings WHERE subject_type='guide' AND subject_id=guides.id AND user_id=$2) AS your_rating,
+                EXISTS (SELECT 1 FROM saved_guides sg
+                        WHERE sg.guide_id = guides.id AND sg.user_id = $2) AS is_saved
          FROM guides WHERE slug = $1",
     )
     .bind(&slug)
@@ -80,6 +91,42 @@ pub async fn detail(
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
     .map(Json)
     .ok_or(StatusCode::NOT_FOUND)
+}
+
+/// Plain toggle, same shape as `meals::toggle_save` - no notification, since
+/// guides are curated content rather than something a person authored.
+pub async fn toggle_save(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Path(slug): Path<String>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    let guide_id: Option<i64> = sqlx::query_scalar("SELECT id FROM guides WHERE slug = $1")
+        .bind(&slug)
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let Some(guide_id) = guide_id else {
+        return Err(StatusCode::NOT_FOUND);
+    };
+
+    let deleted = sqlx::query("DELETE FROM saved_guides WHERE user_id=$1 AND guide_id=$2")
+        .bind(user.id)
+        .bind(guide_id)
+        .execute(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .rows_affected();
+
+    if deleted == 0 {
+        sqlx::query("INSERT INTO saved_guides (user_id, guide_id) VALUES ($1,$2) ON CONFLICT DO NOTHING")
+            .bind(user.id)
+            .bind(guide_id)
+            .execute(&state.db)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    }
+
+    Ok(Json(serde_json::json!({ "saved": deleted == 0 })))
 }
 
 #[derive(Deserialize)]

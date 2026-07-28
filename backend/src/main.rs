@@ -67,6 +67,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/auth/2fa/verify", post(auth::verify_two_factor))
         .route("/auth/2fa/enable", post(auth::enable_two_factor))
         .route("/auth/2fa/disable", post(auth::disable_two_factor))
+        .route("/auth/2fa/recovery-codes/regenerate", post(auth::regenerate_recovery_codes))
         .route("/auth/logout", post(auth::logout))
         .route("/auth/me", get(auth::me))
         .route("/auth/account", post(auth::update_account).delete(auth::delete_account))
@@ -159,12 +160,14 @@ async fn main() -> anyhow::Result<()> {
         // meal planning
         .route("/plan", get(planner::list_plan).post(planner::add_plan_entry))
         .route("/plan/{id}", post(planner::update_plan_entry).delete(planner::remove_plan_entry))
+        .route("/plan/{id}/move", post(planner::move_plan_entry))
         .route("/plan/grocery", get(planner::grocery_list))
         .route("/plan/grocery/push", post(planner::push_to_shopping))
         .route("/plan/suggestions", get(planner::suggestions))
         // guides
         .route("/guides", get(guides::list))
         .route("/guides/{slug}", get(guides::detail))
+        .route("/guides/{slug}/save", post(guides::toggle_save))
         .route("/guides/{slug}/helpful", post(guides::vote_helpful))
         .route("/guides/{slug}/rate", post(guides::rate))
         .route("/guides/{slug}/related-meals", get(guides::related_meals))

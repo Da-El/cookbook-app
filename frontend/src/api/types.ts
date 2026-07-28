@@ -105,6 +105,7 @@ export interface PlanEntry {
   photo_url: string | null;
   servings: number;
   rating: number;
+  position: number;
 }
 
 export interface GroceryItem {
@@ -158,6 +159,7 @@ export interface GuideSummary {
   helpful_count: number;
   rating: number;
   rating_count: number;
+  is_saved: boolean;
 }
 
 export interface GuideDetail extends GuideSummary {

@@ -32,6 +32,42 @@
   color: var(--ink);
 }
 
+.savedFilter {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 13px;
+  border-radius: 999px;
+  border: 1.5px solid var(--border-card);
+  background: var(--surface-card);
+  color: var(--secondary);
+  font: 700 12px var(--font-ui);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.savedFilterOn {
+  background: var(--accent-tint, var(--chip-bg));
+  color: var(--accent-dark, var(--ink));
+  border-color: var(--accent);
+}
+
+.bookmarkBtn {
+  margin-left: auto;
+  width: 40px;
+  height: 40px;
+  flex: none;
+  border-radius: 13px;
+  border: 1.5px solid var(--border-card);
+  background: var(--surface-card);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--ink);
+}
+
 .lede {
   margin-top: 12px;
   color: var(--secondary);

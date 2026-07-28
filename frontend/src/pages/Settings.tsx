@@ -5,6 +5,7 @@ import { api, ApiError } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 import { useColorScheme, type ColorScheme } from '../theme/ColorSchemeContext';
 import { ChevronLeft } from '../components/Icon/Icon';
+import { RecoveryCodes } from '../components/RecoveryCodes/RecoveryCodes';
 import styles from './Settings.module.css';
 
 const DIET_PREFS = ['Vegetarian', 'Vegan', 'Pescatarian', 'Gluten-free', 'Dairy-free', 'Nut-free'];
@@ -111,6 +112,7 @@ export function Settings() {
   const [diet, setDiet] = useState<string[]>([]);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [confirmLogoutAll, setConfirmLogoutAll] = useState(false);
+  const [revealedCodes, setRevealedCodes] = useState<string[] | null>(null);
 
   const [exporting, setExporting] = useState(false);
 
@@ -217,8 +219,17 @@ export function Settings() {
   });
 
   const toggleTwoFactor = useMutation({
-    mutationFn: (enabled: boolean) => api.post(`/auth/2fa/${enabled ? 'enable' : 'disable'}`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['settings'] }),
+    mutationFn: (enabled: boolean) =>
+      api.post<{ recovery_codes?: string[] }>(`/auth/2fa/${enabled ? 'enable' : 'disable'}`),
+    onSuccess: (res) => {
+      qc.invalidateQueries({ queryKey: ['settings'] });
+      if (res.recovery_codes) setRevealedCodes(res.recovery_codes);
+    },
+  });
+
+  const regenerateRecovery = useMutation({
+    mutationFn: () => api.post<{ recovery_codes: string[] }>('/auth/2fa/recovery-codes/regenerate'),
+    onSuccess: (res) => setRevealedCodes(res.recovery_codes),
   });
 
   const toggleNotifPref = useMutation({
@@ -469,7 +480,29 @@ export function Settings() {
               {settings.two_factor_enabled ? 'On' : 'Off'}
             </button>
           </div>
+          {settings.two_factor_enabled && (
+            <div className={styles.visRow}>
+              <div>
+                <div className={styles.visLabel}>Recovery codes</div>
+                <div className={styles.visSub}>
+                  For when you can't receive the emailed code. Regenerating replaces your
+                  existing codes - old ones stop working.
+                </div>
+              </div>
+              <button
+                className={styles.sessionRevoke}
+                disabled={regenerateRecovery.isPending}
+                onClick={() => regenerateRecovery.mutate()}
+              >
+                Regenerate
+              </button>
+            </div>
+          )}
         </div>
+      )}
+
+      {revealedCodes && (
+        <RecoveryCodes codes={revealedCodes} onClose={() => setRevealedCodes(null)} />
       )}
 
       {loginHistory.length > 0 && (

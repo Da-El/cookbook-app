@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 import { useToast } from '../components/Toast/ToastContext';
-import { ChevronLeft, CameraIcon, ShareIcon, PlayIcon, PencilIcon, ForkIcon, CopyIcon, PrintIcon } from '../components/Icon/Icon';
+import { ChevronLeft, CameraIcon, ShareIcon, PlayIcon, PencilIcon, ForkIcon, CopyIcon, PrintIcon, CloseIcon } from '../components/Icon/Icon';
 import { Avatar } from '../components/Avatar/Avatar';
 import { LoadingState, ErrorState } from '../components/PageState/PageState';
 import { FlagButton } from '../components/Flag/FlagButton';
@@ -113,6 +113,7 @@ interface JournalEntry {
   note: string | null;
   score: number | null;
   cooked_at: string;
+  photo_url: string | null;
 }
 
 interface MealReview {
@@ -131,6 +132,7 @@ interface MealReview {
   author_tier: ContributorTier;
   replies: ReviewReply[];
   edited_at: string | null;
+  photo_url: string | null;
 }
 
 const REVIEW_SORTS: [string, string][] = [
@@ -171,10 +173,12 @@ export function MealDetail() {
   const [params, setParams] = useSearchParams();
   const [showPrompt, setShowPrompt] = useState(params.get('justCooked') === '1');
   const [note, setNote] = useState('');
+  const [notePhoto, setNotePhoto] = useState<string | null>(null);
   const [reviewSort, setReviewSort] = useState('helpful');
   const [editingReviewId, setEditingReviewId] = useState<number | null>(null);
   const [editNote, setEditNote] = useState('');
   const [editScore, setEditScore] = useState<number | null>(null);
+  const [editPhoto, setEditPhoto] = useState<string | null>(null);
   // null until the recipe's own serving count is known, so the stepper opens
   // on "however many this recipe actually makes" rather than an arbitrary 4.
   const [cookingFor, setCookingFor] = useState<number | null>(null);
@@ -235,8 +239,17 @@ export function MealDetail() {
   });
 
   const updateReview = useMutation({
-    mutationFn: ({ reviewId, note, score }: { reviewId: number; note: string; score: number | null }) =>
-      api.put(`/meals/${id}/reviews/${reviewId}`, { note, score }),
+    mutationFn: ({
+      reviewId,
+      note,
+      score,
+      photo_url,
+    }: {
+      reviewId: number;
+      note: string;
+      score: number | null;
+      photo_url: string | null;
+    }) => api.put(`/meals/${id}/reviews/${reviewId}`, { note, score, photo_url }),
     onSuccess: () => {
       setEditingReviewId(null);
       qc.invalidateQueries({ queryKey: ['meal-reviews', id] });
@@ -265,7 +278,8 @@ export function MealDetail() {
   });
 
   const cook = useMutation({
-    mutationFn: (body: { note?: string; score?: number }) => api.post(`/meals/${id}/cook`, body),
+    mutationFn: (body: { note?: string; score?: number; photo_url?: string }) =>
+      api.post(`/meals/${id}/cook`, body),
     onSuccess: () => {
       invalidateMeal();
       qc.invalidateQueries({ queryKey: ['meal-journal', id] });
@@ -366,9 +380,10 @@ export function MealDetail() {
 
   function saveNote() {
     const trimmed = note.trim();
-    if (trimmed) cook.mutate({ note: trimmed });
+    if (trimmed) cook.mutate({ note: trimmed, photo_url: notePhoto ?? undefined });
     setShowPrompt(false);
     setNote('');
+    setNotePhoto(null);
     params.delete('justCooked');
     setParams(params, { replace: true });
   }
@@ -376,6 +391,7 @@ export function MealDetail() {
   function skipNote() {
     setShowPrompt(false);
     setNote('');
+    setNotePhoto(null);
     params.delete('justCooked');
     setParams(params, { replace: true });
   }
@@ -631,6 +647,27 @@ export function MealDetail() {
             onChange={(e) => setNote(e.target.value)}
             placeholder="Any notes for next time? (optional)"
           />
+          {notePhoto ? (
+            <div className={styles.notePhotoPreview}>
+              <img src={notePhoto} alt="" className={styles.notePhotoThumb} />
+              <button
+                type="button"
+                className={styles.notePhotoRemove}
+                onClick={() => setNotePhoto(null)}
+                aria-label="Remove photo"
+              >
+                <CloseIcon size={13} strokeWidth={2.2} />
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              className={styles.notePhotoAdd}
+              onClick={() => pickImage(setNotePhoto)}
+            >
+              <CameraIcon size={14} strokeWidth={1.8} /> Add a photo
+            </button>
+          )}
           <div className={styles.notePromptRow}>
             <button className={styles.notePromptSkip} onClick={skipNote}>Skip</button>
             <button className={styles.notePromptSave} onClick={saveNote}>Save note</button>
@@ -865,12 +902,38 @@ export function MealDetail() {
                           </button>
                         ))}
                       </span>
+                      {editPhoto ? (
+                        <span className={styles.notePhotoPreview}>
+                          <img src={editPhoto} alt="" className={styles.notePhotoThumb} />
+                          <button
+                            type="button"
+                            className={styles.notePhotoRemove}
+                            onClick={() => setEditPhoto(null)}
+                            aria-label="Remove photo"
+                          >
+                            <CloseIcon size={13} strokeWidth={2.2} />
+                          </button>
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          className={styles.notePhotoAdd}
+                          onClick={() => pickImage(setEditPhoto)}
+                        >
+                          <CameraIcon size={14} strokeWidth={1.8} /> Add a photo
+                        </button>
+                      )}
                       <span className={styles.reviewEditActions}>
                         <button
                           className={styles.reviewEditSave}
                           disabled={!editNote.trim() || updateReview.isPending}
                           onClick={() =>
-                            updateReview.mutate({ reviewId: r.id, note: editNote.trim(), score: editScore })
+                            updateReview.mutate({
+                              reviewId: r.id,
+                              note: editNote.trim(),
+                              score: editScore,
+                              photo_url: editPhoto,
+                            })
                           }
                         >
                           Save
@@ -881,7 +944,12 @@ export function MealDetail() {
                       </span>
                     </span>
                   ) : (
-                    <span className={styles.reviewNote}>{r.note}</span>
+                    <>
+                      <span className={styles.reviewNote}>{r.note}</span>
+                      {r.photo_url && (
+                        <img src={r.photo_url} alt="" className={styles.reviewPhoto} />
+                      )}
+                    </>
                   )}
                   {!r.is_current_version && (
                     <span className={styles.reviewStale}>Written about an earlier version of this recipe</span>
@@ -902,6 +970,7 @@ export function MealDetail() {
                           setEditingReviewId(r.id);
                           setEditNote(r.note ?? '');
                           setEditScore(r.score);
+                          setEditPhoto(r.photo_url);
                         }}
                       >
                         Edit
@@ -924,6 +993,7 @@ export function MealDetail() {
             <div key={j.id} className={styles.journalEntry}>
               <div className={styles.journalDate}>{formatDate(j.cooked_at)}</div>
               <div className={styles.journalNote}>{j.note}</div>
+              {j.photo_url && <img src={j.photo_url} alt="" className={styles.reviewPhoto} />}
             </div>
           ))}
         </div>

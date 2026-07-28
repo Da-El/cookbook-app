@@ -40,6 +40,9 @@ pub struct PlanEntry {
     /// cook, not just a name - a 9.2 and a 4.1 read very differently next to
     /// each other even before you open either recipe.
     pub rating: f64,
+    /// Order among sibling entries sharing the same day and slot (e.g. two
+    /// snacks) - across slots, `SLOTS`' own order already does the job.
+    pub position: i32,
 }
 
 #[derive(Deserialize)]
@@ -67,10 +70,10 @@ pub async fn list_plan(
     checked_range(&p)?;
     let rows = sqlx::query_as::<_, PlanEntry>(
         "SELECT e.id, e.plan_date, e.slot, e.meal_id, m.name AS meal_name, m.cuisine,
-                m.time_minutes, m.photo_url, e.servings, m.rating::float8 AS rating
+                m.time_minutes, m.photo_url, e.servings, m.rating::float8 AS rating, e.position
          FROM meal_plan_entries e JOIN meals m ON m.id = e.meal_id AND m.status = 'live'
          WHERE e.user_id = $1 AND e.plan_date BETWEEN $2 AND $3
-         ORDER BY e.plan_date, e.id",
+         ORDER BY e.plan_date, e.slot, e.position, e.id",
     )
     .bind(user.id)
     .bind(p.from)
@@ -99,10 +102,10 @@ pub async fn chef_plan(
     }
     let rows = sqlx::query_as::<_, PlanEntry>(
         "SELECT e.id, e.plan_date, e.slot, e.meal_id, m.name AS meal_name, m.cuisine,
-                m.time_minutes, m.photo_url, e.servings, m.rating::float8 AS rating
+                m.time_minutes, m.photo_url, e.servings, m.rating::float8 AS rating, e.position
          FROM meal_plan_entries e JOIN meals m ON m.id = e.meal_id AND m.status = 'live'
          WHERE e.user_id = $1 AND e.plan_date BETWEEN $2 AND $3
-         ORDER BY e.plan_date, e.id",
+         ORDER BY e.plan_date, e.slot, e.position, e.id",
     )
     .bind(id)
     .bind(p.from)
@@ -130,9 +133,14 @@ pub async fn add_plan_entry(
         return Err(StatusCode::BAD_REQUEST);
     }
     let servings = b.servings.unwrap_or(1).clamp(1, 50);
+    // Lands after every existing entry in the same day+slot, same as
+    // appending to a list - a fresh addition doesn't jump the queue.
     let id: i64 = sqlx::query_scalar(
-        "INSERT INTO meal_plan_entries (user_id, plan_date, slot, meal_id, servings)
-         VALUES ($1,$2,$3,$4,$5) RETURNING id",
+        "INSERT INTO meal_plan_entries (user_id, plan_date, slot, meal_id, servings, position)
+         VALUES ($1,$2,$3,$4,$5,
+                 COALESCE((SELECT max(position) + 1 FROM meal_plan_entries
+                           WHERE user_id = $1 AND plan_date = $2 AND slot = $3), 0))
+         RETURNING id",
     )
     .bind(user.id)
     .bind(b.plan_date)
@@ -143,6 +151,76 @@ pub async fn add_plan_entry(
     .await
     .map_err(db_err)?;
     Ok((StatusCode::CREATED, Json(serde_json::json!({ "id": id }))))
+}
+
+#[derive(Deserialize)]
+pub struct MovePlanEntry {
+    pub direction: String,
+}
+
+/// Swaps this entry's position with its neighbor on the given side, within
+/// the same day+slot group - a no-op (still 204) if it's already first/last,
+/// so the frontend can fire this from an always-enabled button pair without
+/// first checking whether the move is possible.
+pub async fn move_plan_entry(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Path(id): Path<i64>,
+    Json(b): Json<MovePlanEntry>,
+) -> Result<StatusCode, StatusCode> {
+    if b.direction != "up" && b.direction != "down" {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+
+    let mut tx = state.db.begin().await.map_err(db_err)?;
+
+    let entry: Option<(NaiveDate, String, i32)> = sqlx::query_as(
+        "SELECT plan_date, slot, position FROM meal_plan_entries WHERE id = $1 AND user_id = $2",
+    )
+    .bind(id)
+    .bind(user.id)
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(db_err)?;
+    let Some((plan_date, slot, position)) = entry else {
+        return Err(StatusCode::NOT_FOUND);
+    };
+
+    let neighbor_sql = if b.direction == "up" {
+        "SELECT id, position FROM meal_plan_entries
+         WHERE user_id = $1 AND plan_date = $2 AND slot = $3 AND position < $4
+         ORDER BY position DESC LIMIT 1"
+    } else {
+        "SELECT id, position FROM meal_plan_entries
+         WHERE user_id = $1 AND plan_date = $2 AND slot = $3 AND position > $4
+         ORDER BY position ASC LIMIT 1"
+    };
+    let neighbor: Option<(i64, i32)> = sqlx::query_as(neighbor_sql)
+        .bind(user.id)
+        .bind(plan_date)
+        .bind(&slot)
+        .bind(position)
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(db_err)?;
+
+    if let Some((neighbor_id, neighbor_position)) = neighbor {
+        sqlx::query("UPDATE meal_plan_entries SET position = $1 WHERE id = $2")
+            .bind(neighbor_position)
+            .bind(id)
+            .execute(&mut *tx)
+            .await
+            .map_err(db_err)?;
+        sqlx::query("UPDATE meal_plan_entries SET position = $1 WHERE id = $2")
+            .bind(position)
+            .bind(neighbor_id)
+            .execute(&mut *tx)
+            .await
+            .map_err(db_err)?;
+    }
+
+    tx.commit().await.map_err(db_err)?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 pub async fn remove_plan_entry(

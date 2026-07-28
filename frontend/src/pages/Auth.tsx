@@ -20,6 +20,8 @@ export function Auth() {
   // non-null the form below shows the code prompt instead of email/password.
   const [challenge, setChallenge] = useState<string | null>(null);
   const [code, setCode] = useState('');
+  const [useRecoveryCode, setUseRecoveryCode] = useState(false);
+  const [recoveryCode, setRecoveryCode] = useState('');
 
   const isSignup = mode === 'signup';
   const isForgot = mode === 'forgot';
@@ -57,7 +59,11 @@ export function Auth() {
     setError(null);
     setBusy(true);
     try {
-      await verifyTwoFactor(challenge, code.trim());
+      if (useRecoveryCode) {
+        await verifyTwoFactor(challenge, { recoveryCode: recoveryCode.trim() });
+      } else {
+        await verifyTwoFactor(challenge, { code: code.trim() });
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong.');
     } finally {
@@ -71,6 +77,8 @@ export function Auth() {
     setResetSent(false);
     setChallenge(null);
     setCode('');
+    setUseRecoveryCode(false);
+    setRecoveryCode('');
   }
 
   return (
@@ -85,22 +93,55 @@ export function Auth() {
           {challenge ? (
             <form className={styles.form} onSubmit={onVerify}>
               {error && <p className={styles.error}>{error}</p>}
-              <p className={styles.forgotHint}>
-                We sent a 6-digit code to your email. It expires in 10 minutes.
-              </p>
-              <Input
-                label="Code"
-                inputMode="numeric"
-                value={code}
-                onChange={(e) => setCode(e.target.value)}
-                autoComplete="one-time-code"
-                maxLength={6}
-                autoFocus
-                required
-              />
-              <Button type="submit" fullWidth disabled={busy || code.trim().length !== 6}>
-                {busy ? 'Checking…' : 'Verify'}
-              </Button>
+              {useRecoveryCode ? (
+                <>
+                  <p className={styles.forgotHint}>
+                    Enter one of the recovery codes you saved when you turned on two-factor
+                    authentication. Each code only works once.
+                  </p>
+                  <Input
+                    label="Recovery code"
+                    value={recoveryCode}
+                    onChange={(e) => setRecoveryCode(e.target.value)}
+                    placeholder="XXXXX-XXXXX"
+                    autoComplete="off"
+                    autoFocus
+                    required
+                  />
+                  <Button type="submit" fullWidth disabled={busy || !recoveryCode.trim()}>
+                    {busy ? 'Checking…' : 'Verify'}
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <p className={styles.forgotHint}>
+                    We sent a 6-digit code to your email. It expires in 10 minutes.
+                  </p>
+                  <Input
+                    label="Code"
+                    inputMode="numeric"
+                    value={code}
+                    onChange={(e) => setCode(e.target.value)}
+                    autoComplete="one-time-code"
+                    maxLength={6}
+                    autoFocus
+                    required
+                  />
+                  <Button type="submit" fullWidth disabled={busy || code.trim().length !== 6}>
+                    {busy ? 'Checking…' : 'Verify'}
+                  </Button>
+                </>
+              )}
+              <button
+                type="button"
+                className={styles.forgotLink}
+                onClick={() => {
+                  setError(null);
+                  setUseRecoveryCode((v) => !v);
+                }}
+              >
+                {useRecoveryCode ? "Use my emailed code instead" : "Can't access your email? Use a recovery code"}
+              </button>
               <button type="button" className={styles.forgotLink} onClick={() => switchMode('login')}>
                 Back to sign in
               </button>

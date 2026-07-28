@@ -1,0 +1,83 @@
+.scrim {
+  position: fixed;
+  inset: 0;
+  background: rgba(30, 20, 10, 0.32);
+  z-index: 52;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.sheet {
+  width: min(420px, 100%);
+  max-height: 85vh;
+  overflow-y: auto;
+  background: var(--surface-card);
+  border-radius: 22px;
+  border: 1px solid var(--border-hairline);
+  padding: 20px;
+  box-shadow: 0 -18px 44px -20px rgba(30, 20, 10, 0.5);
+}
+
+.sheetHead {
+  margin-bottom: 8px;
+}
+
+.sheetTitle {
+  font-family: var(--font-display);
+  font-size: 19px;
+  color: var(--ink);
+}
+
+.hint {
+  color: var(--secondary);
+  font: 400 13px var(--font-ui);
+  line-height: 1.5;
+  margin: 0 0 16px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  padding: 14px;
+  background: var(--bg-page);
+  border: 1px solid var(--border-hairline);
+  border-radius: 14px;
+  margin-bottom: 14px;
+}
+
+.code {
+  font: 700 13.5px var(--font-mono, monospace);
+  color: var(--ink);
+  letter-spacing: 0.02em;
+  text-align: center;
+}
+
+.copyBtn {
+  width: 100%;
+  padding: 10px;
+  border-radius: 12px;
+  border: 1.5px solid var(--border-card);
+  background: var(--surface-card);
+  color: var(--ink);
+  font: 700 13px var(--font-ui);
+  cursor: pointer;
+  margin-bottom: 8px;
+}
+
+.doneBtn {
+  width: 100%;
+  padding: 10px;
+  border-radius: 12px;
+  border: none;
+  background: var(--ink-solid);
+  color: var(--on-ink-solid);
+  font: 700 13px var(--font-ui);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}

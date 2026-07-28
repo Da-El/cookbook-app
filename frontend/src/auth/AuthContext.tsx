@@ -12,7 +12,7 @@ interface AuthValue {
   user: UserProfile | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<LoginOutcome>;
-  verifyTwoFactor: (challenge: string, code: string) => Promise<void>;
+  verifyTwoFactor: (challenge: string, opts: { code?: string; recoveryCode?: string }) => Promise<void>;
   register: (email: string, password: string, displayName: string) => Promise<void>;
   logout: () => Promise<void>;
 }
@@ -43,7 +43,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   });
 
   const verifyMut = useMutation({
-    mutationFn: (v: { challenge: string; code: string }) => api.post<UserProfile>('/auth/2fa/verify', v),
+    mutationFn: (v: { challenge: string; code?: string; recovery_code?: string }) =>
+      api.post<UserProfile>('/auth/2fa/verify', v),
     onSuccess: setUser,
   });
 
@@ -64,8 +65,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(res as UserProfile);
       return { twoFactorRequired: false };
     },
-    verifyTwoFactor: async (challenge, code) => {
-      await verifyMut.mutateAsync({ challenge, code });
+    verifyTwoFactor: async (challenge, { code, recoveryCode }) => {
+      await verifyMut.mutateAsync({ challenge, code, recovery_code: recoveryCode });
     },
     register: async (email, password, display_name) => {
       await registerMut.mutateAsync({ email, password, display_name });

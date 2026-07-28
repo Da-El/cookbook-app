@@ -163,6 +163,12 @@ export function Plan() {
     },
   });
 
+  const moveEntry = useMutation({
+    mutationFn: ({ id, direction }: { id: number; direction: 'up' | 'down' }) =>
+      api.post(`/plan/${id}/move`, { direction }),
+    onSuccess: invalidate,
+  });
+
   const [ticked, setTicked] = useState<Set<string>>(new Set());
   const toggleTick = (key: string) =>
     setTicked((prev) => {
@@ -254,8 +260,28 @@ export function Plan() {
                     return (
                       <div key={slot} className={styles.slot}>
                         <div className={styles.slotLabel}>{SLOT_LABEL[slot]}</div>
-                        {inSlot.map((e) => (
+                        {inSlot.map((e, i) => (
                           <div key={e.id} className={styles.planned}>
+                            {inSlot.length > 1 && (
+                              <div className={styles.plannedReorder}>
+                                <button
+                                  className={styles.plannedReorderBtn}
+                                  disabled={i === 0 || moveEntry.isPending}
+                                  onClick={() => moveEntry.mutate({ id: e.id, direction: 'up' })}
+                                  aria-label={`Move ${e.meal_name} earlier`}
+                                >
+                                  ▲
+                                </button>
+                                <button
+                                  className={styles.plannedReorderBtn}
+                                  disabled={i === inSlot.length - 1 || moveEntry.isPending}
+                                  onClick={() => moveEntry.mutate({ id: e.id, direction: 'down' })}
+                                  aria-label={`Move ${e.meal_name} later`}
+                                >
+                                  ▼
+                                </button>
+                              </div>
+                            )}
                             <button
                               className={styles.plannedOpen}
                               onClick={() => navigate(`/meals/${e.meal_id}`)}

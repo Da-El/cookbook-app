@@ -22,6 +22,7 @@ const MAX_RESET_ATTEMPTS: i64 = 5;
 const RESET_ATTEMPT_WINDOW_MINS: i64 = 60;
 const TWO_FACTOR_CODE_MINUTES: i64 = 10;
 const TWO_FACTOR_MAX_ATTEMPTS: i16 = 5;
+const RECOVERY_CODE_COUNT: usize = 10;
 
 #[derive(Deserialize)]
 pub struct Credentials {
@@ -385,15 +386,22 @@ pub async fn login(
 #[derive(Deserialize)]
 pub struct TwoFactorVerify {
     pub challenge: String,
-    pub code: String,
+    #[serde(default)]
+    pub code: Option<String>,
+    /// Alternative to `code` for when the emailed code is unreachable - one
+    /// of the codes shown when 2FA was enabled. Exactly one of the two
+    /// should be set; `code` wins if a client sends both.
+    #[serde(default)]
+    pub recovery_code: Option<String>,
 }
 
-/// The second step of a 2FA login: exchanges a challenge + the emailed code
-/// for the same cookie+profile response a normal `login` would have given
-/// directly. Wrong code just increments `attempts` on the same challenge
-/// row rather than failing it outright - a mistyped digit shouldn't force
-/// starting over from the password - but once `attempts` hits the cap the
-/// challenge is spent regardless, so brute-forcing the 6-digit space isn't
+/// The second step of a 2FA login: exchanges a challenge + either the
+/// emailed code or a recovery code for the same cookie+profile response a
+/// normal `login` would have given directly. Wrong code just increments
+/// `attempts` on the same challenge row rather than failing it outright - a
+/// mistyped digit shouldn't force starting over from the password - but
+/// once `attempts` hits the cap the challenge is spent regardless, so
+/// brute-forcing the 6-digit space (or the recovery-code space) isn't
 /// viable within one challenge's lifetime.
 pub async fn verify_two_factor(
     State(state): State<AppState>,
@@ -402,6 +410,8 @@ pub async fn verify_two_factor(
     Json(body): Json<TwoFactorVerify>,
 ) -> Result<(CookieJar, Json<UserProfile>), (StatusCode, Json<serde_json::Value>)> {
     let invalid = || err(StatusCode::UNAUTHORIZED, "That code isn't right. Check your email and try again.");
+    let invalid_recovery =
+        || err(StatusCode::UNAUTHORIZED, "That recovery code isn't right or has already been used.");
 
     let row: Option<(i64, i64, Vec<u8>, i16, DateTime<Utc>)> = sqlx::query_as(
         "SELECT id, user_id, code_hash, attempts, expires_at
@@ -421,13 +431,44 @@ pub async fn verify_two_factor(
         return Err(err(StatusCode::BAD_REQUEST, "That code has expired. Sign in again to get a new one."));
     }
 
-    if hash_token(body.code.trim()) != code_hash {
-        sqlx::query("UPDATE two_factor_codes SET attempts = attempts + 1 WHERE id = $1")
-            .bind(row_id)
-            .execute(&state.db)
-            .await
-            .ok();
-        return Err(invalid());
+    let recovery_attempt = match &body.code {
+        Some(_) => None,
+        None => body.recovery_code.as_deref(),
+    };
+
+    if let Some(recovery_code) = recovery_attempt {
+        let normalized: String = recovery_code.chars().filter(|c| !c.is_whitespace()).collect();
+        let used: Option<i64> = sqlx::query_scalar(
+            "UPDATE two_factor_recovery_codes SET used_at = now()
+             WHERE user_id = $1 AND code_hash = $2 AND used_at IS NULL
+             RETURNING id",
+        )
+        .bind(user_id)
+        .bind(hash_token(&normalized.to_uppercase()))
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|_| oops())?;
+
+        if used.is_none() {
+            sqlx::query("UPDATE two_factor_codes SET attempts = attempts + 1 WHERE id = $1")
+                .bind(row_id)
+                .execute(&state.db)
+                .await
+                .ok();
+            return Err(invalid_recovery());
+        }
+    } else {
+        let Some(code) = body.code.as_deref() else {
+            return Err(invalid());
+        };
+        if hash_token(code.trim()) != code_hash {
+            sqlx::query("UPDATE two_factor_codes SET attempts = attempts + 1 WHERE id = $1")
+                .bind(row_id)
+                .execute(&state.db)
+                .await
+                .ok();
+            return Err(invalid());
+        }
     }
 
     sqlx::query("DELETE FROM two_factor_codes WHERE id = $1").bind(row_id).execute(&state.db).await.ok();
@@ -456,15 +497,23 @@ pub async fn verify_two_factor(
     ))
 }
 
-pub async fn enable_two_factor(State(state): State<AppState>, CurrentUser(user): CurrentUser) -> StatusCode {
-    match sqlx::query("UPDATE users SET two_factor_enabled = true WHERE id = $1")
+/// Turning 2FA on immediately mints a fresh set of recovery codes and
+/// returns them in the clear - the only time they're ever readable again,
+/// same as the enable step for most 2FA implementations. If the email
+/// account backing sign-in ever becomes unreachable, one of these substitutes
+/// for the emailed code at `verify_two_factor`.
+pub async fn enable_two_factor(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    sqlx::query("UPDATE users SET two_factor_enabled = true WHERE id = $1")
         .bind(user.id)
         .execute(&state.db)
         .await
-    {
-        Ok(_) => StatusCode::NO_CONTENT,
-        Err(_) => StatusCode::INTERNAL_SERVER_ERROR,
-    }
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let codes = issue_recovery_codes(&state, user.id).await?;
+    Ok(Json(serde_json::json!({ "recovery_codes": codes })))
 }
 
 pub async fn disable_two_factor(State(state): State<AppState>, CurrentUser(user): CurrentUser) -> StatusCode {
@@ -473,9 +522,73 @@ pub async fn disable_two_factor(State(state): State<AppState>, CurrentUser(user)
         .execute(&state.db)
         .await
     {
-        Ok(_) => StatusCode::NO_CONTENT,
+        Ok(_) => {
+            // No longer meaningful once there's nothing to recover into.
+            sqlx::query("DELETE FROM two_factor_recovery_codes WHERE user_id = $1")
+                .bind(user.id)
+                .execute(&state.db)
+                .await
+                .ok();
+            StatusCode::NO_CONTENT
+        }
         Err(_) => StatusCode::INTERNAL_SERVER_ERROR,
     }
+}
+
+/// Discards any unused codes from a prior batch and mints a fresh set - for
+/// "I think someone's seen my codes" or just running low. Requires 2FA to
+/// already be on; turning it on is what should hand you your first batch.
+pub async fn regenerate_recovery_codes(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+) -> Result<Json<serde_json::Value>, (StatusCode, Json<serde_json::Value>)> {
+    let enabled: bool = sqlx::query_scalar("SELECT two_factor_enabled FROM users WHERE id = $1")
+        .bind(user.id)
+        .fetch_one(&state.db)
+        .await
+        .map_err(|_| oops())?;
+    if !enabled {
+        return Err(err(StatusCode::BAD_REQUEST, "Turn on two-factor authentication first."));
+    }
+
+    let codes = issue_recovery_codes(&state, user.id).await.map_err(|_| oops())?;
+    Ok(Json(serde_json::json!({ "recovery_codes": codes })))
+}
+
+/// Replaces the user's whole recovery-code set: old codes (used or not) are
+/// discarded so a stale batch can't linger as a second, forgotten set of
+/// valid codes alongside the new one.
+async fn issue_recovery_codes(state: &AppState, user_id: i64) -> Result<Vec<String>, StatusCode> {
+    sqlx::query("DELETE FROM two_factor_recovery_codes WHERE user_id = $1")
+        .bind(user_id)
+        .execute(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let mut codes = Vec::with_capacity(RECOVERY_CODE_COUNT);
+    for _ in 0..RECOVERY_CODE_COUNT {
+        let code = new_recovery_code();
+        sqlx::query("INSERT INTO two_factor_recovery_codes (user_id, code_hash) VALUES ($1,$2)")
+            .bind(user_id)
+            .bind(hash_token(&code))
+            .execute(&state.db)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        codes.push(code);
+    }
+    Ok(codes)
+}
+
+/// Groups of 5 from an alphabet with ambiguous characters (0/O, 1/I/L)
+/// removed - these get hand-copied or typed under stress, so legibility
+/// matters more than entropy density.
+fn new_recovery_code() -> String {
+    const ALPHABET: &[u8] = b"ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+    fn group() -> String {
+        let mut rng = rand::rng();
+        (0..5).map(|_| ALPHABET[rng.random_range(0..ALPHABET.len())] as char).collect()
+    }
+    format!("{}-{}", group(), group())
 }
 
 fn new_two_factor_code() -> String {

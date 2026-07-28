@@ -339,6 +339,62 @@
   box-sizing: border-box;
 }
 
+.notePhotoAdd {
+  margin-top: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border-radius: 999px;
+  border: 1.5px solid var(--border-card);
+  background: var(--surface-card);
+  color: var(--secondary);
+  font: 700 12px var(--font-ui);
+  cursor: pointer;
+}
+
+.notePhotoPreview {
+  position: relative;
+  display: inline-block;
+  margin-top: 10px;
+}
+
+.notePhotoThumb {
+  width: 72px;
+  height: 72px;
+  object-fit: cover;
+  border-radius: 12px;
+  border: 1px solid var(--border-hairline);
+  display: block;
+}
+
+.notePhotoRemove {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  border: 1.5px solid var(--surface-card);
+  background: var(--ink-solid);
+  color: var(--on-ink-solid);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.reviewPhoto {
+  margin-top: 8px;
+  max-width: 220px;
+  max-height: 220px;
+  width: auto;
+  border-radius: 14px;
+  border: 1px solid var(--border-hairline);
+  display: block;
+  object-fit: cover;
+}
+
 .notePromptRow {
   display: flex;
   gap: 9px;

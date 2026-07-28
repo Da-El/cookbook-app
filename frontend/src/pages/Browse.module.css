@@ -158,6 +158,70 @@
   border-color: var(--ink-solid);
 }
 
+.presetChip {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  border-radius: 999px;
+  border: 1px solid var(--accent);
+  overflow: hidden;
+}
+
+.presetChipApply {
+  padding: 9px 6px 9px 15px;
+  border: none;
+  background: var(--accent-tint);
+  color: var(--accent-dark);
+  font: 700 13px var(--font-ui);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.presetChipRemove {
+  padding: 9px 13px 9px 6px;
+  border: none;
+  background: var(--accent-tint);
+  color: var(--accent-dark);
+  font: 700 13px var(--font-ui);
+  cursor: pointer;
+  opacity: 0.7;
+}
+
+.presetSaveForm {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.presetSaveInput {
+  padding: 8px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border-chip);
+  background: var(--surface-card);
+  color: var(--ink);
+  font: 600 13px var(--font-ui);
+  width: 160px;
+}
+
+.presetSaveConfirm {
+  flex: none;
+  padding: 9px 15px;
+  border-radius: 999px;
+  border: none;
+  background: var(--accent);
+  color: #fff;
+  font: 700 13px var(--font-ui);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.presetSaveConfirm:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 .sortChip {
   padding: 6px 10px;
   font-size: 11px;

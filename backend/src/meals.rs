@@ -1658,6 +1658,7 @@ pub struct CookBody {
     pub note: Option<String>,
     pub score: Option<i16>,
     pub is_public: Option<bool>,
+    pub photo_url: Option<String>,
 }
 
 pub async fn cook(
@@ -1712,14 +1713,15 @@ pub async fn cook(
                 .unwrap_or(0);
 
         sqlx::query(
-            "INSERT INTO reviews (user_id, meal_id, score, note, is_public, meal_revision_count)
-             VALUES ($1,$2,$3,$4,$5,$6)",
+            "INSERT INTO reviews (user_id, meal_id, score, note, is_public, meal_revision_count, photo_url)
+             VALUES ($1,$2,$3,$4,$5,$6,$7)",
         )
         .bind(user.id).bind(id)
         .bind(body.score)
         .bind(body.note.as_deref().map(str::trim).filter(|s| !s.is_empty()))
         .bind(body.is_public.unwrap_or(true))
         .bind(revision_count)
+        .bind(body.photo_url.as_deref())
         .execute(&mut *tx).await.ok();
     }
 
@@ -1824,6 +1826,7 @@ pub struct JournalEntry {
     pub note: Option<String>,
     pub score: Option<i16>,
     pub cooked_at: chrono::DateTime<chrono::Utc>,
+    pub photo_url: Option<String>,
 }
 
 /// The viewer's own cooking notes for this meal - private, newest first.
@@ -1833,7 +1836,7 @@ pub async fn my_journal(
     Path(id): Path<i64>,
 ) -> Result<Json<Vec<JournalEntry>>, StatusCode> {
     let rows = sqlx::query_as::<_, JournalEntry>(
-        "SELECT id, note, score, cooked_at FROM reviews
+        "SELECT id, note, score, cooked_at, photo_url FROM reviews
          WHERE user_id = $1 AND meal_id = $2 AND note IS NOT NULL
          ORDER BY cooked_at DESC",
     )
@@ -1865,6 +1868,7 @@ struct MealReviewRow {
     your_helpful_vote: bool,
     author_tier: String,
     edited_at: Option<chrono::DateTime<chrono::Utc>>,
+    photo_url: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -1887,6 +1891,7 @@ pub struct MealReview {
     pub author_tier: String,
     pub replies: Vec<ReviewReply>,
     pub edited_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub photo_url: Option<String>,
 }
 
 impl From<MealReviewRow> for MealReview {
@@ -1907,6 +1912,7 @@ impl From<MealReviewRow> for MealReview {
             author_tier: r.author_tier,
             replies: Vec::new(),
             edited_at: r.edited_at,
+            photo_url: r.photo_url,
         }
     }
 }
@@ -1969,7 +1975,7 @@ pub async fn meal_reviews(
                         EXISTS (SELECT 1 FROM review_votes v
                                 WHERE v.review_id = r.id AND v.user_id = $3) AS your_helpful_vote,
                         contributor_tier(u.id) AS author_tier,
-                        r.edited_at
+                        r.edited_at, r.photo_url
                  FROM reviews r JOIN users u ON u.id = r.user_id
                  WHERE r.meal_id = $1 AND r.is_public = true AND r.note IS NOT NULL
                  ORDER BY ",
@@ -2156,15 +2162,22 @@ pub async fn delete_reply(
 pub struct ReviewEdit {
     pub note: String,
     pub score: Option<i16>,
+    /// Unlike `score`, always replaces the existing value - the edit form
+    /// always shows and resubmits the review's current photo (or lack of
+    /// one), so there's no "wasn't included in this edit" case to protect
+    /// the way a bare `Option<i16>` would need to for `score`.
+    #[serde(default)]
+    pub photo_url: Option<String>,
 }
 
 /// Author-only: fix a typo or update your take after cooking it again,
 /// without losing the "written about revision N" stamp `meal_reviews`
-/// already shows - only `note`/`score`/`edited_at` change, everything else
-/// about when and what revision the review was originally written against
-/// stays put. Updating the score re-runs the same `upsert_rating` a fresh
-/// rating does, since `reviews.score` and the canonical `ratings` row are
-/// otherwise two copies of the same number that would silently drift.
+/// already shows - only `note`/`score`/`photo_url`/`edited_at` change,
+/// everything else about when and what revision the review was originally
+/// written against stays put. Updating the score re-runs the same
+/// `upsert_rating` a fresh rating does, since `reviews.score` and the
+/// canonical `ratings` row are otherwise two copies of the same number that
+/// would silently drift.
 pub async fn update_review(
     State(state): State<AppState>,
     CurrentUser(user): CurrentUser,
@@ -2205,17 +2218,19 @@ pub async fn update_review(
     // whenever the client edits just the note, leaving `reviews.score` and
     // the canonical `ratings` row (still untouched below) disagreeing.
     if let Some(score) = body.score {
-        sqlx::query("UPDATE reviews SET note = $1, score = $2, edited_at = now() WHERE id = $3")
+        sqlx::query("UPDATE reviews SET note = $1, score = $2, photo_url = $3, edited_at = now() WHERE id = $4")
             .bind(text)
             .bind(score)
+            .bind(body.photo_url.as_deref())
             .bind(review_id)
             .execute(&mut *tx)
             .await
             .map_err(|_| oops())?;
         upsert_rating(&mut tx, user.id, "meal", meal_id, score).await;
     } else {
-        sqlx::query("UPDATE reviews SET note = $1, edited_at = now() WHERE id = $2")
+        sqlx::query("UPDATE reviews SET note = $1, photo_url = $2, edited_at = now() WHERE id = $3")
             .bind(text)
+            .bind(body.photo_url.as_deref())
             .bind(review_id)
             .execute(&mut *tx)
             .await

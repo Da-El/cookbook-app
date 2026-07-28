@@ -5,7 +5,7 @@ import { api, ApiError } from '../api/client';
 import type { GuideDetail, GuideSummary } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
 import { useToast } from '../components/Toast/ToastContext';
-import { ChevronLeft } from '../components/Icon/Icon';
+import { ChevronLeft, BookmarkIcon } from '../components/Icon/Icon';
 import { LoadingState, ErrorState } from '../components/PageState/PageState';
 import { FlagButton } from '../components/Flag/FlagButton';
 import { mealBackground } from '../lib/imagery';
@@ -46,14 +46,19 @@ interface GuideEditRow {
 
 export function Guides() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const [savedOnly, setSavedOnly] = useState(false);
   const { data: guides = [] } = useQuery({
     queryKey: ['guides'],
     queryFn: () => api.get<GuideSummary[]>('/guides'),
   });
 
+  const savedCount = guides.filter((g) => g.is_saved).length;
+  const visible = savedOnly ? guides.filter((g) => g.is_saved) : guides;
+
   // Preserve the server's ordering (topic, then position) while grouping.
   const topics: { topic: string; items: GuideSummary[] }[] = [];
-  for (const g of guides) {
+  for (const g of visible) {
     const bucket = topics.find((t) => t.topic === g.topic);
     bucket ? bucket.items.push(g) : topics.push({ topic: g.topic, items: [g] });
   }
@@ -65,10 +70,23 @@ export function Guides() {
           <ChevronLeft size={18} strokeWidth={2.2} />
         </button>
         <h1 className={styles.title}>Guides</h1>
+        {user && savedCount > 0 && (
+          <button
+            className={`${styles.savedFilter} ${savedOnly ? styles.savedFilterOn : ''}`}
+            onClick={() => setSavedOnly((v) => !v)}
+            aria-pressed={savedOnly}
+          >
+            <BookmarkIcon size={14} strokeWidth={2} filled={savedOnly} /> Saved ({savedCount})
+          </button>
+        )}
       </div>
       <p className={styles.lede}>
         Short reads for the things recipes assume you already know.
       </p>
+
+      {savedOnly && visible.length === 0 && (
+        <p className={styles.cardSummary}>No saved guides yet.</p>
+      )}
 
       {topics.map(({ topic, items }) => (
         <section key={topic} className={styles.section}>
@@ -186,6 +204,11 @@ export function GuidePage() {
     onSuccess: invalidate,
   });
 
+  const toggleSave = useMutation({
+    mutationFn: () => api.post(`/guides/${slug}/save`),
+    onSuccess: invalidate,
+  });
+
   const rate = useMutation({
     mutationFn: (value: number) => api.post(`/guides/${slug}/rate`, { value }),
     onSuccess: invalidate,
@@ -232,6 +255,17 @@ export function GuidePage() {
         <button className={styles.backBtn} onClick={() => navigate(-1)} aria-label="Back">
           <ChevronLeft size={18} strokeWidth={2.2} />
         </button>
+        {user && (
+          <button
+            className={styles.bookmarkBtn}
+            onClick={() => toggleSave.mutate()}
+            aria-pressed={guide.is_saved}
+            aria-label={guide.is_saved ? 'Remove from saved guides' : 'Save this guide'}
+            title={guide.is_saved ? 'Remove from saved guides' : 'Save this guide'}
+          >
+            <BookmarkIcon size={18} strokeWidth={1.8} filled={guide.is_saved} />
+          </button>
+        )}
       </div>
 
       <div className={styles.eyebrow}>{guide.topic}</div>

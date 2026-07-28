@@ -12,6 +12,7 @@ import { EmptyLine } from '../components/Empty/Empty';
 import { SearchIcon } from '../components/Icon/Icon';
 import { ingredientBackground } from '../lib/imagery';
 import { addRecentSearch, clearRecentSearches, getRecentSearches } from '../lib/searchHistory';
+import { deleteFilterPreset, getFilterPresets, isNonDefaultFilter, saveFilterPreset, type FilterPreset } from '../lib/filterPresets';
 import styles from './Browse.module.css';
 
 const MEAL_TYPES = ['All', 'Breakfast', 'Lunch', 'Dinner', 'Dessert', 'Snack'];
@@ -91,6 +92,9 @@ export function Browse() {
   const [maxTime, setMaxTime] = useState<number | null>(null);
   const [occasion, setOccasion] = useState('All');
   const [recent, setRecent] = useState<string[]>(() => getRecentSearches());
+  const [presets, setPresets] = useState<FilterPreset[]>(() => getFilterPresets());
+  const [savingPreset, setSavingPreset] = useState(false);
+  const [presetName, setPresetName] = useState('');
 
   // The desktop topbar searches by pushing ?q=, so mirror it into local state.
   const urlQuery = params.get('q');
@@ -209,6 +213,31 @@ export function Browse() {
   const active = tab === 'meals' ? mealType : category;
   const setActive = tab === 'meals' ? setMealType : setCategory;
   const showChips = tab !== 'chefs';
+
+  const currentFilter = { mealType, diet, sort, difficulty, maxTime, occasion };
+
+  function applyPreset(p: FilterPreset) {
+    setSearch('');
+    setMealType(p.mealType);
+    setDiet(p.diet);
+    setSort(p.sort);
+    setDifficulty(p.difficulty);
+    setMaxTime(p.maxTime);
+    setOccasion(p.occasion);
+  }
+
+  function confirmSavePreset() {
+    if (!presetName.trim()) return;
+    saveFilterPreset(presetName, currentFilter);
+    setPresets(getFilterPresets());
+    setPresetName('');
+    setSavingPreset(false);
+  }
+
+  function removePreset(id: string) {
+    deleteFilterPreset(id);
+    setPresets(getFilterPresets());
+  }
 
   const surpriseMe = useMutation({
     mutationFn: () => api.get<MealRow>('/meals/random'),
@@ -360,6 +389,49 @@ export function Browse() {
       {/* Once there's a query, relevance is the sort - "Top rated"/"Fastest"
           would silently do nothing against ranked search results, which is
           worse than not offering them. */}
+
+      {tab === 'meals' && (presets.length > 0 || isNonDefaultFilter(currentFilter)) && (
+        <div className={`${styles.chipRow} hscroll`}>
+          {presets.map((p) => (
+            <span key={p.id} className={styles.presetChip}>
+              <button className={styles.presetChipApply} onClick={() => applyPreset(p)}>
+                {p.name}
+              </button>
+              <button
+                className={styles.presetChipRemove}
+                onClick={() => removePreset(p.id)}
+                aria-label={`Delete preset "${p.name}"`}
+              >
+                ×
+              </button>
+            </span>
+          ))}
+          {isNonDefaultFilter(currentFilter) &&
+            (savingPreset ? (
+              <span className={styles.presetSaveForm}>
+                <input
+                  className={styles.presetSaveInput}
+                  value={presetName}
+                  onChange={(e) => setPresetName(e.target.value)}
+                  placeholder="Name this search…"
+                  maxLength={40}
+                  autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') confirmSavePreset();
+                    if (e.key === 'Escape') setSavingPreset(false);
+                  }}
+                />
+                <button className={styles.presetSaveConfirm} disabled={!presetName.trim()} onClick={confirmSavePreset}>
+                  Save
+                </button>
+              </span>
+            ) : (
+              <button className={styles.chip} onClick={() => setSavingPreset(true)}>
+                + Save this search
+              </button>
+            ))}
+        </div>
+      )}
 
       {tab === 'chefs' ? (
         chefs.length > 0 ? (
