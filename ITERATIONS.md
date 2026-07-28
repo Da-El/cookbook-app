@@ -505,3 +505,82 @@ that the owner always sees their own plan regardless of the setting),
 then the Plan tab and the Settings toggle confirmed in the browser; and
 recently-viewed's recording, ordering, and de-duplication-on-revisit
 confirmed in the browser across both a meal and an ingredient page.
+
+---
+
+## Batch 10 — Iterations 46–50
+
+**Commit:** local only — not pushed/deployed this batch, per standing
+instruction · **Migrations:** 0035–0036 · **Tests:** 61 backend, passing
+
+46. **Pantry staples** — fridge items gained an `is_staple` flag (salt,
+    oil, flour - things always on hand that shouldn't clutter a grocery
+    list) with a star toggle on the fridge tab. `grocery_list()`'s
+    accumulation loop skips staple rows entirely rather than just
+    de-emphasizing them, so a planned recipe calling for olive oil
+    doesn't add "olive oil" to the shopping list just because it's a
+    planner ingredient - the shopping list stays a list of things to
+    actually buy.
+47. **Cook-count badge** — `cooked_meals` already recorded who cooked
+    what, but nothing surfaced *how many* people had. A shared
+    `meal_cook_count_sql!` macro fragment (matching the existing
+    `is_top_in_cuisine_sql!`/`meal_diet_tags_sql!` pattern) spliced into
+    all four `MealCard`-shaped query sites adds a `🍳 N` chip next to a
+    meal's rating everywhere a card renders, plus the same count on the
+    meal detail page's meta line.
+48. **Duplicate your own recipe** — forking already covered "start from
+    someone else's recipe," but an author had no quick way to spin off a
+    variant of their *own* meal (a spicier version, a halved-batch
+    version) without hand-retyping it. `duplicate()` is fork's mirror
+    image: author-only instead of anyone-but-the-author, no
+    `forked_from_*` attribution since it's not a fork, ` (copy)` name
+    suffix, always `visibility: 'personal'` regardless of the
+    original's, and lands straight on the new copy's edit form instead
+    of its detail page since the point is to change something right
+    away.
+49. **Ingredient health highlights** — the micronutrient bars already
+    showed raw values, but reading "42.6 mg" against nothing requires
+    already knowing the FDA %DV table. A pure `nutritionHighlights()`
+    function applies the same excellent-source (≥20% DV) / good-source
+    (10–19% DV) convention labels use, as colored chips above the macro
+    grid; sodium is the one exception, framed as "High in sodium" rather
+    than a positive highlight since a high %DV there is a caution, not a
+    selling point.
+50. **Nested review replies** — review replies were one level deep
+    (reply to a review, never to a reply). Added a self-referencing
+    `parent_reply_id` on `review_replies` (`ON DELETE CASCADE`, so
+    deleting a reply quietly takes its sub-thread with it - no orphaned
+    replies-to-a-reply-that-no-longer-exists) and rebuilt the frontend
+    component around a client-built tree instead of a flat list, with a
+    "Replying to {name}" pill once you're threading under a specific
+    reply rather than the review itself. Notifications now go to
+    whoever the reply is actually addressed to - the parent reply's
+    author when nested, the review's author when not - rather than
+    always the review's author regardless of who's actually being
+    replied to.
+
+**Verified:** pantry staples' full cycle via curl - a staple ingredient
+present in a planned recipe correctly excluded from the grocery list
+while a non-staple with the same planner entry still appears - then the
+star toggle and its "· Staple" subtitle confirmed in the browser;
+cook-count confirmed correct at all four `MealCard` construction sites
+via curl against a meal cooked by a known number of users, then the
+`🍳 N` chip confirmed on both a Browse card and the meal detail page;
+duplication's authorization boundary (403 for a non-author) and content
+correctness (name suffix, `personal` visibility, no fork attribution)
+confirmed via curl, then the browser flow of duplicating landing
+directly on the pre-filled edit form confirmed end to end; health
+highlights' tier thresholds confirmed against real seeded ingredients
+spanning all three tiers in one page load (Anchovies: good-source
+calcium and iron, excellent-source magnesium, and the sodium caution,
+all four chips correct against their actual %DV) plus a clean excellent-
+and-good-only case (Arugula) and a single-chip case (avocado), all
+confirmed in the browser with computed chip colors matching their tier;
+and nested replies' full chain via curl - a top-level reply, a reply
+threaded under it, the cross-review parent-injection guard rejecting a
+parent from a different review with 400, notification recipients
+resolving correctly for both the top-level and nested case, and
+`ON DELETE CASCADE` removing a child reply when its parent is deleted -
+then the threaded UI (indentation, the "Replying to" pill, inline reply
+triggers at every depth, and delete) confirmed in a real two-user
+browser session.
