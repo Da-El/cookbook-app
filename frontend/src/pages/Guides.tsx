@@ -394,12 +394,18 @@ export function GuidePage() {
                   {c.author_name} · {relativeTime(c.created_at)}
                 </span>
                 <p className={styles.editRowBody}>{c.body}</p>
-                {user && c.user_id === user.id && (
+                {user && c.user_id === user.id ? (
                   <div className={styles.editRowActions}>
                     <button className={styles.editDeleteBtn} onClick={() => deleteComment.mutate(c.id)}>
                       Delete
                     </button>
                   </div>
+                ) : (
+                  user && (
+                    <div className={styles.editRowActions}>
+                      <FlagButton contentType="guide_comment" contentId={c.id} />
+                    </div>
+                  )
                 )}
               </div>
             ))}

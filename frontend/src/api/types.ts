@@ -8,7 +8,9 @@ export interface UserProfile {
 
 export interface FlagRow {
   id: number;
-  content_type: 'meal_revision' | 'review' | 'ingredient_edit' | 'alias' | 'substitute' | 'guide_edit' | 'user_profile';
+  content_type:
+    | 'meal_revision' | 'review' | 'ingredient_edit' | 'alias' | 'substitute' | 'guide_edit' | 'user_profile'
+    | 'ingredient_review' | 'review_reply' | 'guide_comment' | 'collection' | 'collection_comment';
   content_id: number;
   reason: string;
   flagged_by_name: string | null;

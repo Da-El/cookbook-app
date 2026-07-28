@@ -11,7 +11,12 @@ export type FlaggableType =
   | 'alias'
   | 'substitute'
   | 'guide_edit'
-  | 'user_profile';
+  | 'user_profile'
+  | 'ingredient_review'
+  | 'review_reply'
+  | 'guide_comment'
+  | 'collection'
+  | 'collection_comment';
 
 /**
  * A quiet "send this to a moderator" control, reused everywhere community

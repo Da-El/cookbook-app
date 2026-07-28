@@ -15,6 +15,7 @@ import {
 } from '../components/EditVoting/EditVoting';
 import { AliasSection } from '../components/EditVoting/AliasSection';
 import { SubstituteSection } from '../components/EditVoting/SubstituteSection';
+import { FlagButton } from '../components/Flag/FlagButton';
 import { LoadingState, ErrorState } from '../components/PageState/PageState';
 import { Avatar } from '../components/Avatar/Avatar';
 import { ContributorBadge, type ContributorTier } from '../components/ContributorBadge/ContributorBadge';
@@ -293,13 +294,18 @@ export function IngredientDetail() {
                     </span>
                   </div>
                   {r.note && <p className={styles.reviewNote}>{r.note}</p>}
-                  <button
-                    className={`${styles.helpfulBtn} ${r.your_helpful_vote ? styles.helpfulBtnOn : ''}`}
-                    onClick={() => voteHelpful.mutate(r.id)}
-                    aria-pressed={r.your_helpful_vote}
-                  >
-                    👍 Helpful{r.helpful_count > 0 ? ` (${r.helpful_count})` : ''}
-                  </button>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <button
+                      className={`${styles.helpfulBtn} ${r.your_helpful_vote ? styles.helpfulBtnOn : ''}`}
+                      onClick={() => voteHelpful.mutate(r.id)}
+                      aria-pressed={r.your_helpful_vote}
+                    >
+                      👍 Helpful{r.helpful_count > 0 ? ` (${r.helpful_count})` : ''}
+                    </button>
+                    {user && r.user_id !== user.id && (
+                      <FlagButton contentType="ingredient_review" contentId={r.id} />
+                    )}
+                  </div>
                 </div>
               </div>
             ))}

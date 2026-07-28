@@ -4,6 +4,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '../../api/client';
 import { useAuth } from '../../auth/AuthContext';
 import { useToast } from '../Toast/ToastContext';
+import { FlagButton } from '../Flag/FlagButton';
 import styles from './ReviewReplies.module.css';
 
 interface ReviewReply {
@@ -86,6 +87,7 @@ function ReplyRow({
             ×
           </button>
         )}
+        {user && node.user_id !== user.id && <FlagButton contentType="review_reply" contentId={node.id} />}
       </div>
 
       {replyingTo === node.id && composer}

@@ -14,8 +14,12 @@ use crate::{guides, ingredients, meals};
 /// "user_profile" is the odd one out - `content_id` is a user id, not a
 /// piece of content, and reports it (harassment, a fake account, spam
 /// posted as their bio) rather than any single edit or review of theirs.
-const CONTENT_TYPES: [&str; 7] =
-    ["meal_revision", "review", "ingredient_edit", "alias", "substitute", "guide_edit", "user_profile"];
+/// The last five (0046) closed a gap: each shipped in its own iteration
+/// with no flagging story at all until now.
+const CONTENT_TYPES: [&str; 12] = [
+    "meal_revision", "review", "ingredient_edit", "alias", "substitute", "guide_edit", "user_profile",
+    "ingredient_review", "review_reply", "guide_comment", "collection", "collection_comment",
+];
 
 #[derive(Deserialize)]
 pub struct NewFlag {
@@ -225,6 +229,95 @@ async fn describe(state: &AppState, content_type: &str, content_id: i64) -> (Str
             match name {
                 Some(name) => (format!("Reported profile: {name}"), Some(format!("/chefs/{content_id}")), true),
                 None => ("This account no longer exists.".into(), None, false),
+            }
+        }
+        "ingredient_review" => {
+            let row: Option<(i64, Option<String>, Option<i16>)> = sqlx::query_as(
+                "SELECT ingredient_id, note, score FROM ingredient_reviews WHERE id = $1",
+            )
+            .bind(content_id)
+            .fetch_optional(&state.db)
+            .await
+            .unwrap_or(None);
+            match row {
+                Some((ingredient_id, note, score)) => {
+                    let text = note.filter(|n| !n.trim().is_empty()).unwrap_or_else(|| "(no written note)".into());
+                    let scored = score.map(|s| format!("{s}/10 - ")).unwrap_or_default();
+                    (format!("{scored}{text}"), Some(format!("/ingredients/{ingredient_id}")), true)
+                }
+                None => ("This review no longer exists.".into(), None, false),
+            }
+        }
+        "review_reply" => {
+            let row: Option<(i64, Option<String>, String)> = sqlx::query_as(
+                "SELECT rr.review_id, rr.author_name, rr.body FROM review_replies rr WHERE rr.id = $1",
+            )
+            .bind(content_id)
+            .fetch_optional(&state.db)
+            .await
+            .unwrap_or(None);
+            match row {
+                Some((review_id, author_name, body)) => {
+                    let meal_id: Option<i64> = sqlx::query_scalar("SELECT meal_id FROM reviews WHERE id = $1")
+                        .bind(review_id)
+                        .fetch_optional(&state.db)
+                        .await
+                        .unwrap_or(None);
+                    let preview: String = body.chars().take(140).collect();
+                    (
+                        format!("{}: {preview}", author_name.as_deref().unwrap_or("Someone")),
+                        meal_id.map(|id| format!("/meals/{id}")),
+                        true,
+                    )
+                }
+                None => ("This reply no longer exists.".into(), None, false),
+            }
+        }
+        "guide_comment" => {
+            let row: Option<(String, String, String)> = sqlx::query_as(
+                "SELECT g.slug, gc.author_name, gc.body
+                 FROM guide_comments gc JOIN guides g ON g.id = gc.guide_id WHERE gc.id = $1",
+            )
+            .bind(content_id)
+            .fetch_optional(&state.db)
+            .await
+            .unwrap_or(None);
+            match row {
+                Some((slug, author_name, body)) => {
+                    let preview: String = body.chars().take(140).collect();
+                    (format!("{author_name}: {preview}"), Some(format!("/guides/{slug}")), true)
+                }
+                None => ("This comment no longer exists.".into(), None, false),
+            }
+        }
+        "collection" => {
+            let row: Option<(String, i64)> =
+                sqlx::query_as("SELECT name, user_id FROM meal_collections WHERE id = $1")
+                    .bind(content_id)
+                    .fetch_optional(&state.db)
+                    .await
+                    .unwrap_or(None);
+            match row {
+                Some((name, _owner_id)) => {
+                    (format!("Collection: {name}"), Some(format!("/collections/{content_id}")), true)
+                }
+                None => ("This collection no longer exists.".into(), None, false),
+            }
+        }
+        "collection_comment" => {
+            let row: Option<(i64, String, String)> = sqlx::query_as(
+                "SELECT collection_id, author_name, body FROM collection_comments WHERE id = $1",
+            )
+            .bind(content_id)
+            .fetch_optional(&state.db)
+            .await
+            .unwrap_or(None);
+            match row {
+                Some((collection_id, author_name, body)) => {
+                    let preview: String = body.chars().take(140).collect();
+                    (format!("{author_name}: {preview}"), Some(format!("/collections/{collection_id}")), true)
+                }
+                None => ("This comment no longer exists.".into(), None, false),
             }
         }
         _ => ("Unrecognized content.".into(), None, false),
@@ -457,6 +550,101 @@ async fn remove_content(
                     // No subject: guides route by slug, not the numeric id here.
                     notify_removed(tx, author_id, None, None).await
                 }
+                None => None,
+            }
+        }
+        // No is_public column on ingredient_reviews (unlike meals' `reviews`)
+        // to soft-hide behind, so removal is a hard delete - same as the
+        // author's own review is replaced outright by a re-submission, not
+        // versioned. Doesn't touch the separate `ratings` row this review's
+        // score wrote via `upsert_rating` - same "the number stands, only
+        // the written review goes away" precedent the "review" arm above
+        // already sets for meals.
+        "ingredient_review" => {
+            let target: Option<(i64, i64)> =
+                sqlx::query_as("SELECT user_id, ingredient_id FROM ingredient_reviews WHERE id = $1")
+                    .bind(content_id)
+                    .fetch_optional(&mut **tx)
+                    .await?;
+            sqlx::query("DELETE FROM ingredient_reviews WHERE id = $1")
+                .bind(content_id)
+                .execute(&mut **tx)
+                .await?;
+            match target {
+                Some((user_id, ingredient_id)) => notify_removed(tx, Some(user_id), Some("ingredient"), Some(ingredient_id)).await,
+                None => None,
+            }
+        }
+        // Hard delete, same "closer to a chat message than catalog content"
+        // reasoning the author-facing withdraw already uses for this table -
+        // a cascading FK takes any child replies with it.
+        "review_reply" => {
+            let target: Option<(i64, Option<i64>)> =
+                sqlx::query_as("SELECT review_id, user_id FROM review_replies WHERE id = $1")
+                    .bind(content_id)
+                    .fetch_optional(&mut **tx)
+                    .await?;
+            sqlx::query("DELETE FROM review_replies WHERE id = $1")
+                .bind(content_id)
+                .execute(&mut **tx)
+                .await?;
+            match target {
+                Some((review_id, user_id)) => {
+                    let meal_id: Option<i64> = sqlx::query_scalar("SELECT meal_id FROM reviews WHERE id = $1")
+                        .bind(review_id)
+                        .fetch_optional(&mut **tx)
+                        .await?;
+                    notify_removed(tx, user_id, Some("meal"), meal_id).await
+                }
+                None => None,
+            }
+        }
+        // Same hard-delete reasoning as review_reply. No subject: guides
+        // route by slug, not the numeric id here - same as guide_edit above.
+        "guide_comment" => {
+            let author_id: Option<Option<i64>> =
+                sqlx::query_scalar("SELECT user_id FROM guide_comments WHERE id = $1")
+                    .bind(content_id)
+                    .fetch_optional(&mut **tx)
+                    .await?;
+            sqlx::query("DELETE FROM guide_comments WHERE id = $1")
+                .bind(content_id)
+                .execute(&mut **tx)
+                .await?;
+            match author_id.flatten() {
+                Some(user_id) => notify_removed(tx, Some(user_id), None, None).await,
+                None => None,
+            }
+        }
+        // Reuses the owner's own visibility toggle rather than deleting the
+        // collection outright - the owner keeps their meals grouped, it just
+        // stops being link-shareable, same as choosing "Private" themselves.
+        "collection" => {
+            let owner_id: Option<i64> = sqlx::query_scalar("SELECT user_id FROM meal_collections WHERE id = $1")
+                .bind(content_id)
+                .fetch_optional(&mut **tx)
+                .await?;
+            sqlx::query("UPDATE meal_collections SET is_public = FALSE WHERE id = $1")
+                .bind(content_id)
+                .execute(&mut **tx)
+                .await?;
+            match owner_id {
+                Some(owner_id) => notify_removed(tx, Some(owner_id), Some("collection"), Some(content_id)).await,
+                None => None,
+            }
+        }
+        "collection_comment" => {
+            let target: Option<(i64, Option<i64>)> =
+                sqlx::query_as("SELECT collection_id, user_id FROM collection_comments WHERE id = $1")
+                    .bind(content_id)
+                    .fetch_optional(&mut **tx)
+                    .await?;
+            sqlx::query("DELETE FROM collection_comments WHERE id = $1")
+                .bind(content_id)
+                .execute(&mut **tx)
+                .await?;
+            match target {
+                Some((collection_id, user_id)) => notify_removed(tx, user_id, Some("collection"), Some(collection_id)).await,
                 None => None,
             }
         }
