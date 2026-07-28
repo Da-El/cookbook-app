@@ -3,10 +3,16 @@ import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
+import { useColorScheme, type ColorScheme } from '../theme/ColorSchemeContext';
 import { ChevronLeft } from '../components/Icon/Icon';
 import styles from './Settings.module.css';
 
 const DIET_PREFS = ['Vegetarian', 'Vegan', 'Pescatarian', 'Gluten-free', 'Dairy-free', 'Nut-free'];
+const APPEARANCE_OPTIONS: [ColorScheme, string][] = [
+  ['light', 'Light'],
+  ['dark', 'Dark'],
+  ['system', 'System'],
+];
 
 interface Session {
   id: number;
@@ -14,6 +20,13 @@ interface Session {
   created_at: string;
   last_seen_at: string;
   is_current: boolean;
+}
+
+interface NotificationPref {
+  type: string;
+  label: string;
+  description: string;
+  email_enabled: boolean;
 }
 
 interface LoginHistoryRow {
@@ -46,7 +59,14 @@ interface SettingsProfile {
   vis_want: 'public' | 'private';
   vis_fridge: 'public' | 'private';
   two_factor_enabled: boolean;
+  unit_system: 'as_written' | 'metric' | 'imperial';
 }
+
+const UNIT_SYSTEMS: ['as_written' | 'metric' | 'imperial', string][] = [
+  ['as_written', 'As written'],
+  ['metric', 'Metric'],
+  ['imperial', 'Imperial'],
+];
 
 const VIS_ROWS: [keyof Pick<SettingsProfile, 'vis_mine' | 'vis_made' | 'vis_want' | 'vis_fridge'>, string, string][] = [
   ['vis_mine', 'My recipes', 'Meals you’ve published'],
@@ -58,6 +78,7 @@ const VIS_ROWS: [keyof Pick<SettingsProfile, 'vis_mine' | 'vis_made' | 'vis_want
 export function Settings() {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
+  const { scheme, setScheme } = useColorScheme();
   const qc = useQueryClient();
 
   const { data: settings } = useQuery({
@@ -87,6 +108,11 @@ export function Settings() {
   const { data: loginHistory = [] } = useQuery({
     queryKey: ['login-history'],
     queryFn: () => api.get<LoginHistoryRow[]>('/auth/login-history'),
+  });
+
+  const { data: notificationPrefs = [] } = useQuery({
+    queryKey: ['notification-prefs'],
+    queryFn: () => api.get<NotificationPref[]>('/settings/notification-prefs'),
   });
 
   useEffect(() => {
@@ -137,8 +163,19 @@ export function Settings() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['settings'] }),
   });
 
+  const toggleNotifPref = useMutation({
+    mutationFn: ({ type, enabled }: { type: string; enabled: boolean }) =>
+      api.put(`/settings/notification-prefs/${type}`, { enabled }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['notification-prefs'] }),
+  });
+
   const setVisibility = useMutation({
     mutationFn: (patch: Record<string, string>) => api.post('/profile', patch),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['settings'] }),
+  });
+
+  const setUnitSystem = useMutation({
+    mutationFn: (unit_system: string) => api.post('/profile', { unit_system }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['settings'] }),
   });
 
@@ -190,6 +227,29 @@ export function Settings() {
           <ChevronLeft size={18} strokeWidth={2.2} />
         </button>
         <h1 className={styles.title}>Settings</h1>
+      </div>
+
+      <div className={styles.section}>
+        <div className={styles.sectionTitle}>Appearance</div>
+        <div className={styles.visRow}>
+          <div>
+            <div className={styles.visLabel}>Theme</div>
+            <div className={styles.visSub}>
+              {scheme === 'system' ? "Matches your device's setting." : `Always ${scheme}.`}
+            </div>
+          </div>
+          <div className={styles.visToggle}>
+            {APPEARANCE_OPTIONS.map(([value, label]) => (
+              <button
+                key={value}
+                className={scheme === value ? styles.visActive : ''}
+                onClick={() => setScheme(value)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
 
       {user.is_admin && (
@@ -345,6 +405,58 @@ export function Settings() {
                 </div>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {notificationPrefs.length > 0 && (
+        <div className={styles.section}>
+          <div className={styles.sectionTitle}>Email notifications</div>
+          <p className={styles.securityHint}>
+            Everything still shows up in your Activity tab either way - this just controls what
+            also gets emailed to you.
+          </p>
+          {notificationPrefs.map((p) => (
+            <div key={p.type} className={styles.visRow}>
+              <div>
+                <div className={styles.visLabel}>{p.label}</div>
+                <div className={styles.visSub}>{p.description}</div>
+              </div>
+              <button
+                className={`${styles.twoFactorToggle} ${p.email_enabled ? styles.twoFactorToggleOn : ''}`}
+                disabled={toggleNotifPref.isPending}
+                onClick={() => toggleNotifPref.mutate({ type: p.type, enabled: !p.email_enabled })}
+              >
+                {p.email_enabled ? 'On' : 'Off'}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {settings && (
+        <div className={styles.section}>
+          <div className={styles.sectionTitle}>Measurement units</div>
+          <div className={styles.visRow}>
+            <div>
+              <div className={styles.visLabel}>Grocery list totals</div>
+              <div className={styles.visSub}>
+                {settings.unit_system === 'as_written'
+                  ? 'Shown in whichever unit each recipe used most.'
+                  : `Always converted to ${settings.unit_system}.`}
+              </div>
+            </div>
+            <div className={styles.visToggle}>
+              {UNIT_SYSTEMS.map(([value, label]) => (
+                <button
+                  key={value}
+                  className={settings.unit_system === value ? styles.visActive : ''}
+                  onClick={() => setUnitSystem.mutate(value)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       )}

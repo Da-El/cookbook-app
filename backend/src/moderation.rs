@@ -248,8 +248,9 @@ pub async fn resolve_flag(
         return Err(bad("That flag has already been resolved."));
     }
 
+    let mut removed_author = None;
     if body.resolution == "removed" {
-        remove_content(&mut tx, &content_type, content_id, admin.id, &admin.display_name)
+        removed_author = remove_content(&mut tx, &content_type, content_id, admin.id, &admin.display_name)
             .await
             .map_err(|_| oops())?;
     }
@@ -276,6 +277,22 @@ pub async fn resolve_flag(
     }
 
     tx.commit().await.map_err(|_| oops())?;
+
+    if let Some(author_id) = removed_author {
+        crate::notify::send_notification_email(
+            &state.db, author_id, "content_removed",
+            "Content removed on Cookbook",
+            &format!("Your {} was removed by a moderator.", content_type.replace('_', " ")),
+        ).await;
+    }
+    if let Some(flagged_by) = flagged_by {
+        crate::notify::send_notification_email(
+            &state.db, flagged_by, "flag_resolved",
+            "Your flag was resolved on Cookbook",
+            &format!("A moderator {} the content you flagged.", if body.resolution == "removed" { "removed" } else { "reviewed and dismissed" }),
+        ).await;
+    }
+
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -289,8 +306,8 @@ async fn notify_removed(
     author_id: Option<i64>,
     subject_type: Option<&str>,
     subject_id: Option<i64>,
-) {
-    let Some(author_id) = author_id else { return };
+) -> Option<i64> {
+    let author_id = author_id?;
     sqlx::query(
         "INSERT INTO notifications (recipient_id, actor_id, type, subject_type, subject_id)
          VALUES ($1, NULL, 'content_removed', $2, $3)",
@@ -301,16 +318,21 @@ async fn notify_removed(
     .execute(&mut **tx)
     .await
     .ok();
+    Some(author_id)
 }
 
+/// Returns whoever `notify_removed` just notified, if anyone - the caller
+/// sends the actual email post-commit, same pattern as `apply_winner` in
+/// ingredients.rs/guides.rs and for the same reason (only a transaction is
+/// available here, not the pool `send_notification_email` needs).
 async fn remove_content(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     content_type: &str,
     content_id: i64,
     admin_id: i64,
     admin_name: &str,
-) -> Result<(), sqlx::Error> {
-    match content_type {
+) -> Result<Option<i64>, sqlx::Error> {
+    let notified = match content_type {
         "review" => {
             let target: Option<(i64, i64)> =
                 sqlx::query_as("SELECT user_id, meal_id FROM reviews WHERE id = $1")
@@ -321,8 +343,9 @@ async fn remove_content(
                 .bind(content_id)
                 .execute(&mut **tx)
                 .await?;
-            if let Some((user_id, meal_id)) = target {
-                notify_removed(tx, Some(user_id), Some("meal"), Some(meal_id)).await;
+            match target {
+                Some((user_id, meal_id)) => notify_removed(tx, Some(user_id), Some("meal"), Some(meal_id)).await,
+                None => None,
             }
         }
         // Removing a bad revision means undoing exactly the edit it
@@ -336,10 +359,13 @@ async fn remove_content(
                     .bind(content_id)
                     .fetch_optional(&mut **tx)
                     .await?;
-            if let Some((meal_id, editor_id)) = target {
-                meals::revert_to_revision(tx, meal_id, content_id, admin_id, admin_name, "removed by a moderator")
-                    .await?;
-                notify_removed(tx, editor_id, Some("meal"), Some(meal_id)).await;
+            match target {
+                Some((meal_id, editor_id)) => {
+                    meals::revert_to_revision(tx, meal_id, content_id, admin_id, admin_name, "removed by a moderator")
+                        .await?;
+                    notify_removed(tx, editor_id, Some("meal"), Some(meal_id)).await
+                }
+                None => None,
             }
         }
         "ingredient_edit" => {
@@ -348,13 +374,16 @@ async fn remove_content(
                     .bind(content_id)
                     .fetch_optional(&mut **tx)
                     .await?;
-            if let Some((ingredient_id, field, author_id)) = target {
-                sqlx::query("DELETE FROM ingredient_edits WHERE id = $1")
-                    .bind(content_id)
-                    .execute(&mut **tx)
-                    .await?;
-                ingredients::apply_winner(tx, ingredient_id, &field).await?;
-                notify_removed(tx, author_id, Some("ingredient"), Some(ingredient_id)).await;
+            match target {
+                Some((ingredient_id, field, author_id)) => {
+                    sqlx::query("DELETE FROM ingredient_edits WHERE id = $1")
+                        .bind(content_id)
+                        .execute(&mut **tx)
+                        .await?;
+                    ingredients::apply_winner(tx, ingredient_id, &field).await?;
+                    notify_removed(tx, author_id, Some("ingredient"), Some(ingredient_id)).await
+                }
+                None => None,
             }
         }
         "alias" => {
@@ -367,8 +396,11 @@ async fn remove_content(
                 .bind(content_id)
                 .execute(&mut **tx)
                 .await?;
-            if let Some((ingredient_id, author_id)) = target {
-                notify_removed(tx, author_id, Some("ingredient"), Some(ingredient_id)).await;
+            match target {
+                Some((ingredient_id, author_id)) => {
+                    notify_removed(tx, author_id, Some("ingredient"), Some(ingredient_id)).await
+                }
+                None => None,
             }
         }
         "substitute" => {
@@ -381,8 +413,11 @@ async fn remove_content(
                 .bind(content_id)
                 .execute(&mut **tx)
                 .await?;
-            if let Some((ingredient_id, author_id)) = target {
-                notify_removed(tx, author_id, Some("ingredient"), Some(ingredient_id)).await;
+            match target {
+                Some((ingredient_id, author_id)) => {
+                    notify_removed(tx, author_id, Some("ingredient"), Some(ingredient_id)).await
+                }
+                None => None,
             }
         }
         "guide_edit" => {
@@ -391,19 +426,22 @@ async fn remove_content(
                     .bind(content_id)
                     .fetch_optional(&mut **tx)
                     .await?;
-            if let Some((guide_id, author_id)) = target {
-                sqlx::query("DELETE FROM guide_edits WHERE id = $1")
-                    .bind(content_id)
-                    .execute(&mut **tx)
-                    .await?;
-                guides::apply_winner(tx, guide_id).await?;
-                // No subject: guides route by slug, not the numeric id here.
-                notify_removed(tx, author_id, None, None).await;
+            match target {
+                Some((guide_id, author_id)) => {
+                    sqlx::query("DELETE FROM guide_edits WHERE id = $1")
+                        .bind(content_id)
+                        .execute(&mut **tx)
+                        .await?;
+                    guides::apply_winner(tx, guide_id).await?;
+                    // No subject: guides route by slug, not the numeric id here.
+                    notify_removed(tx, author_id, None, None).await
+                }
+                None => None,
             }
         }
-        _ => {}
-    }
-    Ok(())
+        _ => None,
+    };
+    Ok(notified)
 }
 
 fn bad(msg: &str) -> (StatusCode, Json<serde_json::Value>) {

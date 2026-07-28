@@ -119,7 +119,15 @@ interface MealReview {
   your_helpful_vote: boolean;
   author_tier: ContributorTier;
   replies: ReviewReply[];
+  edited_at: string | null;
 }
+
+const REVIEW_SORTS: [string, string][] = [
+  ['helpful', 'Most helpful'],
+  ['recent', 'Most recent'],
+  ['highest', 'Highest rated'],
+  ['lowest', 'Lowest rated'],
+];
 
 interface ReviewReply {
   id: number;
@@ -151,6 +159,10 @@ export function MealDetail() {
   const [params, setParams] = useSearchParams();
   const [showPrompt, setShowPrompt] = useState(params.get('justCooked') === '1');
   const [note, setNote] = useState('');
+  const [reviewSort, setReviewSort] = useState('helpful');
+  const [editingReviewId, setEditingReviewId] = useState<number | null>(null);
+  const [editNote, setEditNote] = useState('');
+  const [editScore, setEditScore] = useState<number | null>(null);
   // null until the recipe's own serving count is known, so the stepper opens
   // on "however many this recipe actually makes" rather than an arbitrary 4.
   const [cookingFor, setCookingFor] = useState<number | null>(null);
@@ -177,14 +189,24 @@ export function MealDetail() {
   });
 
   const { data: reviews = [] } = useQuery({
-    queryKey: ['meal-reviews', id],
-    queryFn: () => api.get<MealReview[]>(`/meals/${id}/reviews`),
+    queryKey: ['meal-reviews', id, reviewSort],
+    queryFn: () => api.get<MealReview[]>(`/meals/${id}/reviews?sort=${reviewSort}`),
     enabled: Boolean(id),
   });
 
   const voteHelpful = useMutation({
     mutationFn: (reviewId: number) => api.post(`/meals/${id}/reviews/${reviewId}/helpful`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['meal-reviews', id] }),
+  });
+
+  const updateReview = useMutation({
+    mutationFn: ({ reviewId, note, score }: { reviewId: number; note: string; score: number | null }) =>
+      api.put(`/meals/${id}/reviews/${reviewId}`, { note, score }),
+    onSuccess: () => {
+      setEditingReviewId(null);
+      qc.invalidateQueries({ queryKey: ['meal-reviews', id] });
+      invalidateMeal();
+    },
   });
 
   const { data: journal = [] } = useQuery({
@@ -687,6 +709,18 @@ export function MealDetail() {
           <div className={styles.sectionHeadRow}>
             <h2 className={styles.sectionTitle}>Reviews</h2>
             <span className={styles.reviewCount}>{reviews.length}</span>
+            <select
+              className={styles.reviewSortSelect}
+              value={reviewSort}
+              onChange={(e) => setReviewSort(e.target.value)}
+              aria-label="Sort reviews"
+            >
+              {REVIEW_SORTS.map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
           </div>
           <div className={styles.reviewList}>
             {reviews.map((r) => (
@@ -711,9 +745,52 @@ export function MealDetail() {
                     </button>
                     <ContributorBadge tier={r.author_tier} />
                     {r.score != null && <span className={styles.reviewStars}>★ {r.score}/10</span>}
-                    <span className={styles.reviewWhen}>{relativeTime(r.cooked_at)}</span>
+                    <span className={styles.reviewWhen}>
+                      {relativeTime(r.cooked_at)}
+                      {r.edited_at && ' (edited)'}
+                    </span>
                   </span>
-                  <span className={styles.reviewNote}>{r.note}</span>
+                  {editingReviewId === r.id ? (
+                    <span className={styles.reviewEditForm}>
+                      <textarea
+                        className={styles.reviewEditTextarea}
+                        value={editNote}
+                        onChange={(e) => setEditNote(e.target.value)}
+                        maxLength={4000}
+                        rows={3}
+                      />
+                      <span className={styles.reviewEditScoreRow}>
+                        {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
+                          <button
+                            key={n}
+                            type="button"
+                            className={`${styles.editScoreBtn} ${editScore === n ? styles.editScoreBtnOn : ''}`}
+                            onClick={() => setEditScore(n)}
+                            aria-pressed={editScore === n}
+                            aria-label={`Rate ${n} out of 10`}
+                          >
+                            {n}
+                          </button>
+                        ))}
+                      </span>
+                      <span className={styles.reviewEditActions}>
+                        <button
+                          className={styles.reviewEditSave}
+                          disabled={!editNote.trim() || updateReview.isPending}
+                          onClick={() =>
+                            updateReview.mutate({ reviewId: r.id, note: editNote.trim(), score: editScore })
+                          }
+                        >
+                          Save
+                        </button>
+                        <button className={styles.reviewEditCancel} onClick={() => setEditingReviewId(null)}>
+                          Cancel
+                        </button>
+                      </span>
+                    </span>
+                  ) : (
+                    <span className={styles.reviewNote}>{r.note}</span>
+                  )}
                   {!r.is_current_version && (
                     <span className={styles.reviewStale}>Written about an earlier version of this recipe</span>
                   )}
@@ -726,6 +803,18 @@ export function MealDetail() {
                     >
                       👍 Helpful{r.helpful_count > 0 ? ` (${r.helpful_count})` : ''}
                     </button>
+                    {user && r.user_id === user.id && editingReviewId !== r.id && (
+                      <button
+                        className={styles.helpfulBtn}
+                        onClick={() => {
+                          setEditingReviewId(r.id);
+                          setEditNote(r.note ?? '');
+                          setEditScore(r.score);
+                        }}
+                      >
+                        Edit
+                      </button>
+                    )}
                     {user && r.user_id !== user.id && <FlagButton contentType="review" contentId={r.id} />}
                   </span>
                   <ReviewReplies mealId={meal.id} reviewId={r.id} replies={r.replies} />

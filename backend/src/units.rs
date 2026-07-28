@@ -98,6 +98,33 @@ pub fn from_base(base_amount: f64, unit: &str) -> Option<f64> {
     find_unit(unit).map(|u| base_amount / u.to_base)
 }
 
+/// Picks a display unit for a mass/volume total under an explicit unit
+/// system, by magnitude - "1400 g" is less readable than "1.4 kg", and
+/// "0.06 cup" less than "1 tbsp". Count dimensions have no metric/imperial
+/// concept ("3 cloves" either way), so callers never call this for them.
+///
+/// Thresholds favor the next unit up as soon as the number would otherwise
+/// read as three-plus digits or a small fraction, matching how a shopping
+/// list is actually written by hand rather than converting at a fixed
+/// power-of-ten boundary.
+pub fn preferred_unit(dimension: &Dimension, base_amount: f64, system: &str) -> Option<&'static str> {
+    match (dimension, system) {
+        (Dimension::Mass, "metric") => Some(if base_amount >= 1000.0 { "kg" } else { "g" }),
+        (Dimension::Mass, "imperial") => Some(if base_amount >= 454.0 { "lb" } else { "oz" }),
+        (Dimension::Volume, "metric") => Some(if base_amount >= 1000.0 { "l" } else { "ml" }),
+        (Dimension::Volume, "imperial") => Some(if base_amount >= 946.0 {
+            "quart"
+        } else if base_amount >= 237.0 {
+            "cup"
+        } else if base_amount >= 15.0 {
+            "tbsp"
+        } else {
+            "tsp"
+        }),
+        _ => None,
+    }
+}
+
 /// "1/2" -> 0.5, "½" -> 0.5, "2 1/2" -> 2.5. Returns None for anything else.
 fn parse_number(text: &str) -> Option<f64> {
     let text = text.trim();
@@ -459,6 +486,18 @@ mod tests {
         let grams = to_base(1.0, "kg").unwrap();
         assert_eq!(grams, 1000.0);
         assert!((from_base(grams, "lb").unwrap() - 2.204_62).abs() < 0.001);
+    }
+
+    #[test]
+    fn preferred_unit_switches_at_a_readable_magnitude() {
+        assert_eq!(preferred_unit(&Dimension::Mass, 500.0, "metric"), Some("g"));
+        assert_eq!(preferred_unit(&Dimension::Mass, 1200.0, "metric"), Some("kg"));
+        assert_eq!(preferred_unit(&Dimension::Mass, 200.0, "imperial"), Some("oz"));
+        assert_eq!(preferred_unit(&Dimension::Mass, 900.0, "imperial"), Some("lb"));
+        assert_eq!(preferred_unit(&Dimension::Volume, 10.0, "imperial"), Some("tsp"));
+        assert_eq!(preferred_unit(&Dimension::Volume, 300.0, "imperial"), Some("cup"));
+        assert_eq!(preferred_unit(&Dimension::Count("clove"), 5.0, "metric"), None);
+        assert_eq!(preferred_unit(&Dimension::Mass, 500.0, "as_written"), None);
     }
 
     #[test]

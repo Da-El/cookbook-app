@@ -2,7 +2,7 @@
   display: flex;
   gap: 5px;
   padding: 4px;
-  background: #F0E9DD;
+  background: var(--selected-bg);
   border-radius: 999px;
 }
 
@@ -39,13 +39,13 @@
 }
 
 .trackSquare .active {
-  background: var(--ink);
-  color: #fff;
+  background: var(--ink-solid);
+  color: var(--on-ink-solid);
 }
 
 .trackDark .active {
-  background: var(--ink);
-  color: #fff;
+  background: var(--ink-solid);
+  color: var(--on-ink-solid);
 }
 
 .trackDark {

@@ -252,8 +252,9 @@ pub async fn submit_edit(
         .await
         .map_err(|_| oops())?;
 
-    apply_winner(&mut tx, guide_id).await.map_err(|_| oops())?;
+    let newly_won = apply_winner(&mut tx, guide_id).await.map_err(|_| oops())?;
     tx.commit().await.map_err(|_| oops())?;
+    notify_edit_won(&state, newly_won, guide_id).await;
 
     Ok(StatusCode::CREATED)
 }
@@ -297,10 +298,30 @@ pub async fn vote_edit(
     .await
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    apply_winner(&mut tx, guide_id).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let newly_won = apply_winner(&mut tx, guide_id).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     tx.commit().await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    notify_edit_won(&state, newly_won, guide_id).await;
 
     Ok(Json(serde_json::json!({ "voted": removed == 0 })))
+}
+
+/// Best-effort email for whoever's edit `apply_winner` just crowned - see
+/// ingredients.rs's `notify_edit_won` for why this happens post-commit here
+/// rather than inside `apply_winner` itself.
+async fn notify_edit_won(state: &AppState, newly_won_author: Option<i64>, guide_id: i64) {
+    let Some(author_id) = newly_won_author else { return };
+    let title: Option<String> = sqlx::query_scalar("SELECT title FROM guides WHERE id = $1")
+        .bind(guide_id)
+        .fetch_optional(&state.db)
+        .await
+        .ok()
+        .flatten();
+    let title = title.unwrap_or_else(|| "a guide".to_string());
+    crate::notify::send_notification_email(
+        &state.db, author_id, "edit_won",
+        "Your edit was approved on Cookbook",
+        &format!("Your proposed edit to \"{}\" is now the community-approved version.", title),
+    ).await;
 }
 
 /// Author-only withdrawal, same as ingredients.rs's `delete_edit`.
@@ -333,8 +354,9 @@ pub async fn delete_edit(
         .await
         .map_err(|_| oops())?;
 
-    apply_winner(&mut tx, guide_id).await.map_err(|_| oops())?;
+    let newly_won = apply_winner(&mut tx, guide_id).await.map_err(|_| oops())?;
     tx.commit().await.map_err(|_| oops())?;
+    notify_edit_won(&state, newly_won, guide_id).await;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -342,7 +364,12 @@ pub async fn delete_edit(
 /// `apply_winner`. No edits left just means the guide's own seeded body
 /// stands: unlike description/photo, there's no "blank" fallback for a
 /// guide's teaching content.
-pub(crate) async fn apply_winner(tx: &mut sqlx::Transaction<'_, sqlx::Postgres>, guide_id: i64) -> Result<(), sqlx::Error> {
+/// Returns the winning edit's author when this call is the one that just
+/// made them the winner, same contract as ingredients.rs's `apply_winner`.
+pub(crate) async fn apply_winner(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    guide_id: i64,
+) -> Result<Option<i64>, sqlx::Error> {
     let winner: Option<(i64, Option<i64>, String)> = sqlx::query_as(
         "SELECT id, author_id, body FROM guide_edits WHERE guide_id = $1 ORDER BY votes DESC, id ASC LIMIT 1",
     )
@@ -350,6 +377,7 @@ pub(crate) async fn apply_winner(tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     .fetch_optional(&mut **tx)
     .await?;
 
+    let mut newly_won_author = None;
     if let Some((edit_id, author_id, body)) = winner {
         sqlx::query("UPDATE guides SET body = $1 WHERE id = $2")
             .bind(body)
@@ -374,10 +402,11 @@ pub(crate) async fn apply_winner(tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
                 .execute(&mut **tx)
                 .await
                 .ok();
+                newly_won_author = Some(author_id);
             }
         }
     }
-    Ok(())
+    Ok(newly_won_author)
 }
 
 fn bad(msg: &str) -> (StatusCode, Json<serde_json::Value>) {

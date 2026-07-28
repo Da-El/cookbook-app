@@ -141,7 +141,7 @@
 }
 
 .error {
-  color: #C0392B;
+  color: var(--danger);
   font: 600 13px var(--font-ui);
   margin-top: 16px;
 }
@@ -171,7 +171,7 @@
   height: 150px;
   width: 100%;
   border-radius: 20px;
-  border: 2px dashed #D8CBB6;
+  border: 2px dashed var(--muted-4);
   background: var(--surface-card);
   display: flex;
   flex-direction: column;
@@ -226,9 +226,9 @@
 }
 
 .chipActive {
-  background: var(--ink);
-  color: #fff;
-  border-color: var(--ink);
+  background: var(--ink-solid);
+  color: var(--on-ink-solid);
+  border-color: var(--ink-solid);
 }
 
 /* ---------- visibility toggle ---------- */
@@ -253,8 +253,8 @@
 }
 
 .segActive {
-  background: var(--ink) !important;
-  color: #fff !important;
+  background: var(--ink-solid) !important;
+  color: var(--on-ink-solid) !important;
 }
 
 .visHint {
@@ -291,8 +291,8 @@
   gap: 9px;
   padding: 8px 8px 8px 14px;
   border-radius: 14px;
-  background: var(--ink);
-  color: #fff;
+  background: var(--ink-solid);
+  color: var(--on-ink-solid);
 }
 
 .selectedName {
@@ -441,8 +441,8 @@
   height: 30px;
   flex: none;
   border-radius: 10px;
-  background: var(--ink);
-  color: #fff;
+  background: var(--ink-solid);
+  color: var(--on-ink-solid);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -468,7 +468,7 @@
   flex: none;
   border: none;
   background: none;
-  color: #B9AE9D;
+  color: var(--muted-4);
   font-size: 20px;
   cursor: pointer;
   margin-top: 6px;
@@ -504,7 +504,7 @@
   margin-top: 12px;
   width: 100%;
   padding: 12px;
-  border: 1.5px dashed #D8CBB6;
+  border: 1.5px dashed var(--muted-4);
   border-radius: 13px;
   background: var(--surface-card);
   color: var(--muted);
@@ -590,7 +590,7 @@
   padding: 16px;
   border-radius: 16px;
   border: 1.5px solid var(--amber);
-  background: #FFF8EC;
+  background: var(--amber-tint);
 }
 
 .dupTitle {

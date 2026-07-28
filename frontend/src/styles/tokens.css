@@ -52,4 +52,137 @@
   --shadow-thumb: 0 10px 22px -15px rgba(60, 40, 20, .6);
   --shadow-card: 0 16px 30px -22px rgba(60, 40, 20, .7);
   --shadow-hero: 0 18px 40px -22px rgba(60, 40, 20, .7);
+
+  /* Semantic tokens for the handful of colors components used to hardcode
+     directly - giving them a name means dark mode below can retint them
+     instead of leaving a light-mode box stranded on a dark page. */
+  --danger: #C0392B;
+  --danger-bg: #FDEDE8;
+  --danger-border: #F3C6B8;
+  --selected-bg: #F0E9DD;
+  --amber-tint: #FFF8EC;
+
+  /* For "filled dark pill/button" chrome (active toggle, primary button,
+     selected chip) that pairs a dark background with white text. Deliberately
+     NOT the same variable as `--ink` (which dark mode inverts to a light
+     color for body text) - a component styled `background: var(--ink);
+     color: #fff` would otherwise end up with white text on a near-white
+     pill the moment dark mode flips `--ink` itself. This pair stays dark
+     enough for white text to read against in both themes. */
+  --ink-solid: #241F1B;
+  --on-ink-solid: #fff;
+}
+
+/* Dark mode overrides every token above except the five user-chosen page
+   themes (Cream/Sage/Terracotta/Slate/Blush) and the four avatar identity
+   colors - both are deliberately fixed, vivid choices the way a Slack
+   avatar color doesn't flip with the OS theme, not part of the site chrome
+   this palette re-tints. `ThemeContext` skips applying a page theme's
+   background at all once dark mode resolves true, so `--bg-page` here is
+   the only page background dark mode ever shows.
+   Order matters: the bare media query sets the OS-driven default, then the
+   explicit `data-theme` attribute (stamped by `ColorSchemeContext`) always
+   wins in both directions so a manual toggle can override the OS setting. */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg-page: #1C1A17;
+    --surface-card: #262320;
+    --surface-sidebar: #201E1B;
+    --border-hairline: #363129;
+    --border-card: #423B30;
+    --border-sidebar: #33302A;
+    --border-chip: #3A352C;
+
+    --ink: #F2EEE7;
+    --body: #D9D2C6;
+    --secondary: #B9B0A0;
+    --muted: #8F8574;
+    --muted-2: #9C9382;
+    --muted-3: #857C6D;
+    --muted-4: #5C5344;
+
+    --green-tint: #1E2A20;
+    --green-tint-2: #232821;
+
+    --chip-bg: #2C2822;
+
+    --danger-bg: #3A2320;
+    --danger-border: #5C332B;
+    --selected-bg: #3A3226;
+    --amber-tint: #332B1C;
+    --ink-solid: #3A342E;
+
+    --shadow-thumb: 0 10px 22px -15px rgba(0, 0, 0, .8);
+    --shadow-card: 0 16px 30px -22px rgba(0, 0, 0, .85);
+    --shadow-hero: 0 18px 40px -22px rgba(0, 0, 0, .85);
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg-page: #1C1A17;
+  --surface-card: #262320;
+  --surface-sidebar: #201E1B;
+  --border-hairline: #363129;
+  --border-card: #423B30;
+  --border-sidebar: #33302A;
+  --border-chip: #3A352C;
+
+  --ink: #F2EEE7;
+  --body: #D9D2C6;
+  --secondary: #B9B0A0;
+  --muted: #8F8574;
+  --muted-2: #9C9382;
+  --muted-3: #857C6D;
+  --muted-4: #5C5344;
+
+  --green-tint: #1E2A20;
+  --green-tint-2: #232821;
+
+  --chip-bg: #2C2822;
+
+  --danger-bg: #3A2320;
+  --danger-border: #5C332B;
+  --selected-bg: #3A3226;
+  --amber-tint: #332B1C;
+  --ink-solid: #3A342E;
+
+  --shadow-thumb: 0 10px 22px -15px rgba(0, 0, 0, .8);
+  --shadow-card: 0 16px 30px -22px rgba(0, 0, 0, .85);
+  --shadow-hero: 0 18px 40px -22px rgba(0, 0, 0, .85);
+}
+
+/* Explicit "Light" pick overrides an OS-level dark preference back to the
+   default light values - same token list as above, reset to :root's own
+   values so a system-dark user can still opt back into light. */
+:root[data-theme="light"] {
+  --bg-page: var(--bg-cream);
+  --surface-card: #FFFFFF;
+  --surface-sidebar: #FBF9F6;
+  --border-hairline: #EFE7DA;
+  --border-card: #E3D9C9;
+  --border-sidebar: #E7DECF;
+  --border-chip: #EAE0D1;
+
+  --ink: #241F1B;
+  --body: #3A342E;
+  --secondary: #5C5348;
+  --muted: #8A8074;
+  --muted-2: #948A7D;
+  --muted-3: #A79C8D;
+  --muted-4: #C9B79F;
+
+  --green-tint: #E7F0E4;
+  --green-tint-2: #F3F7F1;
+
+  --chip-bg: #F4EDE1;
+
+  --danger-bg: #FDEDE8;
+  --danger-border: #F3C6B8;
+  --selected-bg: #F0E9DD;
+  --amber-tint: #FFF8EC;
+  --ink-solid: #241F1B;
+
+  --shadow-thumb: 0 10px 22px -15px rgba(60, 40, 20, .6);
+  --shadow-card: 0 16px 30px -22px rgba(60, 40, 20, .7);
+  --shadow-hero: 0 18px 40px -22px rgba(60, 40, 20, .7);
 }

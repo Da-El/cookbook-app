@@ -9,6 +9,7 @@ mod ingredients;
 mod kitchen;
 mod meals;
 mod moderation;
+mod notify;
 mod nutrition;
 mod og;
 mod planner;
@@ -20,7 +21,7 @@ mod substitutes;
 mod units;
 
 use axum::{
-    routing::{delete, get, post},
+    routing::{delete, get, post, put},
     Json, Router,
 };
 use serde_json::json;
@@ -74,6 +75,8 @@ async fn main() -> anyhow::Result<()> {
         .route("/auth/sessions/revoke-others", post(auth::revoke_other_sessions))
         .route("/auth/sessions/{id}", delete(auth::revoke_session))
         .route("/settings", get(auth::settings))
+        .route("/settings/notification-prefs", get(notify::list_prefs))
+        .route("/settings/notification-prefs/{type}", put(notify::set_pref))
         .route("/ingredients", get(ingredients::list).post(ingredients::create))
         .route("/ingredients/categories", get(ingredients::categories))
         .route("/ingredients/{id}", get(ingredients::detail))
@@ -104,6 +107,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/meals/{id}/rate", post(meals::rate))
         .route("/meals/{id}/journal", get(meals::my_journal))
         .route("/meals/{id}/reviews", get(meals::meal_reviews))
+        .route("/meals/{id}/reviews/{review_id}", put(meals::update_review))
         .route("/meals/{id}/reviews/{review_id}/helpful", post(meals::vote_review_helpful))
         .route("/meals/{id}/reviews/{review_id}/replies", post(meals::create_reply))
         .route("/meals/{id}/reviews/{review_id}/replies/{reply_id}", delete(meals::delete_reply))

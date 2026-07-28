@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider, useAuth } from './auth/AuthContext';
 import { ThemeProvider } from './theme/ThemeContext';
+import { ColorSchemeProvider } from './theme/ColorSchemeContext';
 import { ToastProvider } from './components/Toast/ToastContext';
 import { InstallProvider } from './pwa/InstallContext';
 import { InstallPrompt } from './components/InstallPrompt/InstallPrompt';
@@ -112,19 +113,21 @@ function Routed() {
 
 export default function App() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
-        <ToastProvider>
-          <AuthProvider>
-            <ThemeProvider>
-              <InstallProvider>
-                <Routed />
-                <InstallPrompt />
-              </InstallProvider>
-            </ThemeProvider>
-          </AuthProvider>
-        </ToastProvider>
-      </BrowserRouter>
-    </QueryClientProvider>
+    <ColorSchemeProvider>
+      <QueryClientProvider client={queryClient}>
+        <BrowserRouter>
+          <ToastProvider>
+            <AuthProvider>
+              <ThemeProvider>
+                <InstallProvider>
+                  <Routed />
+                  <InstallPrompt />
+                </InstallProvider>
+              </ThemeProvider>
+            </AuthProvider>
+          </ToastProvider>
+        </BrowserRouter>
+      </QueryClientProvider>
+    </ColorSchemeProvider>
   );
 }

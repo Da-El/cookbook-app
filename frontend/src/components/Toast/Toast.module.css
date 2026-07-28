@@ -3,8 +3,8 @@
   left: 50%;
   bottom: 34px;
   transform: translateX(-50%);
-  background: var(--ink);
-  color: #fff;
+  background: var(--ink-solid);
+  color: var(--on-ink-solid);
   font: 600 13px var(--font-ui);
   padding: 11px 18px;
   border-radius: 999px;

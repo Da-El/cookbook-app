@@ -302,8 +302,9 @@ pub async fn submit_edit(
         .await
         .map_err(|_| oops())?;
 
-    apply_winner(&mut tx, id, &body.field).await.map_err(|_| oops())?;
+    let newly_won = apply_winner(&mut tx, id, &body.field).await.map_err(|_| oops())?;
     tx.commit().await.map_err(|_| oops())?;
+    notify_edit_won(&state, newly_won, id).await;
     Ok(StatusCode::CREATED)
 }
 
@@ -384,8 +385,9 @@ pub async fn delete_edit(
         .await
         .map_err(|_| oops())?;
 
-    apply_winner(&mut tx, id, &field).await.map_err(|_| oops())?;
+    let newly_won = apply_winner(&mut tx, id, &field).await.map_err(|_| oops())?;
     tx.commit().await.map_err(|_| oops())?;
+    notify_edit_won(&state, newly_won, id).await;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -437,21 +439,45 @@ pub async fn vote_edit(
     .await
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    apply_winner(&mut tx, id, &field).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let newly_won = apply_winner(&mut tx, id, &field).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     tx.commit().await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    notify_edit_won(&state, newly_won, id).await;
 
     Ok(Json(serde_json::json!({ "voted": removed == 0 })))
+}
+
+/// Best-effort email for whoever's edit `apply_winner` just crowned -
+/// looked up post-commit since `apply_winner` only has a transaction, not
+/// the pool `send_notification_email` needs.
+async fn notify_edit_won(state: &AppState, newly_won_author: Option<i64>, ingredient_id: i64) {
+    let Some(author_id) = newly_won_author else { return };
+    let name: Option<String> = sqlx::query_scalar("SELECT name FROM ingredients WHERE id = $1")
+        .bind(ingredient_id)
+        .fetch_optional(&state.db)
+        .await
+        .ok()
+        .flatten();
+    let name = name.unwrap_or_else(|| "an ingredient".to_string());
+    crate::notify::send_notification_email(
+        &state.db, author_id, "edit_won",
+        "Your edit was approved on Cookbook",
+        &format!("Your proposed edit to \"{}\" is now the community-approved version.", name),
+    ).await;
 }
 
 /// Highest votes wins; ties go to the oldest edit (lowest id) since rows are
 /// already ordered that way - mirrors the prototype's pickWinner exactly.
 /// Applies the result onto the materialized ingredients/ingredient_nutrition
 /// columns that every other endpoint reads.
+/// Returns the winning edit's author when this call is the one that just
+/// made them the winner - `None` on every other call, including when an
+/// edit stays the winner across a later vote. See the doc on the return
+/// site below for why the caller (not this function) sends the email.
 pub(crate) async fn apply_winner(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     ingredient_id: i64,
     field: &str,
-) -> Result<(), sqlx::Error> {
+) -> Result<Option<i64>, sqlx::Error> {
     let winner: Option<(i64, Option<i64>, serde_json::Value)> = sqlx::query_as(
         "SELECT id, author_id, value FROM ingredient_edits WHERE ingredient_id = $1 AND field = $2
          ORDER BY votes DESC, id ASC LIMIT 1",
@@ -491,7 +517,7 @@ pub(crate) async fn apply_winner(
             }
             _ => {}
         }
-        return Ok(());
+        return Ok(None);
     };
 
     match field {
@@ -573,6 +599,7 @@ pub(crate) async fn apply_winner(
     .bind(edit_id)
     .fetch_optional(&mut **tx)
     .await?;
+    let mut newly_won_author = None;
     if newly_won.is_some() {
         if let Some(author_id) = author_id {
             sqlx::query(
@@ -584,10 +611,14 @@ pub(crate) async fn apply_winner(
             .execute(&mut **tx)
             .await
             .ok();
+            newly_won_author = Some(author_id);
         }
     }
 
-    Ok(())
+    // Returned rather than emailed from here - `apply_winner` only has a
+    // transaction, not the pool `send_notification_email` needs, so the
+    // caller sends it once the transaction (and thus this win) is committed.
+    Ok(newly_won_author)
 }
 
 #[derive(Serialize, sqlx::FromRow)]

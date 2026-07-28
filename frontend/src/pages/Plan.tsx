@@ -43,6 +43,22 @@ function groceryByAisle(items: GroceryItem[]): [string, GroceryItem[]][] {
   return groups;
 }
 
+/** Plain-text version of the list, grouped by aisle like the on-screen
+ * version - meant for pasting into a Notes app or texting to whoever else
+ * is doing the shopping, not for parsing back in. */
+function groceryListText(grocery: GroceryList): string {
+  const lines = [`Grocery list (${grocery.meals_planned} meal${grocery.meals_planned === 1 ? '' : 's'} planned)`, ''];
+  for (const [category, items] of groceryByAisle(grocery.items)) {
+    lines.push(category.toUpperCase());
+    for (const it of items) {
+      const qty = it.total_label ?? (it.unquantified.join(', ') || '');
+      lines.push(`- ${it.name}${qty ? ` — ${qty}` : ''}`);
+    }
+    lines.push('');
+  }
+  return lines.join('\n').trim();
+}
+
 function startOfWeek(base: Date): Date {
   const d = new Date(base);
   // Monday-first: getDay() is 0 for Sunday, which should close a week, not open one.
@@ -165,6 +181,24 @@ export function Plan() {
       qc.invalidateQueries({ queryKey: ['cookbook-counts'] });
     },
   });
+
+  // Web Share on a phone (hands it straight to Messages/Notes/etc.);
+  // clipboard everywhere else, since desktop browsers mostly don't
+  // implement `navigator.share` at all.
+  async function shareGroceryList() {
+    if (!grocery) return;
+    const text = groceryListText(grocery);
+    if (navigator.share) {
+      try {
+        await navigator.share({ text, title: 'Grocery list' });
+      } catch {
+        // AbortError from the user cancelling the share sheet - not a failure.
+      }
+      return;
+    }
+    await navigator.clipboard.writeText(text);
+    toast('Copied to clipboard');
+  }
 
   const weekLabel = `${days[0].toLocaleDateString(undefined, { day: 'numeric', month: 'short' })} – ${days[6].toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}`;
 
@@ -317,6 +351,9 @@ export function Plan() {
                     </>
                   )}
                 </span>
+                <button className={styles.shareBtn} onClick={shareGroceryList}>
+                  Share list
+                </button>
               </div>
 
               {/* Grouped by aisle (the server already sorts items this way)

@@ -74,8 +74,8 @@
   padding: 12px 22px;
   border-radius: 13px;
   border: none;
-  background: var(--ink);
-  color: #fff;
+  background: var(--ink-solid);
+  color: var(--on-ink-solid);
   font: 700 13.5px var(--font-ui);
   cursor: pointer;
 }
@@ -86,7 +86,7 @@
 }
 
 .error {
-  color: #C0392B;
+  color: var(--danger);
   font: 600 13px var(--font-ui);
   margin-top: 10px;
 }
@@ -114,9 +114,9 @@
 }
 
 .chipActive {
-  background: var(--ink);
-  color: #fff;
-  border-color: var(--ink);
+  background: var(--ink-solid);
+  color: var(--on-ink-solid);
+  border-color: var(--ink-solid);
 }
 
 .visRow {
@@ -162,8 +162,8 @@
 }
 
 .visActive {
-  background: var(--ink) !important;
-  color: #fff !important;
+  background: var(--ink-solid) !important;
+  color: var(--on-ink-solid) !important;
 }
 
 .twoFactorToggle {

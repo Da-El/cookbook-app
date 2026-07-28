@@ -5,6 +5,7 @@ import { api } from '../api/client';
 import type { IngredientSummary } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
 import { useProfileTheme } from '../theme/ThemeContext';
+import { useColorScheme } from '../theme/ColorSchemeContext';
 import { useIsDesktop } from '../hooks/useMediaQuery';
 import { useToast } from '../components/Toast/ToastContext';
 import { Segmented } from '../components/Segmented/Segmented';
@@ -13,7 +14,7 @@ import { MealCard, MealGrid } from '../components/MealCard/MealCard';
 import { EmptyCard, EmptyLine } from '../components/Empty/Empty';
 import { PencilIcon, SearchIcon } from '../components/Icon/Icon';
 import { ingredientBackground, mealBackground } from '../lib/imagery';
-import { PAGE_THEMES, heroTextColors } from '../lib/themes';
+import { heroCardBg, heroTextColorsForScheme } from '../lib/themes';
 import styles from './Cookbook.module.css';
 
 type Group = 'recipes' | 'kitchen' | 'contributions';
@@ -169,6 +170,7 @@ export function Cookbook() {
   const isDesktop = useIsDesktop();
   const { user } = useAuth();
   const theme = useProfileTheme();
+  const { resolved: colorScheme } = useColorScheme();
   const qc = useQueryClient();
   const toast = useToast();
 
@@ -321,8 +323,8 @@ export function Cookbook() {
   const heroTheme = theme?.cb_hero_theme ?? 'cream';
   const heroBg = hasHeroPhoto
     ? `center/cover no-repeat url("${theme!.cb_hero_photo_url}")`
-    : PAGE_THEMES[heroTheme].cardBg;
-  const heroColors = heroTextColors(hasHeroPhoto, heroTheme);
+    : heroCardBg(hasHeroPhoto, heroTheme, colorScheme === 'dark');
+  const heroColors = heroTextColorsForScheme(hasHeroPhoto, heroTheme, colorScheme === 'dark');
   const cookbookTitle = theme?.cb_title?.trim() || 'Your Cookbook';
   const cookbookBio = theme?.cb_bio?.trim();
 

@@ -1,7 +1,12 @@
 .root {
   position: fixed;
   inset: 0;
-  background: var(--ink);
+  /* Deliberately fixed rather than theme-reactive: Cook Mode is a
+     permanently-dark full-screen focus mode (light text throughout,
+     styled for a dark backdrop specifically) regardless of the site's own
+     light/dark setting - `--ink` would otherwise flip light under dark
+     mode and invert the whole screen against text that never repaints. */
+  background: var(--ink-solid);
   display: flex;
   flex-direction: column;
   z-index: 100;

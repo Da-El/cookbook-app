@@ -182,6 +182,15 @@ pub async fn toggle_follow(
             "INSERT INTO notifications (recipient_id, actor_id, type) VALUES ($1,$2,'new_follower')",
         )
         .bind(id).bind(user.id).execute(&state.db).await.ok();
+
+        crate::notify::send_notification_email(
+            &state.db,
+            id,
+            "new_follower",
+            "You have a new follower on Cookbook",
+            &format!("{} started following you on Cookbook.", user.display_name),
+        )
+        .await;
     }
 
     Ok(Json(serde_json::json!({ "following": deleted == 0 })))
@@ -481,6 +490,7 @@ pub struct UpdateProfile {
     pub vis_made: Option<String>,
     pub vis_want: Option<String>,
     pub vis_fridge: Option<String>,
+    pub unit_system: Option<String>,
 }
 
 /// Every field is optional; COALESCE leaves omitted ones untouched. Used by
@@ -501,6 +511,7 @@ pub async fn update_profile(
            vis_made = COALESCE(NULLIF($7,''), vis_made),
            vis_want = COALESCE(NULLIF($8,''), vis_want),
            vis_fridge = COALESCE(NULLIF($9,''), vis_fridge),
+           unit_system = COALESCE(NULLIF($10,''), unit_system),
            updated_at = now()
          WHERE id = $1",
     )
@@ -513,6 +524,7 @@ pub async fn update_profile(
     .bind(b.vis_made.as_deref())
     .bind(b.vis_want.as_deref())
     .bind(b.vis_fridge.as_deref())
+    .bind(b.unit_system.as_deref())
     .execute(&state.db)
     .await
     .map_err(|e| {

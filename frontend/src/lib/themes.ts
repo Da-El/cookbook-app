@@ -48,3 +48,29 @@ export function heroTextColors(hasPhoto: boolean, theme: PageTheme) {
   const t = PAGE_THEMES[theme];
   return { eyebrow: t.accent, title: '#241F1B', bio: '#5C5348', stat: '#241F1B', statLabel: '#948A7D', dot: '#D8CBB6' };
 }
+
+/** The card's own gradient background, or the dark-mode substitute below
+ * when there's no photo - none of the five page themes have a dark
+ * equivalent (they're all light gradients meant for dark ink text), so
+ * dark mode swaps in a flat dark surface instead of leaving whichever
+ * light gradient the user picked stranded against an otherwise dark page. */
+export function heroCardBg(hasPhoto: boolean, theme: PageTheme, dark: boolean) {
+  if (hasPhoto || !dark) return PAGE_THEMES[theme].cardBg;
+  return 'var(--surface-card)';
+}
+
+/** Same idea as `heroCardBg`: a photo's own scrim already guarantees
+ * contrast regardless of site theme, but the flat-color background does
+ * not, so dark mode routes text through theme-reactive CSS vars instead of
+ * `heroTextColors`'s literal light-mode hex values. */
+export function heroTextColorsForScheme(hasPhoto: boolean, theme: PageTheme, dark: boolean) {
+  if (hasPhoto || !dark) return heroTextColors(hasPhoto, theme);
+  return {
+    eyebrow: 'var(--accent)',
+    title: 'var(--ink)',
+    bio: 'var(--body)',
+    stat: 'var(--ink)',
+    statLabel: 'var(--muted-2)',
+    dot: 'var(--muted-4)',
+  };
+}

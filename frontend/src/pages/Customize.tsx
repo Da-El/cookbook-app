@@ -5,8 +5,9 @@ import { api } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 import { ChevronLeft } from '../components/Icon/Icon';
 import { pickImage } from '../lib/photo';
-import { AVATAR_THEMES, PAGE_THEMES, heroTextColors, type AvatarTheme, type PageTheme } from '../lib/themes';
+import { AVATAR_THEMES, PAGE_THEMES, heroCardBg, heroTextColorsForScheme, type AvatarTheme, type PageTheme } from '../lib/themes';
 import type { ProfileTheme } from '../theme/ThemeContext';
+import { useColorScheme } from '../theme/ColorSchemeContext';
 import styles from './Customize.module.css';
 
 interface FormState {
@@ -27,6 +28,7 @@ export function Customize() {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const { user } = useAuth();
+  const { resolved: colorScheme } = useColorScheme();
 
   const { data: initial } = useQuery({
     queryKey: ['profile-theme'],
@@ -68,10 +70,10 @@ export function Customize() {
   if (!form || !user) return null;
 
   const hasHeroPhoto = Boolean(form.cb_hero_photo_url);
-  const heroColors = heroTextColors(hasHeroPhoto, form.cb_hero_theme);
+  const heroColors = heroTextColorsForScheme(hasHeroPhoto, form.cb_hero_theme, colorScheme === 'dark');
   const heroBg = hasHeroPhoto
     ? `center/cover no-repeat url("${form.cb_hero_photo_url}")`
-    : PAGE_THEMES[form.cb_hero_theme].cardBg;
+    : heroCardBg(hasHeroPhoto, form.cb_hero_theme, colorScheme === 'dark');
 
   return (
     <div className={styles.page}>

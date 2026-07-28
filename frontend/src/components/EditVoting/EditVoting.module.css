@@ -48,8 +48,8 @@
   padding: 10px 16px;
   border: none;
   border-radius: 12px;
-  background: var(--ink);
-  color: #fff;
+  background: var(--ink-solid);
+  color: var(--on-ink-solid);
   font: 700 12.5px var(--font-ui);
   cursor: pointer;
 }
@@ -72,9 +72,9 @@
 }
 
 .chipOn {
-  background: var(--ink);
-  color: #fff;
-  border-color: var(--ink);
+  background: var(--ink-solid);
+  color: var(--on-ink-solid);
+  border-color: var(--ink-solid);
 }
 
 .list {

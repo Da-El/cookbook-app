@@ -74,9 +74,9 @@
 }
 
 .chipActive {
-  background: var(--ink);
-  color: #fff;
-  border-color: var(--ink);
+  background: var(--ink-solid);
+  color: var(--on-ink-solid);
+  border-color: var(--ink-solid);
 }
 
 .chefList {
@@ -125,9 +125,9 @@
 }
 
 .following {
-  background: var(--ink);
-  color: #fff;
-  border-color: var(--ink);
+  background: var(--ink-solid);
+  color: var(--on-ink-solid);
+  border-color: var(--ink-solid);
 }
 
 .emptyNote {

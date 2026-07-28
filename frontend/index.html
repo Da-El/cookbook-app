@@ -32,6 +32,17 @@
     <meta name="apple-mobile-web-app-title" content="Cookbook" />
   </head>
   <body>
+    <!-- Stamps data-theme before the first paint, mirroring
+         ColorSchemeContext's own resolution - without this, a dark-mode
+         pick would still flash the light palette for one frame while React
+         boots and runs that same logic. -->
+    <script>
+      (function () {
+        var pref = localStorage.getItem('cb-color-scheme');
+        var dark = pref === 'dark' || (pref !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches);
+        document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+      })();
+    </script>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

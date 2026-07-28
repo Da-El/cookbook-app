@@ -8,6 +8,7 @@ import { useProfileTheme } from '../../theme/ThemeContext';
 import { canOfferInstall, useInstall } from '../../pwa/InstallContext';
 import { api } from '../../api/client';
 import { Avatar } from '../Avatar/Avatar';
+import { CommandPalette } from '../CommandPalette/CommandPalette';
 import { BookIcon, CalendarIcon, CompassIcon, HomeIcon, PlusIcon, SearchIcon } from '../Icon/Icon';
 import styles from './Shell.module.css';
 
@@ -201,6 +202,7 @@ export function Shell({ children, bare = false }: ShellProps) {
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
               />
+              <kbd className={styles.searchKbd}>⌘K</kbd>
             </form>
             <div className={styles.topbarRight}>
               <button
@@ -228,6 +230,7 @@ export function Shell({ children, bare = false }: ShellProps) {
           <div className={styles.content} id="main-content" tabIndex={-1}>{children}</div>
         </div>
         {menu}
+        <CommandPalette />
       </div>
     );
   }
@@ -268,6 +271,7 @@ export function Shell({ children, bare = false }: ShellProps) {
         </nav>
       )}
       {menu}
+      <CommandPalette />
     </div>
   );
 }

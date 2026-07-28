@@ -162,9 +162,9 @@
 }
 
 .subTabActive {
-  background: var(--ink);
-  color: #fff;
-  border-color: var(--ink);
+  background: var(--ink-solid);
+  color: var(--on-ink-solid);
+  border-color: var(--ink-solid);
 }
 
 .subTabCount {
@@ -207,7 +207,7 @@
 }
 
 .visPublic {
-  background: #E9F0EC;
+  background: var(--green-tint);
   color: var(--green);
 }
 
@@ -236,14 +236,14 @@
   padding: 13px 15px;
   border-radius: 16px;
   background: var(--chip-bg);
-  border: 1px solid #EBE0CD;
+  border: 1px solid var(--border-hairline);
   max-width: 640px;
 }
 
 .crossNoteText {
   flex: 1;
   min-width: 0;
-  color: #6B6157;
+  color: var(--secondary);
   font: 500 13px var(--font-ui);
   line-height: 1.4;
 }
@@ -253,8 +253,8 @@
   padding: 9px 15px;
   border-radius: 999px;
   border: none;
-  background: var(--ink);
-  color: #fff;
+  background: var(--ink-solid);
+  color: var(--on-ink-solid);
   font: 700 12.5px var(--font-ui);
   cursor: pointer;
 }

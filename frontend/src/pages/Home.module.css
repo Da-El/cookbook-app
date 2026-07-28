@@ -306,7 +306,7 @@
 }
 
 .saveBtnOn {
-  background: var(--ink);
+  background: var(--ink-solid);
 }
 
 @media (min-width: 900px) {

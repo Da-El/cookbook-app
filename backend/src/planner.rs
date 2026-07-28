@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::auth::CurrentUser;
 use crate::state::AppState;
-use crate::units::{format_amount, from_base, tidy_amount, to_base, unit_dimension, Dimension};
+use crate::units::{format_amount, from_base, preferred_unit, tidy_amount, to_base, unit_dimension, Dimension};
 
 const SLOTS: [&str; 4] = ["breakfast", "lunch", "dinner", "snack"];
 
@@ -285,24 +285,34 @@ impl Bucket {
         }
     }
 
-    /// Renders each dimension's total back into whichever unit the recipes used
-    /// most often - "3 cups" reads better than "710 ml" when every source said
-    /// cups. Ties fall to the alphabetically first unit so output is stable.
-    fn label(&self) -> Option<String> {
+    /// Renders each dimension's total back into a unit. Under `unit_system`
+    /// "as_written" (the only behavior before Iteration 25), that's whichever
+    /// unit the recipes used most often - "3 cups" reads better than "710 ml"
+    /// when every source said cups, and ties fall to the alphabetically first
+    /// unit so output is stable. Under an explicit "metric"/"imperial" system,
+    /// `preferred_unit` picks the unit instead, overriding what the recipes
+    /// happened to say - the whole point of setting a preference is a
+    /// shopping list that reads consistently regardless of source.
+    fn label(&self, unit_system: &str) -> Option<String> {
         if self.totals.is_empty() {
             return None;
         }
         let parts: Vec<String> = self
             .totals
             .iter()
-            .filter_map(|(_, base, units)| {
-                let mut best: Vec<(&String, &usize)> = units.iter().collect();
-                best.sort_by(|a, b| b.1.cmp(a.1).then(a.0.cmp(b.0)));
-                let unit = best.first()?.0;
+            .filter_map(|(dim, base, units)| {
+                let unit = match preferred_unit(dim, *base, unit_system) {
+                    Some(u) => u.to_string(),
+                    None => {
+                        let mut best: Vec<(&String, &usize)> = units.iter().collect();
+                        best.sort_by(|a, b| b.1.cmp(a.1).then(a.0.cmp(b.0)));
+                        best.first()?.0.clone()
+                    }
+                };
                 if unit.is_empty() {
                     return Some(format_amount(tidy_amount(*base)));
                 }
-                let shown = from_base(*base, unit)?;
+                let shown = from_base(*base, &unit)?;
                 Some(format!("{} {}", format_amount(tidy_amount(shown)), unit))
             })
             .collect();
@@ -317,6 +327,12 @@ pub async fn grocery_list(
 ) -> Result<Json<GroceryList>, StatusCode> {
     checked_range(&p)?;
     let rows = planned_ingredients(&state, user.id, p.from, p.to).await?;
+
+    let unit_system: String = sqlx::query_scalar("SELECT unit_system FROM users WHERE id = $1")
+        .bind(user.id)
+        .fetch_one(&state.db)
+        .await
+        .map_err(db_err)?;
 
     let meals_planned: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM meal_plan_entries WHERE user_id=$1 AND plan_date BETWEEN $2 AND $3",
@@ -373,7 +389,7 @@ pub async fn grocery_list(
         .filter_map(|k| {
             let b = buckets.remove(&k)?;
             Some(GroceryItem {
-                total_label: b.label(),
+                total_label: b.label(&unit_system),
                 key: k,
                 name: b.name,
                 ingredient_id: b.ingredient_id,
@@ -551,7 +567,7 @@ mod tests {
         let mut b = Bucket::default();
         b.add_quantity(2.0, "cup");
         b.add_quantity(1.0, "cup");
-        assert_eq!(b.label().as_deref(), Some("3 cup"));
+        assert_eq!(b.label("as_written").as_deref(), Some("3 cup"));
     }
 
     #[test]
@@ -560,7 +576,7 @@ mod tests {
         b.add_quantity(500.0, "g");
         b.add_quantity(1.0, "kg");
         // Grams appear as often as kilos; the tie resolves to "g" by name.
-        assert_eq!(b.label().as_deref(), Some("1500 g"));
+        assert_eq!(b.label("as_written").as_deref(), Some("1500 g"));
     }
 
     #[test]
@@ -568,7 +584,7 @@ mod tests {
         let mut b = Bucket::default();
         b.add_quantity(2.0, "cup");
         b.add_quantity(100.0, "g");
-        let label = b.label().unwrap();
+        let label = b.label("as_written").unwrap();
         assert!(label.contains('+'), "expected two totals, got {label}");
     }
 
@@ -577,12 +593,12 @@ mod tests {
         let mut b = Bucket::default();
         b.add_quantity(2.0, "clove");
         b.add_quantity(1.0, "can");
-        assert!(b.label().unwrap().contains('+'));
+        assert!(b.label("as_written").unwrap().contains('+'));
     }
 
     #[test]
     fn no_quantities_means_no_label() {
-        assert_eq!(Bucket::default().label(), None);
+        assert_eq!(Bucket::default().label("as_written"), None);
     }
 
     #[test]
@@ -590,7 +606,7 @@ mod tests {
         let mut b = Bucket::default();
         b.add_quantity(2.0, ""); // "2 eggs"
         b.add_quantity(3.0, ""); // "3 eggs"
-        assert_eq!(b.label().as_deref(), Some("5"));
+        assert_eq!(b.label("as_written").as_deref(), Some("5"));
     }
 
     #[test]
@@ -598,6 +614,23 @@ mod tests {
         let mut b = Bucket::default();
         b.add_quantity(2.0, "");
         b.add_quantity(100.0, "g");
-        assert!(b.label().unwrap().contains('+'));
+        assert!(b.label("as_written").unwrap().contains('+'));
+    }
+
+    #[test]
+    fn explicit_unit_system_overrides_the_source_unit() {
+        // Written in cups, but a metric preference should show it in ml,
+        // not "whichever unit the recipes used most" - the whole point of
+        // setting a system is that it wins over the source.
+        let mut b = Bucket::default();
+        b.add_quantity(1.0, "cup");
+        assert_eq!(b.label("metric").as_deref(), Some("236.588 ml"));
+
+        // Written in grams, but an imperial preference should convert - and
+        // 500g crosses `preferred_unit`'s lb threshold, so it's pounds, not
+        // ounces, matching how a shopper would actually write it down.
+        let mut b = Bucket::default();
+        b.add_quantity(500.0, "g");
+        assert_eq!(b.label("imperial").as_deref(), Some("1.102 lb"));
     }
 }

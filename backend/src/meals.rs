@@ -1460,6 +1460,18 @@ pub async fn toggle_save(
         )
         .bind(user.id).bind(id)
         .execute(&state.db).await.ok();
+
+        let notified: Option<(i64, String)> =
+            sqlx::query_as("SELECT author_id, name FROM meals WHERE id = $1 AND author_id <> $2")
+                .bind(id).bind(user.id)
+                .fetch_optional(&state.db).await.ok().flatten();
+        if let Some((author_id, meal_name)) = notified {
+            crate::notify::send_notification_email(
+                &state.db, author_id, "meal_saved",
+                "Someone saved your recipe on Cookbook",
+                &format!("{} saved your recipe \"{}\" to cook later.", user.display_name, meal_name),
+            ).await;
+        }
     }
 
     Ok(Json(serde_json::json!({ "saved": deleted == 0 })))
@@ -1487,6 +1499,7 @@ pub async fn cook(
 
     // Only the first time - re-marking an already-cooked meal (e.g. after
     // editing the note) shouldn't re-notify the author every time.
+    let mut cooked_notify: Option<(i64, String)> = None;
     if first_cook {
         sqlx::query(
             "INSERT INTO notifications (recipient_id, actor_id, type, subject_type, subject_id)
@@ -1494,6 +1507,10 @@ pub async fn cook(
         )
         .bind(user.id).bind(id)
         .execute(&mut *tx).await.ok();
+
+        cooked_notify = sqlx::query_as("SELECT author_id, name FROM meals WHERE id = $1 AND author_id <> $2")
+            .bind(id).bind(user.id)
+            .fetch_optional(&mut *tx).await.ok().flatten();
     }
 
     // Cooking it fulfils the intent to save it, so drop it from the saved list.
@@ -1529,6 +1546,15 @@ pub async fn cook(
     }
 
     tx.commit().await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    if let Some((author_id, meal_name)) = cooked_notify {
+        crate::notify::send_notification_email(
+            &state.db, author_id, "meal_cooked",
+            "Someone cooked your recipe on Cookbook",
+            &format!("{} cooked your recipe \"{}\".", user.display_name, meal_name),
+        ).await;
+    }
+
     Ok(Json(serde_json::json!({ "cooked": true })))
 }
 
@@ -1640,6 +1666,7 @@ struct MealReviewRow {
     helpful_count: i32,
     your_helpful_vote: bool,
     author_tier: String,
+    edited_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
 #[derive(Serialize)]
@@ -1661,6 +1688,7 @@ pub struct MealReview {
     pub your_helpful_vote: bool,
     pub author_tier: String,
     pub replies: Vec<ReviewReply>,
+    pub edited_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
 impl From<MealReviewRow> for MealReview {
@@ -1680,6 +1708,7 @@ impl From<MealReviewRow> for MealReview {
             your_helpful_vote: r.your_helpful_vote,
             author_tier: r.author_tier,
             replies: Vec::new(),
+            edited_at: r.edited_at,
         }
     }
 }
@@ -1695,18 +1724,25 @@ pub struct ReviewReply {
     pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
+#[derive(Deserialize)]
+pub struct ReviewsParams {
+    pub sort: Option<String>,
+}
+
 /// Public, multi-author reviews for a recipe - the actual "Reviews" section a
 /// recipe page needs. `my_reviews`/`chef_reviews` are both single-author
 /// (this viewer's, or one chef's); neither can answer "what has everyone who
 /// cooked this said," which is the question this endpoint exists for.
 ///
-/// Ranked by helpfulness first: on a recipe with a lot of reviews, the ones
-/// other cooks have actually found useful belong above yesterday's review
-/// that nobody's seen yet.
+/// Default order is helpfulness first: on a recipe with a lot of reviews,
+/// the ones other cooks have actually found useful belong above yesterday's
+/// review that nobody's seen yet. `sort` picks a different lens on the same
+/// data rather than changing what's included.
 pub async fn meal_reviews(
     State(state): State<AppState>,
     viewer: Option<CurrentUser>,
     Path(id): Path<i64>,
+    Query(params): Query<ReviewsParams>,
 ) -> Result<Json<Vec<MealReview>>, StatusCode> {
     let viewer_id = viewer.map(|u| u.0.id);
     let current_revision_count: i64 =
@@ -1716,28 +1752,49 @@ pub async fn meal_reviews(
             .await
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    let rows = sqlx::query_as::<_, MealReviewRow>(
-        "SELECT r.id, r.user_id, u.display_name AS author_name,
-                u.cb_avatar_theme AS avatar_theme, u.cb_avatar_photo_url AS avatar_photo_url,
-                r.score, r.note, r.cooked_at, r.meal_revision_count,
-                r.meal_revision_count = $2 AS is_current_version,
-                r.helpful_count,
-                EXISTS (SELECT 1 FROM review_votes v
-                        WHERE v.review_id = r.id AND v.user_id = $3) AS your_helpful_vote,
-                contributor_tier(u.id) AS author_tier
-         FROM reviews r JOIN users u ON u.id = r.user_id
-         WHERE r.meal_id = $1 AND r.is_public = true AND r.note IS NOT NULL
-         ORDER BY r.helpful_count DESC, r.cooked_at DESC LIMIT 100",
-    )
-    .bind(id)
-    .bind(current_revision_count)
-    .bind(viewer_id)
-    .fetch_all(&state.db)
-    .await
-    .map_err(|e| {
-        tracing::error!("meal_reviews failed: {e}");
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
+    // sqlx 0.9 requires query strings to be `&'static str` (its guard
+    // against runtime-built SQL) - a `format!` with the ORDER BY spliced in
+    // doesn't qualify even though `order_by` only ever comes from this fixed
+    // set. `meal_review_sql!` produces four complete static literals instead,
+    // one per sort, so the whole query stays compile-time-known either way.
+    macro_rules! meal_review_sql {
+        ($order:literal) => {
+            concat!(
+                "SELECT r.id, r.user_id, u.display_name AS author_name,
+                        u.cb_avatar_theme AS avatar_theme, u.cb_avatar_photo_url AS avatar_photo_url,
+                        r.score, r.note, r.cooked_at, r.meal_revision_count,
+                        r.meal_revision_count = $2 AS is_current_version,
+                        r.helpful_count,
+                        EXISTS (SELECT 1 FROM review_votes v
+                                WHERE v.review_id = r.id AND v.user_id = $3) AS your_helpful_vote,
+                        contributor_tier(u.id) AS author_tier,
+                        r.edited_at
+                 FROM reviews r JOIN users u ON u.id = r.user_id
+                 WHERE r.meal_id = $1 AND r.is_public = true AND r.note IS NOT NULL
+                 ORDER BY ",
+                $order,
+                " LIMIT 100"
+            )
+        };
+    }
+
+    let sql: &'static str = match params.sort.as_deref() {
+        Some("recent") => meal_review_sql!("r.cooked_at DESC"),
+        Some("highest") => meal_review_sql!("r.score DESC NULLS LAST, r.cooked_at DESC"),
+        Some("lowest") => meal_review_sql!("r.score ASC NULLS LAST, r.cooked_at DESC"),
+        _ => meal_review_sql!("r.helpful_count DESC, r.cooked_at DESC"),
+    };
+
+    let rows = sqlx::query_as::<_, MealReviewRow>(sql)
+        .bind(id)
+        .bind(current_revision_count)
+        .bind(viewer_id)
+        .fetch_all(&state.db)
+        .await
+        .map_err(|e| {
+            tracing::error!("meal_reviews failed: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
     let mut rows: Vec<MealReview> = rows.into_iter().map(MealReview::from).collect();
 
     let review_ids: Vec<i64> = rows.iter().map(|r| r.id).collect();
@@ -1813,6 +1870,21 @@ pub async fn create_reply(
     .await
     .ok();
 
+    let notified: Option<i64> = sqlx::query_scalar("SELECT user_id FROM reviews WHERE id = $1 AND user_id <> $2")
+        .bind(review_id)
+        .bind(user.id)
+        .fetch_optional(&state.db)
+        .await
+        .ok()
+        .flatten();
+    if let Some(recipient_id) = notified {
+        crate::notify::send_notification_email(
+            &state.db, recipient_id, "review_reply",
+            "Someone replied to your review on Cookbook",
+            &format!("{} replied to your review: \"{}\"", user.display_name, text),
+        ).await;
+    }
+
     Ok((StatusCode::CREATED, Json(serde_json::json!({ "id": reply_id }))))
 }
 
@@ -1838,6 +1910,80 @@ pub async fn delete_reply(
         return Err(StatusCode::NOT_FOUND);
     }
     Ok(StatusCode::NO_CONTENT)
+}
+
+#[derive(Deserialize)]
+pub struct ReviewEdit {
+    pub note: String,
+    pub score: Option<i16>,
+}
+
+/// Author-only: fix a typo or update your take after cooking it again,
+/// without losing the "written about revision N" stamp `meal_reviews`
+/// already shows - only `note`/`score`/`edited_at` change, everything else
+/// about when and what revision the review was originally written against
+/// stays put. Updating the score re-runs the same `upsert_rating` a fresh
+/// rating does, since `reviews.score` and the canonical `ratings` row are
+/// otherwise two copies of the same number that would silently drift.
+pub async fn update_review(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Path((meal_id, review_id)): Path<(i64, i64)>,
+    Json(body): Json<ReviewEdit>,
+) -> Result<Json<serde_json::Value>, (StatusCode, Json<serde_json::Value>)> {
+    let text = body.note.trim();
+    if text.is_empty() || text.chars().count() > 4000 {
+        return Err(bad("A review needs to be between 1 and 4000 characters."));
+    }
+    if let Some(score) = body.score {
+        if !(1..=10).contains(&score) {
+            return Err(bad("Rating must be between 1 and 10."));
+        }
+    }
+
+    let mut tx = state.db.begin().await.map_err(|_| oops())?;
+
+    let owner: Option<i64> = sqlx::query_scalar(
+        "SELECT user_id FROM reviews WHERE id = $1 AND meal_id = $2",
+    )
+    .bind(review_id)
+    .bind(meal_id)
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(|_| oops())?;
+
+    match owner {
+        None => return Err((StatusCode::NOT_FOUND, Json(serde_json::json!({ "error": "Review not found." })))),
+        Some(owner_id) if owner_id != user.id => {
+            return Err((StatusCode::FORBIDDEN, Json(serde_json::json!({ "error": "Not your review." }))))
+        }
+        _ => {}
+    }
+
+    // `score` only touches the row when the edit actually includes one -
+    // binding a bare `Option<i16>` here would NULL out an existing score
+    // whenever the client edits just the note, leaving `reviews.score` and
+    // the canonical `ratings` row (still untouched below) disagreeing.
+    if let Some(score) = body.score {
+        sqlx::query("UPDATE reviews SET note = $1, score = $2, edited_at = now() WHERE id = $3")
+            .bind(text)
+            .bind(score)
+            .bind(review_id)
+            .execute(&mut *tx)
+            .await
+            .map_err(|_| oops())?;
+        upsert_rating(&mut tx, user.id, "meal", meal_id, score).await;
+    } else {
+        sqlx::query("UPDATE reviews SET note = $1, edited_at = now() WHERE id = $2")
+            .bind(text)
+            .bind(review_id)
+            .execute(&mut *tx)
+            .await
+            .map_err(|_| oops())?;
+    }
+
+    tx.commit().await.map_err(|_| oops())?;
+    Ok(Json(serde_json::json!({ "updated": true })))
 }
 
 /// Toggle-only, like `edit_votes`: tapping again withdraws it. There's no

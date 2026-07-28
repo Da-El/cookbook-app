@@ -281,8 +281,23 @@
 
 .groceryHead {
   margin-top: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
   color: var(--secondary);
   font: 400 14px var(--font-ui);
+}
+
+.shareBtn {
+  flex: none;
+  padding: 7px 14px;
+  border-radius: 999px;
+  border: 1.5px solid var(--border-card);
+  background: var(--surface-card);
+  color: var(--secondary);
+  font: 700 12px var(--font-ui);
+  cursor: pointer;
 }
 
 .groceryHead strong {

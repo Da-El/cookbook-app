@@ -534,14 +534,15 @@ pub struct SettingsProfile {
     pub vis_want: String,
     pub vis_fridge: String,
     pub two_factor_enabled: bool,
+    pub unit_system: String,
 }
 
 pub async fn settings(
     State(state): State<AppState>,
     CurrentUser(user): CurrentUser,
 ) -> Result<Json<SettingsProfile>, StatusCode> {
-    let row = sqlx::query_as::<_, (String, Option<String>, Option<String>, Vec<String>, String, String, String, String, bool)>(
-        "SELECT display_name, email, bio, diet_prefs, vis_mine, vis_made, vis_want, vis_fridge, two_factor_enabled
+    let row = sqlx::query_as::<_, (String, Option<String>, Option<String>, Vec<String>, String, String, String, String, bool, String)>(
+        "SELECT display_name, email, bio, diet_prefs, vis_mine, vis_made, vis_want, vis_fridge, two_factor_enabled, unit_system
          FROM users WHERE id = $1",
     )
     .bind(user.id)
@@ -559,6 +560,7 @@ pub async fn settings(
         vis_want: row.6,
         vis_fridge: row.7,
         two_factor_enabled: row.8,
+        unit_system: row.9,
     }))
 }
 
