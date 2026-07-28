@@ -240,3 +240,56 @@ both themes; the command palette's keyboard shortcut, live search, and
 Enter-to-navigate through a real browser session; and unit conversion
 confirmed at the API level for both metric and imperial before checking
 the same numbers rendered correctly in the Plan page and its exported text.
+
+---
+
+## Batch 6 — Iterations 26–30
+
+**Commit:** `c63ad2d` (local only — not pushed/deployed this batch, per standing
+instruction) · **Migrations:** 0023–0026 · **Tests:** 55 backend, passing
+
+26. **Ingredient reviews** — ingredients have had `rating`/`rating_count`
+    columns since the original schema, and `upsert_rating()` already
+    branched on `subject_type='ingredient'`, but nothing had ever called
+    it — there was no way to rate an ingredient at all, anywhere in the
+    app. Adds the missing action (a score, an optional note, one row per
+    user per ingredient) plus helpfulness voting, mirroring meal reviews.
+    Caught and fixed the exact same note-only-edit-nulls-the-score bug
+    from Iteration 21, this time in ingredients.rs, before it shipped.
+27. **Guide discussion comments** — guides have had propose-and-vote
+    editing for the guide's own body since Batch 2, but no way for a
+    reader to just say something about it. A flat, one-level comment
+    list, author-only hard delete — the same "closer to a chat message
+    than catalog content" reasoning review_replies already used.
+28. **Nutrition goals + daily tracking** — optional daily calorie/protein/
+    carbs/fat targets in Settings, plus a "Today" card on the feed once
+    any goal is set (or a meal's been logged). Required genuinely new
+    plumbing, not just a UI on existing data: neither `cooked_meals`
+    (upserted once, no repeat timestamp) nor `reviews` (only written with
+    a note or score) could answer "what did I eat today," so `cook()` now
+    also writes a plain append-only `meal_log` entry every time.
+29. **Data export** — a GDPR/CCPA-style "download my data," bundling a
+    user's own profile, published meals, meal and ingredient reviews,
+    collections, and saved/cooked lists into one downloadable JSON file
+    from Settings.
+30. **Occasion tags for meals** ("quick weeknight," "meal prep," "date
+    night," ...) — crowd-voted rather than propose-and-pick-a-winner like
+    ingredient_edits/guide_edits, since an occasion is a judgment call
+    about the dish with no single "right" answer to converge on. A tag
+    counts as applied — and becomes filterable on Browse — once 2+ people
+    vote for it, the same "don't let one vote decide it" instinct behind
+    reputation-weighted voting elsewhere in the app.
+
+**Verified:** ingredient rating/review end-to-end via curl and real
+browser UI, including confirming the meal-review score-preservation fix
+generalizes correctly to the new code path; guide comments' full
+post/list/delete cycle plus the cross-user delete-authorization boundary;
+nutrition goals confirmed at the API level with a purpose-built test meal
+(200g of a known ingredient → exact expected calorie/macro totals), then
+the same numbers checked rendering correctly in both Settings and the
+Home feed, including the goal-cleared fallback; data export's JSON
+structure verified via curl and the actual browser download trigger
+(blob + filename) confirmed firing; occasion tags' vote-threshold
+behavior (1 vote = not applied, 2 = applied) confirmed at the API level
+for both the meal page and the Browse filter, then spot-checked through
+the real UI.
