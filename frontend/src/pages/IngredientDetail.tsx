@@ -1,7 +1,9 @@
+import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '../api/client';
 import type { IngredientDetail as Detail, Micros } from '../api/types';
+import { useAuth } from '../auth/AuthContext';
 import { ChevronLeft } from '../components/Icon/Icon';
 import {
   CategoryEditSection,
@@ -13,8 +15,33 @@ import {
 import { AliasSection } from '../components/EditVoting/AliasSection';
 import { SubstituteSection } from '../components/EditVoting/SubstituteSection';
 import { LoadingState, ErrorState } from '../components/PageState/PageState';
+import { Avatar } from '../components/Avatar/Avatar';
+import { ContributorBadge, type ContributorTier } from '../components/ContributorBadge/ContributorBadge';
 import { ingredientBackground } from '../lib/imagery';
 import styles from './IngredientDetail.module.css';
+
+interface IngredientReview {
+  id: number;
+  user_id: number;
+  author_name: string;
+  avatar_theme: 'green' | 'terracotta' | 'navy' | 'plum';
+  avatar_photo_url: string | null;
+  score: number | null;
+  note: string | null;
+  created_at: string;
+  edited_at: string | null;
+  helpful_count: number;
+  your_helpful_vote: boolean;
+  author_tier: ContributorTier;
+}
+
+function relativeTime(iso: string) {
+  const days = Math.round((Date.now() - new Date(iso).getTime()) / 86400000);
+  if (days < 1) return 'today';
+  if (days === 1) return '1 day ago';
+  if (days < 30) return `${days} days ago`;
+  return new Date(iso).toLocaleDateString(undefined, { month: 'short', year: 'numeric' });
+}
 
 // FDA daily values (mg) - drives the %DV bars.
 const DV: Record<keyof Micros, { label: string; dv: number }> = {
@@ -36,6 +63,10 @@ interface UsedInMeal {
 export function IngredientDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const qc = useQueryClient();
+  const { user } = useAuth();
+  const [note, setNote] = useState('');
+  const [score, setScore] = useState<number | null>(null);
 
   const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['ingredient', id],
@@ -53,6 +84,26 @@ export function IngredientDetail() {
     queryKey: ['ingredient-used-in', id],
     queryFn: () => api.get<UsedInMeal[]>(`/ingredients/${id}/used-in`),
     enabled: Boolean(id),
+  });
+
+  const { data: reviews = [] } = useQuery({
+    queryKey: ['ingredient-reviews', id],
+    queryFn: () => api.get<IngredientReview[]>(`/ingredients/${id}/reviews`),
+    enabled: Boolean(id),
+  });
+
+  const submitReview = useMutation({
+    mutationFn: () => api.post(`/ingredients/${id}/reviews`, { score, note: note.trim() || null }),
+    onSuccess: () => {
+      setNote('');
+      qc.invalidateQueries({ queryKey: ['ingredient-reviews', id] });
+      qc.invalidateQueries({ queryKey: ['ingredient', id] });
+    },
+  });
+
+  const voteHelpful = useMutation({
+    mutationFn: (reviewId: number) => api.post(`/ingredients/${id}/reviews/${reviewId}/helpful`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['ingredient-reviews', id] }),
   });
 
   if (isLoading) return <LoadingState label="Loading ingredient…" />;
@@ -95,6 +146,15 @@ export function IngredientDetail() {
 
       <h1 className={styles.name}>{data.name}</h1>
 
+      {data.rating_count > 0 && (
+        <div className={styles.ratingSummary}>
+          <span className={styles.ratingStar}>★ {data.rating.toFixed(1)}</span>
+          <span className={styles.ratingCount}>
+            {data.rating_count} rating{data.rating_count === 1 ? '' : 's'}
+          </span>
+        </div>
+      )}
+
       <div className={styles.chips}>
         <span className={styles.tag}>{data.category}</span>
         {data.food_group && <span className={styles.tag}>{data.food_group}</span>}
@@ -118,6 +178,77 @@ export function IngredientDetail() {
         <p className={styles.desc} style={{ color: 'var(--muted-2)', fontStyle: 'italic' }}>
           No description yet — be the first to suggest one below.
         </p>
+      )}
+
+      {user && (
+        <div className={styles.card}>
+          <p className={styles.sectionTitle}>Rate it</p>
+          <div className={styles.rateRow}>
+            {Array.from({ length: 10 }, (_, i) => i + 1).map((n2) => (
+              <button
+                key={n2}
+                className={`${styles.rateBtn} ${score === n2 ? styles.rateBtnOn : ''}`}
+                onClick={() => setScore(n2)}
+                aria-pressed={score === n2}
+                aria-label={`Rate ${n2} out of 10`}
+              >
+                {n2}
+              </button>
+            ))}
+          </div>
+          <textarea
+            className={styles.reviewInput}
+            placeholder="Add a note about how you use it (optional)…"
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            rows={2}
+          />
+          <button
+            className={styles.reviewSubmit}
+            disabled={(score === null && !note.trim()) || submitReview.isPending}
+            onClick={() => submitReview.mutate()}
+          >
+            {submitReview.isPending ? 'Saving…' : 'Save'}
+          </button>
+        </div>
+      )}
+
+      {reviews.length > 0 && (
+        <div className={styles.card}>
+          <p className={styles.sectionTitle}>Reviews</p>
+          <div className={styles.reviewList}>
+            {reviews.map((r) => (
+              <div key={r.id} className={styles.reviewRow}>
+                <Avatar
+                  name={r.author_name}
+                  photoUrl={r.avatar_photo_url}
+                  theme={r.avatar_theme}
+                  size="sm"
+                  shape="rounded"
+                />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div className={styles.reviewHead}>
+                    <span className={styles.reviewAuthor}>{r.author_name}</span>
+                    <ContributorBadge tier={r.author_tier} />
+                    {r.score != null && <span className={styles.reviewStars}>★ {r.score}/10</span>}
+                    <span className={styles.reviewWhen}>
+                      {relativeTime(r.created_at)}
+                      {r.edited_at && ' (edited)'}
+                    </span>
+                  </div>
+                  {r.note && <p className={styles.reviewNote}>{r.note}</p>}
+                  <button
+                    className={`${styles.helpfulBtn} ${r.your_helpful_vote ? styles.helpfulBtnOn : ''}`}
+                    onClick={() => voteHelpful.mutate(r.id)}
+                    aria-pressed={r.your_helpful_vote}
+                  >
+                    👍 Helpful{r.helpful_count > 0 ? ` (${r.helpful_count})` : ''}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
       )}
 
       <div className={styles.card}>

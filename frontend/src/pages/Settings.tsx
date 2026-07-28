@@ -60,6 +60,10 @@ interface SettingsProfile {
   vis_fridge: 'public' | 'private';
   two_factor_enabled: boolean;
   unit_system: 'as_written' | 'metric' | 'imperial';
+  goal_calories: number | null;
+  goal_protein_g: number | null;
+  goal_carbs_g: number | null;
+  goal_fat_g: number | null;
 }
 
 const UNIT_SYSTEMS: ['as_written' | 'metric' | 'imperial', string][] = [
@@ -100,6 +104,29 @@ export function Settings() {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [confirmLogoutAll, setConfirmLogoutAll] = useState(false);
 
+  const [exporting, setExporting] = useState(false);
+
+  async function exportData() {
+    setExporting(true);
+    try {
+      const data = await api.get('/account/export');
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `cookbook-data-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  const [goalCalories, setGoalCalories] = useState('');
+  const [goalProtein, setGoalProtein] = useState('');
+  const [goalCarbs, setGoalCarbs] = useState('');
+  const [goalFat, setGoalFat] = useState('');
+
   const { data: sessions = [] } = useQuery({
     queryKey: ['sessions'],
     queryFn: () => api.get<Session[]>('/auth/sessions'),
@@ -120,8 +147,26 @@ export function Settings() {
       setDisplayName(settings.display_name);
       setEmail(settings.email);
       setDiet(settings.diet_prefs);
+      setGoalCalories(settings.goal_calories?.toString() ?? '');
+      setGoalProtein(settings.goal_protein_g?.toString() ?? '');
+      setGoalCarbs(settings.goal_carbs_g?.toString() ?? '');
+      setGoalFat(settings.goal_fat_g?.toString() ?? '');
     }
   }, [settings]);
+
+  const saveGoals = useMutation({
+    mutationFn: () =>
+      api.post('/profile', {
+        // An empty field means "clear this goal" - sent as 0, the sentinel
+        // the backend maps to NULL, since a bare omitted/null field there
+        // means "leave it as it was," not "clear it."
+        goal_calories: goalCalories.trim() ? Number(goalCalories) : 0,
+        goal_protein_g: goalProtein.trim() ? Number(goalProtein) : 0,
+        goal_carbs_g: goalCarbs.trim() ? Number(goalCarbs) : 0,
+        goal_fat_g: goalFat.trim() ? Number(goalFat) : 0,
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['settings'] }),
+  });
 
   const saveProfile = useMutation({
     mutationFn: () => api.post('/profile', { display_name: displayName.trim() }),
@@ -462,6 +507,59 @@ export function Settings() {
       )}
 
       <div className={styles.section}>
+        <div className={styles.sectionTitle}>Daily nutrition goals</div>
+        <p className={styles.securityHint}>
+          Optional — set any of these to see a "Today" progress view on your feed, based on
+          what you've marked cooked. Leave a field blank to turn that goal off.
+        </p>
+        <div className={styles.goalGrid}>
+          <div className={styles.field}>
+            <label className={styles.label}>Calories</label>
+            <input
+              className={styles.input}
+              type="number"
+              min={0}
+              value={goalCalories}
+              onChange={(e) => setGoalCalories(e.target.value)}
+            />
+          </div>
+          <div className={styles.field}>
+            <label className={styles.label}>Protein (g)</label>
+            <input
+              className={styles.input}
+              type="number"
+              min={0}
+              value={goalProtein}
+              onChange={(e) => setGoalProtein(e.target.value)}
+            />
+          </div>
+          <div className={styles.field}>
+            <label className={styles.label}>Carbs (g)</label>
+            <input
+              className={styles.input}
+              type="number"
+              min={0}
+              value={goalCarbs}
+              onChange={(e) => setGoalCarbs(e.target.value)}
+            />
+          </div>
+          <div className={styles.field}>
+            <label className={styles.label}>Fat (g)</label>
+            <input
+              className={styles.input}
+              type="number"
+              min={0}
+              value={goalFat}
+              onChange={(e) => setGoalFat(e.target.value)}
+            />
+          </div>
+        </div>
+        <button className={styles.saveBtn} onClick={() => saveGoals.mutate()} disabled={saveGoals.isPending}>
+          Save
+        </button>
+      </div>
+
+      <div className={styles.section}>
         <div className={styles.sectionTitle}>Diet preferences</div>
         <div className={styles.chipRow}>
           {DIET_PREFS.map((p) => (
@@ -500,6 +598,16 @@ export function Settings() {
             </div>
           </div>
         ))}
+      </div>
+
+      <div className={styles.section}>
+        <div className={styles.sectionTitle}>Your data</div>
+        <p className={styles.securityHint}>
+          Download everything you've published, reviewed, rated, and saved as a JSON file.
+        </p>
+        <button className={styles.saveBtn} onClick={() => exportData()} disabled={exporting}>
+          {exporting ? 'Preparing…' : 'Export my data'}
+        </button>
       </div>
 
       <div className={styles.dangerZone}>

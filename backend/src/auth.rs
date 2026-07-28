@@ -535,14 +535,20 @@ pub struct SettingsProfile {
     pub vis_fridge: String,
     pub two_factor_enabled: bool,
     pub unit_system: String,
+    pub goal_calories: Option<i32>,
+    pub goal_protein_g: Option<i32>,
+    pub goal_carbs_g: Option<i32>,
+    pub goal_fat_g: Option<i32>,
 }
 
 pub async fn settings(
     State(state): State<AppState>,
     CurrentUser(user): CurrentUser,
 ) -> Result<Json<SettingsProfile>, StatusCode> {
-    let row = sqlx::query_as::<_, (String, Option<String>, Option<String>, Vec<String>, String, String, String, String, bool, String)>(
-        "SELECT display_name, email, bio, diet_prefs, vis_mine, vis_made, vis_want, vis_fridge, two_factor_enabled, unit_system
+    #[allow(clippy::type_complexity)]
+    let row = sqlx::query_as::<_, (String, Option<String>, Option<String>, Vec<String>, String, String, String, String, bool, String, Option<i32>, Option<i32>, Option<i32>, Option<i32>)>(
+        "SELECT display_name, email, bio, diet_prefs, vis_mine, vis_made, vis_want, vis_fridge, two_factor_enabled, unit_system,
+                goal_calories, goal_protein_g, goal_carbs_g, goal_fat_g
          FROM users WHERE id = $1",
     )
     .bind(user.id)
@@ -561,6 +567,10 @@ pub async fn settings(
         vis_fridge: row.7,
         two_factor_enabled: row.8,
         unit_system: row.9,
+        goal_calories: row.10,
+        goal_protein_g: row.11,
+        goal_carbs_g: row.12,
+        goal_fat_g: row.13,
     }))
 }
 

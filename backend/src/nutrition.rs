@@ -12,9 +12,14 @@
 //! honest gap. `counted`/`total` on the response says exactly how partial
 //! the number is instead of dressing it up as complete.
 
+use axum::extract::State;
+use axum::http::StatusCode;
+use axum::Json;
 use serde::Serialize;
 use sqlx::PgPool;
 
+use crate::auth::CurrentUser;
+use crate::state::AppState;
 use crate::units::{to_base, unit_dimension, Dimension};
 
 #[derive(sqlx::FromRow)]
@@ -66,6 +71,23 @@ impl NutritionTotals {
         self.potassium_mg += line.potassium_mg.unwrap_or(0.0) * factor;
         self.magnesium_mg += line.magnesium_mg.unwrap_or(0.0) * factor;
         self.sodium_mg += line.sodium_mg.unwrap_or(0.0) * factor;
+    }
+
+    /// Accumulates another meal's totals into this one - used to build a
+    /// day's running total across everything logged, not just one recipe.
+    fn add(&mut self, other: &NutritionTotals) {
+        self.calories += other.calories;
+        self.protein += other.protein;
+        self.carbs += other.carbs;
+        self.fat += other.fat;
+        self.fiber += other.fiber;
+        self.sugar += other.sugar;
+        self.vit_c_mg += other.vit_c_mg;
+        self.calcium_mg += other.calcium_mg;
+        self.iron_mg += other.iron_mg;
+        self.potassium_mg += other.potassium_mg;
+        self.magnesium_mg += other.magnesium_mg;
+        self.sodium_mg += other.sodium_mg;
     }
 
     fn scaled(&self, factor: f64) -> NutritionTotals {
@@ -151,6 +173,63 @@ pub async fn compute(db: &PgPool, meal_id: i64, serves: Option<&str>) -> Result<
         counted,
         total_ingredients: total_ingredients as usize,
     })
+}
+
+#[derive(Serialize)]
+pub struct DailyGoals {
+    pub calories: Option<i32>,
+    pub protein_g: Option<i32>,
+    pub carbs_g: Option<i32>,
+    pub fat_g: Option<i32>,
+}
+
+#[derive(Serialize)]
+pub struct TodayNutrition {
+    pub totals: NutritionTotals,
+    pub goals: DailyGoals,
+    pub meals_logged: usize,
+}
+
+/// One serving assumed per `meal_log` entry - there's no quantity-eaten
+/// tracking, so "cooked it" reads as "ate a serving of it," the same
+/// simplifying assumption the rest of the app makes rather than pretending
+/// to a precision it doesn't have (see this module's own doc comment).
+pub async fn today(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+) -> Result<Json<TodayNutrition>, StatusCode> {
+    let today = chrono::Utc::now().date_naive();
+    let logged: Vec<(i64, Option<String>)> = sqlx::query_as(
+        "SELECT ml.meal_id, m.serves FROM meal_log ml
+         JOIN meals m ON m.id = ml.meal_id
+         WHERE ml.user_id = $1 AND ml.logged_at::date = $2",
+    )
+    .bind(user.id)
+    .bind(today)
+    .fetch_all(&state.db)
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let mut totals = NutritionTotals::default();
+    for (meal_id, serves) in &logged {
+        if let Ok(n) = compute(&state.db, *meal_id, serves.as_deref()).await {
+            totals.add(&n.per_serving);
+        }
+    }
+
+    let goals: (Option<i32>, Option<i32>, Option<i32>, Option<i32>) = sqlx::query_as(
+        "SELECT goal_calories, goal_protein_g, goal_carbs_g, goal_fat_g FROM users WHERE id = $1",
+    )
+    .bind(user.id)
+    .fetch_one(&state.db)
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    Ok(Json(TodayNutrition {
+        totals,
+        goals: DailyGoals { calories: goals.0, protein_g: goals.1, carbs_g: goals.2, fat_g: goals.3 },
+        meals_logged: logged.len(),
+    }))
 }
 
 #[cfg(test)]

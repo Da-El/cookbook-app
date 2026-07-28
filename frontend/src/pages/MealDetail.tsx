@@ -89,6 +89,14 @@ function formatAmount(v: number): string {
   return Math.abs(r - Math.round(r)) < 0.005 ? String(Math.round(r)) : String(r);
 }
 
+interface OccasionTag {
+  tag: string;
+  label: string;
+  votes: number;
+  your_vote: boolean;
+  applied: boolean;
+}
+
 interface RelatedMeal {
   id: number;
   name: string;
@@ -197,6 +205,17 @@ export function MealDetail() {
   const voteHelpful = useMutation({
     mutationFn: (reviewId: number) => api.post(`/meals/${id}/reviews/${reviewId}/helpful`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['meal-reviews', id] }),
+  });
+
+  const { data: occasions = [] } = useQuery({
+    queryKey: ['meal-occasions', id],
+    queryFn: () => api.get<OccasionTag[]>(`/meals/${id}/occasions`),
+    enabled: Boolean(id),
+  });
+
+  const voteOccasion = useMutation({
+    mutationFn: (tag: string) => api.post(`/meals/${id}/occasions/${tag}/vote`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['meal-occasions', id] }),
   });
 
   const updateReview = useMutation({
@@ -413,6 +432,25 @@ export function MealDetail() {
               {t.charAt(0).toUpperCase() + t.slice(1)}
             </span>
           ))}
+        </div>
+      )}
+
+      {occasions.length > 0 && (user ? true : occasions.some((o) => o.applied)) && (
+        <div className={styles.dietRow}>
+          {occasions
+            .filter((o) => user || o.applied)
+            .map((o) => (
+              <button
+                key={o.tag}
+                className={`${styles.occasionChip} ${o.applied ? styles.occasionChipApplied : ''} ${o.your_vote ? styles.occasionChipVoted : ''}`}
+                onClick={() => user && voteOccasion.mutate(o.tag)}
+                disabled={!user}
+                title={user ? (o.your_vote ? 'Remove your vote' : 'Vote for this occasion') : undefined}
+              >
+                {o.label}
+                {o.votes > 0 ? ` (${o.votes})` : ''}
+              </button>
+            ))}
         </div>
       )}
 

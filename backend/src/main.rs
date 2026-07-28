@@ -3,6 +3,7 @@ mod auth;
 mod collections;
 mod diet;
 mod email;
+mod export;
 mod guides;
 mod import;
 mod ingredients;
@@ -75,12 +76,16 @@ async fn main() -> anyhow::Result<()> {
         .route("/auth/sessions/revoke-others", post(auth::revoke_other_sessions))
         .route("/auth/sessions/{id}", delete(auth::revoke_session))
         .route("/settings", get(auth::settings))
+        .route("/nutrition/today", get(nutrition::today))
+        .route("/account/export", get(export::export))
         .route("/settings/notification-prefs", get(notify::list_prefs))
         .route("/settings/notification-prefs/{type}", put(notify::set_pref))
         .route("/ingredients", get(ingredients::list).post(ingredients::create))
         .route("/ingredients/categories", get(ingredients::categories))
         .route("/ingredients/{id}", get(ingredients::detail))
         .route("/ingredients/{id}/used-in", get(ingredients::used_in_meals))
+        .route("/ingredients/{id}/reviews", get(ingredients::list_reviews).post(ingredients::submit_review))
+        .route("/ingredients/{id}/reviews/{review_id}/helpful", post(ingredients::vote_review_helpful))
         .route("/ingredients/{id}/edits", post(ingredients::submit_edit))
         .route(
             "/ingredients/{id}/edits/{field}",
@@ -102,6 +107,8 @@ async fn main() -> anyhow::Result<()> {
         .route("/meals/{id}", get(meals::detail).post(meals::update).delete(meals::delete))
         .route("/meals/{id}/fork", post(meals::fork))
         .route("/meals/{id}/save", post(meals::toggle_save))
+        .route("/meals/{id}/occasions", get(meals::list_occasions))
+        .route("/meals/{id}/occasions/{tag}/vote", post(meals::vote_occasion))
         .route("/meals/{id}/photo", post(meals::update_photo))
         .route("/meals/{id}/cook", post(meals::cook))
         .route("/meals/{id}/rate", post(meals::rate))
@@ -152,6 +159,8 @@ async fn main() -> anyhow::Result<()> {
         .route("/guides/{slug}", get(guides::detail))
         .route("/guides/{slug}/helpful", post(guides::vote_helpful))
         .route("/guides/{slug}/related-meals", get(guides::related_meals))
+        .route("/guides/{slug}/comments", get(guides::list_comments).post(guides::create_comment))
+        .route("/guides/{slug}/comments/{comment_id}", delete(guides::delete_comment))
         .route("/guides/{slug}/edits", get(guides::list_edits).post(guides::submit_edit))
         .route("/guides/{slug}/edits/{edit_id}", delete(guides::delete_edit))
         .route("/guides/{slug}/edits/{edit_id}/vote", post(guides::vote_edit))

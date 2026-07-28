@@ -101,6 +101,32 @@
   font: 700 11px var(--font-ui);
 }
 
+.occasionChip {
+  padding: 4px 11px;
+  border-radius: 999px;
+  border: 1.5px solid var(--border-card);
+  background: var(--surface-card);
+  color: var(--muted-2);
+  font: 700 11px var(--font-ui);
+  cursor: pointer;
+}
+
+.occasionChip:disabled {
+  cursor: default;
+}
+
+.occasionChipApplied {
+  background: var(--chip-bg);
+  color: var(--secondary);
+  border-color: var(--border-chip);
+}
+
+.occasionChipVoted {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+
 .authorChip {
   display: flex;
   align-items: center;

@@ -3,11 +3,28 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '../api/client';
 import type { GuideDetail, GuideSummary } from '../api/types';
+import { useAuth } from '../auth/AuthContext';
 import { ChevronLeft } from '../components/Icon/Icon';
 import { LoadingState, ErrorState } from '../components/PageState/PageState';
 import { FlagButton } from '../components/Flag/FlagButton';
 import { mealBackground } from '../lib/imagery';
 import styles from './Guides.module.css';
+
+interface GuideComment {
+  id: number;
+  user_id: number | null;
+  author_name: string;
+  body: string;
+  created_at: string;
+}
+
+function relativeTime(iso: string) {
+  const days = Math.round((Date.now() - new Date(iso).getTime()) / 86400000);
+  if (days < 1) return 'today';
+  if (days === 1) return '1 day ago';
+  if (days < 30) return `${days} days ago`;
+  return new Date(iso).toLocaleDateString(undefined, { month: 'short', year: 'numeric' });
+}
 
 interface RelatedMeal {
   id: number;
@@ -102,8 +119,10 @@ export function GuidePage() {
   const { slug } = useParams();
   const navigate = useNavigate();
   const qc = useQueryClient();
+  const { user } = useAuth();
   const [editOpen, setEditOpen] = useState(false);
   const [draft, setDraft] = useState('');
+  const [comment, setComment] = useState('');
 
   const { data: guide, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['guide', slug],
@@ -125,6 +144,25 @@ export function GuidePage() {
     queryKey: ['guide-edits', slug],
     queryFn: () => api.get<GuideEditRow[]>(`/guides/${slug}/edits`),
     enabled: Boolean(slug),
+  });
+
+  const { data: comments = [] } = useQuery({
+    queryKey: ['guide-comments', slug],
+    queryFn: () => api.get<GuideComment[]>(`/guides/${slug}/comments`),
+    enabled: Boolean(slug),
+  });
+
+  const postComment = useMutation({
+    mutationFn: () => api.post(`/guides/${slug}/comments`, { body: comment.trim() }),
+    onSuccess: () => {
+      setComment('');
+      qc.invalidateQueries({ queryKey: ['guide-comments', slug] });
+    },
+  });
+
+  const deleteComment = useMutation({
+    mutationFn: (commentId: number) => api.del(`/guides/${slug}/comments/${commentId}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['guide-comments', slug] }),
   });
 
   const invalidate = () => {
@@ -200,6 +238,50 @@ export function GuidePage() {
           {guide.helpful_count > 0 ? ` · ${guide.helpful_count}` : ''}
         </button>
       </div>
+
+      <section className={styles.section}>
+        <h2 className={styles.topic}>Discussion</h2>
+        {user && (
+          <div className={styles.editForm}>
+            <textarea
+              className={styles.editTextarea}
+              value={comment}
+              onChange={(e) => setComment(e.target.value)}
+              placeholder="Ask a question or add your own take…"
+              rows={3}
+              maxLength={1000}
+            />
+            <button
+              className={styles.editSubmit}
+              disabled={!comment.trim() || postComment.isPending}
+              onClick={() => postComment.mutate()}
+            >
+              Post
+            </button>
+          </div>
+        )}
+        {comments.length === 0 ? (
+          <p className={styles.cardSummary}>No comments yet — be the first to say something.</p>
+        ) : (
+          <div className={styles.editList}>
+            {comments.map((c) => (
+              <div key={c.id} className={styles.editRow}>
+                <span className={styles.editRowMeta}>
+                  {c.author_name} · {relativeTime(c.created_at)}
+                </span>
+                <p className={styles.editRowBody}>{c.body}</p>
+                {user && c.user_id === user.id && (
+                  <div className={styles.editRowActions}>
+                    <button className={styles.editDeleteBtn} onClick={() => deleteComment.mutate(c.id)}>
+                      Delete
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
 
       {related.length > 0 && (
         <section className={styles.section}>

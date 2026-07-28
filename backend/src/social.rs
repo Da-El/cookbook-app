@@ -491,6 +491,15 @@ pub struct UpdateProfile {
     pub vis_want: Option<String>,
     pub vis_fridge: Option<String>,
     pub unit_system: Option<String>,
+    /// `Some(None)` isn't representable with a plain `Option<i32>` field
+    /// (COALESCE below can't distinguish "not sent" from "clear it"), so a
+    /// goal is set with a positive number and cleared by sending 0 - the
+    /// handler below maps that to NULL rather than storing a nonsensical
+    /// zero-calorie target.
+    pub goal_calories: Option<i32>,
+    pub goal_protein_g: Option<i32>,
+    pub goal_carbs_g: Option<i32>,
+    pub goal_fat_g: Option<i32>,
 }
 
 /// Every field is optional; COALESCE leaves omitted ones untouched. Used by
@@ -512,6 +521,10 @@ pub async fn update_profile(
            vis_want = COALESCE(NULLIF($8,''), vis_want),
            vis_fridge = COALESCE(NULLIF($9,''), vis_fridge),
            unit_system = COALESCE(NULLIF($10,''), unit_system),
+           goal_calories = CASE WHEN $11::int IS NULL THEN goal_calories WHEN $11 = 0 THEN NULL ELSE $11 END,
+           goal_protein_g = CASE WHEN $12::int IS NULL THEN goal_protein_g WHEN $12 = 0 THEN NULL ELSE $12 END,
+           goal_carbs_g = CASE WHEN $13::int IS NULL THEN goal_carbs_g WHEN $13 = 0 THEN NULL ELSE $13 END,
+           goal_fat_g = CASE WHEN $14::int IS NULL THEN goal_fat_g WHEN $14 = 0 THEN NULL ELSE $14 END,
            updated_at = now()
          WHERE id = $1",
     )
@@ -525,6 +538,10 @@ pub async fn update_profile(
     .bind(b.vis_want.as_deref())
     .bind(b.vis_fridge.as_deref())
     .bind(b.unit_system.as_deref())
+    .bind(b.goal_calories)
+    .bind(b.goal_protein_g)
+    .bind(b.goal_carbs_g)
+    .bind(b.goal_fat_g)
     .execute(&state.db)
     .await
     .map_err(|e| {

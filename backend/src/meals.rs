@@ -110,6 +110,9 @@ pub struct BrowseParams {
     pub max_time: Option<i32>,
     /// "easy" | "medium" | "hard" - see `meal_difficulty_sql!`.
     pub difficulty: Option<String>,
+    /// One of OCCASION_TAGS, e.g. "meal-prep" - applied once 2+ users have
+    /// voted for it (see meal_occasion_votes / `vote_occasion`).
+    pub occasion: Option<String>,
 }
 
 pub async fn browse(
@@ -154,6 +157,9 @@ pub async fn browse(
                                 WHERE mi3.meal_id = m.id AND mi3.ingredient_id IS NOT NULL))
              AND ($7::int IS NULL OR m.time_minutes <= $7)
              AND ($8::text IS NULL OR (", meal_difficulty_case_sql!(), ") = $8)
+             AND ($9::text IS NULL OR
+                  (SELECT count(*) FROM meal_occasion_votes mov
+                   WHERE mov.meal_id = m.id AND mov.tag = $9) >= 2)
          ) m
          JOIN users u ON u.id = m.author_id
          ORDER BY
@@ -181,6 +187,7 @@ pub async fn browse(
         .bind(p.diet.as_deref().filter(|s| !s.is_empty()))
         .bind(p.max_time)
         .bind(p.difficulty.as_deref().filter(|s| !s.is_empty()))
+        .bind(p.occasion.as_deref().filter(|s| !s.is_empty()))
         .fetch_all(&state.db)
         .await
         .map_err(|e| {
@@ -1497,6 +1504,12 @@ pub async fn cook(
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
         .rows_affected() > 0;
 
+    // Every cook, not gated on first_cook like the notification below - a
+    // repeat is a real eating event too, and this is the only place daily
+    // nutrition tracking can find "what did I eat today."
+    sqlx::query("INSERT INTO meal_log (user_id, meal_id) VALUES ($1,$2)")
+        .bind(user.id).bind(id).execute(&mut *tx).await.ok();
+
     // Only the first time - re-marking an already-cooked meal (e.g. after
     // editing the note) shouldn't re-notify the author every time.
     let mut cooked_notify: Option<(i64, String)> = None;
@@ -1579,7 +1592,7 @@ pub async fn rate(
 }
 
 /// Writes the user's rating then recomputes the subject's cached average.
-async fn upsert_rating(
+pub(crate) async fn upsert_rating(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     user_id: i64,
     subject_type: &str,
@@ -2046,7 +2059,110 @@ pub async fn filters(State(state): State<AppState>) -> Json<serde_json::Value> {
         "SELECT DISTINCT meal_type FROM meals WHERE visibility='public' AND status='live' ORDER BY meal_type",
     )
     .fetch_all(&state.db).await.unwrap_or_default();
-    Json(serde_json::json!({ "cuisines": cuisines, "meal_types": types }))
+    let occasions: Vec<serde_json::Value> = OCCASION_TAGS
+        .iter()
+        .map(|&(tag, label)| serde_json::json!({ "tag": tag, "label": label }))
+        .collect();
+    Json(serde_json::json!({ "cuisines": cuisines, "meal_types": types, "occasions": occasions }))
+}
+
+/// A judgment about the dish, not something derivable from ingredients (see
+/// this iteration's migration comment for why that rules out a heuristic
+/// the way diet_flags gets one). Fixed vocabulary rather than free-text tags
+/// - an open tag field just becomes a duplicate, half-used search box.
+const OCCASION_TAGS: &[(&str, &str)] = &[
+    ("quick-weeknight", "Quick weeknight"),
+    ("meal-prep", "Meal prep"),
+    ("date-night", "Date night"),
+    ("kid-friendly", "Kid-friendly"),
+    ("party", "Party"),
+    ("comfort-food", "Comfort food"),
+    ("healthy", "Healthy"),
+    ("budget", "Budget-friendly"),
+];
+
+#[derive(Serialize)]
+pub struct OccasionTag {
+    pub tag: String,
+    pub label: String,
+    pub votes: i64,
+    pub your_vote: bool,
+    /// True once `votes >= 2` - the same threshold `browse()`'s occasion
+    /// filter uses, so a tag never matches a search but not show as applied
+    /// here, or vice versa.
+    pub applied: bool,
+}
+
+pub async fn list_occasions(
+    State(state): State<AppState>,
+    viewer: Option<CurrentUser>,
+    Path(id): Path<i64>,
+) -> Result<Json<Vec<OccasionTag>>, StatusCode> {
+    let viewer_id = viewer.map(|u| u.0.id);
+    let counts: Vec<(String, i64)> = sqlx::query_as(
+        "SELECT tag, count(*) FROM meal_occasion_votes WHERE meal_id = $1 GROUP BY tag",
+    )
+    .bind(id)
+    .fetch_all(&state.db)
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let your_tags: Vec<String> = if let Some(uid) = viewer_id {
+        sqlx::query_scalar("SELECT tag FROM meal_occasion_votes WHERE meal_id = $1 AND user_id = $2")
+            .bind(id)
+            .bind(uid)
+            .fetch_all(&state.db)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+    } else {
+        Vec::new()
+    };
+
+    let rows = OCCASION_TAGS
+        .iter()
+        .map(|&(tag, label)| {
+            let votes = counts.iter().find(|(t, _)| t == tag).map(|(_, c)| *c).unwrap_or(0);
+            OccasionTag {
+                tag: tag.to_string(),
+                label: label.to_string(),
+                votes,
+                your_vote: your_tags.iter().any(|t| t == tag),
+                applied: votes >= 2,
+            }
+        })
+        .collect();
+    Ok(Json(rows))
+}
+
+pub async fn vote_occasion(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Path((id, tag)): Path<(i64, String)>,
+) -> Result<Json<serde_json::Value>, (StatusCode, Json<serde_json::Value>)> {
+    if !OCCASION_TAGS.iter().any(|&(t, _)| t == tag) {
+        return Err(bad("Not a recognized occasion tag."));
+    }
+
+    let removed = sqlx::query("DELETE FROM meal_occasion_votes WHERE meal_id = $1 AND tag = $2 AND user_id = $3")
+        .bind(id)
+        .bind(&tag)
+        .bind(user.id)
+        .execute(&state.db)
+        .await
+        .map_err(|_| oops())?
+        .rows_affected();
+
+    if removed == 0 {
+        sqlx::query("INSERT INTO meal_occasion_votes (meal_id, tag, user_id) VALUES ($1,$2,$3)")
+            .bind(id)
+            .bind(&tag)
+            .bind(user.id)
+            .execute(&state.db)
+            .await
+            .map_err(|_| oops())?;
+    }
+
+    Ok(Json(serde_json::json!({ "voted": removed == 0 })))
 }
 
 fn bad(msg: &str) -> (StatusCode, Json<serde_json::Value>) {

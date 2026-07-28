@@ -32,6 +32,19 @@ const TIME_CHIPS: [string, number | null][] = [
   ['45 min', 45],
   ['60 min', 60],
 ];
+// Matches backend/src/meals.rs's OCCASION_TAGS exactly - the tag (left) is
+// what the API filters on, the label (right) is what the chip shows.
+const OCCASION_CHIPS: [string, string][] = [
+  ['All', 'All'],
+  ['quick-weeknight', 'Quick weeknight'],
+  ['meal-prep', 'Meal prep'],
+  ['date-night', 'Date night'],
+  ['kid-friendly', 'Kid-friendly'],
+  ['party', 'Party'],
+  ['comfort-food', 'Comfort food'],
+  ['healthy', 'Healthy'],
+  ['budget', 'Budget-friendly'],
+];
 
 interface MealRow extends MealCardData {
   author_name: string;
@@ -75,6 +88,7 @@ export function Browse() {
   const [sort, setSort] = useState('top');
   const [difficulty, setDifficulty] = useState('All');
   const [maxTime, setMaxTime] = useState<number | null>(null);
+  const [occasion, setOccasion] = useState('All');
 
   // The desktop topbar searches by pushing ?q=, so mirror it into local state.
   const urlQuery = params.get('q');
@@ -94,7 +108,7 @@ export function Browse() {
   });
 
   const { data: browseMeals = [], isLoading: browseMealsLoading } = useQuery({
-    queryKey: ['meals', mealType, diet, sort, difficulty, maxTime],
+    queryKey: ['meals', mealType, diet, sort, difficulty, maxTime, occasion],
     queryFn: () => {
       const q = new URLSearchParams();
       if (mealType !== 'All') q.set('meal_type', mealType);
@@ -102,6 +116,7 @@ export function Browse() {
       q.set('sort', sort);
       if (difficulty !== 'All') q.set('difficulty', difficulty.toLowerCase());
       if (maxTime != null) q.set('max_time', String(maxTime));
+      if (occasion !== 'All') q.set('occasion', occasion);
       return api.get<MealRow[]>(`/meals?${q}`);
     },
     enabled: tab === 'meals' && trimmedSearch.length === 0,
@@ -250,6 +265,20 @@ export function Browse() {
               onClick={() => setDifficulty(d)}
             >
               {d}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {tab === 'meals' && !trimmedSearch && (
+        <div className={`${styles.chipRow} hscroll`}>
+          {OCCASION_CHIPS.map(([tag, label]) => (
+            <button
+              key={tag}
+              className={`${styles.chip} ${occasion === tag ? styles.chipActive : ''}`}
+              onClick={() => setOccasion(tag)}
+            >
+              {label}
             </button>
           ))}
         </div>

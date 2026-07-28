@@ -738,3 +738,143 @@ pub async fn detail(
         nutrition,
     }))
 }
+
+#[derive(Deserialize)]
+pub struct ReviewSubmission {
+    pub score: Option<i16>,
+    pub note: Option<String>,
+}
+
+#[derive(Serialize, sqlx::FromRow)]
+pub struct IngredientReview {
+    pub id: i64,
+    pub user_id: i64,
+    pub author_name: String,
+    pub avatar_theme: String,
+    pub avatar_photo_url: Option<String>,
+    pub score: Option<i16>,
+    pub note: Option<String>,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub edited_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub helpful_count: i32,
+    pub your_helpful_vote: bool,
+    pub author_tier: String,
+}
+
+/// One review per (user, ingredient) - a second submission edits the first
+/// rather than accumulating a history, the same "no repeatable moment to
+/// timestamp" reasoning the migration's own comment explains. Requires at
+/// least a score or a note; a call with neither is a no-op the client
+/// shouldn't have sent.
+pub async fn submit_review(
+    State(state): State<AppState>,
+    crate::auth::CurrentUser(user): crate::auth::CurrentUser,
+    Path(id): Path<i64>,
+    Json(body): Json<ReviewSubmission>,
+) -> Result<StatusCode, (StatusCode, Json<serde_json::Value>)> {
+    if let Some(score) = body.score {
+        if !(1..=10).contains(&score) {
+            return Err(bad("Rating must be between 1 and 10."));
+        }
+    }
+    let note = body.note.as_deref().map(str::trim).filter(|s| !s.is_empty());
+    if body.score.is_none() && note.is_none() {
+        return Err(bad("Give a rating, a note, or both."));
+    }
+
+    let mut tx = state.db.begin().await.map_err(|_| oops())?;
+
+    // COALESCE keeps the previous score when this submission is note-only -
+    // binding EXCLUDED.score bare would otherwise null out an existing
+    // rating any time someone edits just their note (the same bug caught
+    // and fixed in meals.rs's review-edit path in Iteration 21).
+    sqlx::query(
+        "INSERT INTO ingredient_reviews (user_id, ingredient_id, score, note)
+         VALUES ($1, $2, $3, $4)
+         ON CONFLICT (user_id, ingredient_id)
+         DO UPDATE SET
+           score = COALESCE(EXCLUDED.score, ingredient_reviews.score),
+           note = EXCLUDED.note,
+           edited_at = now()",
+    )
+    .bind(user.id)
+    .bind(id)
+    .bind(body.score)
+    .bind(note)
+    .execute(&mut *tx)
+    .await
+    .map_err(|e| {
+        tracing::error!("submit ingredient review failed: {e}");
+        oops()
+    })?;
+
+    if let Some(score) = body.score {
+        crate::meals::upsert_rating(&mut tx, user.id, "ingredient", id, score).await;
+    }
+
+    tx.commit().await.map_err(|_| oops())?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+pub async fn list_reviews(
+    State(state): State<AppState>,
+    viewer: Option<crate::auth::CurrentUser>,
+    Path(id): Path<i64>,
+) -> Result<Json<Vec<IngredientReview>>, StatusCode> {
+    let viewer_id = viewer.map(|u| u.0.id);
+    let rows = sqlx::query_as::<_, IngredientReview>(
+        "SELECT r.id, r.user_id, u.display_name AS author_name,
+                u.cb_avatar_theme AS avatar_theme, u.cb_avatar_photo_url AS avatar_photo_url,
+                r.score, r.note, r.created_at, r.edited_at, r.helpful_count,
+                EXISTS (SELECT 1 FROM ingredient_review_votes v
+                        WHERE v.review_id = r.id AND v.user_id = $2) AS your_helpful_vote,
+                contributor_tier(u.id) AS author_tier
+         FROM ingredient_reviews r JOIN users u ON u.id = r.user_id
+         WHERE r.ingredient_id = $1 AND r.note IS NOT NULL
+         ORDER BY r.helpful_count DESC, r.created_at DESC
+         LIMIT 100",
+    )
+    .bind(id)
+    .bind(viewer_id)
+    .fetch_all(&state.db)
+    .await
+    .map_err(|e| {
+        tracing::error!("list ingredient reviews failed: {e}");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+    Ok(Json(rows))
+}
+
+pub async fn vote_review_helpful(
+    State(state): State<AppState>,
+    crate::auth::CurrentUser(user): crate::auth::CurrentUser,
+    Path((_id, review_id)): Path<(i64, i64)>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    let removed = sqlx::query("DELETE FROM ingredient_review_votes WHERE user_id = $1 AND review_id = $2")
+        .bind(user.id)
+        .bind(review_id)
+        .execute(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .rows_affected();
+
+    if removed == 0 {
+        sqlx::query("INSERT INTO ingredient_review_votes (user_id, review_id) VALUES ($1, $2)")
+            .bind(user.id)
+            .bind(review_id)
+            .execute(&state.db)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    }
+
+    sqlx::query(
+        "UPDATE ingredient_reviews SET helpful_count =
+           (SELECT count(*) FROM ingredient_review_votes WHERE review_id = $1) WHERE id = $1",
+    )
+    .bind(review_id)
+    .execute(&state.db)
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    Ok(Json(serde_json::json!({ "voted": removed == 0 })))
+}

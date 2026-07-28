@@ -415,3 +415,98 @@ fn bad(msg: &str) -> (StatusCode, Json<serde_json::Value>) {
 fn oops() -> (StatusCode, Json<serde_json::Value>) {
     (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "error": "Could not save that." })))
 }
+
+#[derive(Serialize, sqlx::FromRow)]
+pub struct GuideComment {
+    pub id: i64,
+    /// NULL for a former user whose account was deleted (FK `SET NULL`) -
+    /// still shown with their name at the time, just not linkable.
+    pub user_id: Option<i64>,
+    pub author_name: String,
+    pub body: String,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+}
+
+pub async fn list_comments(
+    State(state): State<AppState>,
+    Path(slug): Path<String>,
+) -> Result<Json<Vec<GuideComment>>, StatusCode> {
+    sqlx::query_as::<_, GuideComment>(
+        "SELECT c.id, c.user_id, c.author_name, c.body, c.created_at
+         FROM guide_comments c JOIN guides g ON g.id = c.guide_id
+         WHERE g.slug = $1
+         ORDER BY c.created_at",
+    )
+    .bind(slug)
+    .fetch_all(&state.db)
+    .await
+    .map(Json)
+    .map_err(|e| {
+        tracing::error!("list guide comments failed: {e}");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })
+}
+
+#[derive(Deserialize)]
+pub struct NewComment {
+    pub body: String,
+}
+
+pub async fn create_comment(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Path(slug): Path<String>,
+    Json(body): Json<NewComment>,
+) -> Result<(StatusCode, Json<serde_json::Value>), (StatusCode, Json<serde_json::Value>)> {
+    let text = body.body.trim();
+    if text.is_empty() || text.chars().count() > 1000 {
+        return Err(bad("Say something between 1 and 1000 characters."));
+    }
+
+    let guide_id: Option<i64> = sqlx::query_scalar("SELECT id FROM guides WHERE slug = $1")
+        .bind(&slug)
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|_| oops())?;
+    let Some(guide_id) = guide_id else {
+        return Err((StatusCode::NOT_FOUND, Json(serde_json::json!({ "error": "No such guide." }))));
+    };
+
+    let comment_id: i64 = sqlx::query_scalar(
+        "INSERT INTO guide_comments (guide_id, user_id, author_name, body) VALUES ($1,$2,$3,$4) RETURNING id",
+    )
+    .bind(guide_id)
+    .bind(user.id)
+    .bind(&user.display_name)
+    .bind(text)
+    .fetch_one(&state.db)
+    .await
+    .map_err(|e| {
+        tracing::error!("create guide comment failed: {e}");
+        oops()
+    })?;
+
+    Ok((StatusCode::CREATED, Json(serde_json::json!({ "id": comment_id }))))
+}
+
+/// Author-only: withdraw your own comment. Plain hard delete, same
+/// "closer to a chat message than catalog content" reasoning as
+/// review_replies - no edit history worth preserving for a comment thread.
+pub async fn delete_comment(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Path((_slug, comment_id)): Path<(String, i64)>,
+) -> Result<StatusCode, StatusCode> {
+    let deleted = sqlx::query("DELETE FROM guide_comments WHERE id = $1 AND user_id = $2")
+        .bind(comment_id)
+        .bind(user.id)
+        .execute(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .rows_affected();
+
+    if deleted == 0 {
+        return Err(StatusCode::NOT_FOUND);
+    }
+    Ok(StatusCode::NO_CONTENT)
+}

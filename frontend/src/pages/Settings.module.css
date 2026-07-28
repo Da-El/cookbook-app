@@ -59,6 +59,16 @@
   margin-top: 0;
 }
 
+.goalGrid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14px;
+}
+
+.goalGrid .field {
+  margin-top: 0;
+}
+
 .input {
   width: 100%;
   padding: 14px 16px;
