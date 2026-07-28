@@ -3,9 +3,23 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#D9542B" />
+
+    <!-- Default social-share preview, including the page <title>. The
+         backend swaps this whole block for page-specific tags when serving
+         a meal/ingredient/guide URL directly (see backend/src/og.rs), so a
+         link pasted into Slack or iMessage shows that recipe's own name,
+         photo and description instead of the app's generic tagline. -->
+    <!--OG-META-START-->
     <title>Cookbook</title>
     <meta name="description" content="Follow chefs, build your cookbook, cook from your fridge." />
-    <meta name="theme-color" content="#D9542B" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Cookbook" />
+    <meta property="og:title" content="Cookbook" />
+    <meta property="og:description" content="Follow chefs, build your cookbook, cook from your fridge." />
+    <meta property="og:image" content="/pwa-512x512.png" />
+    <meta name="twitter:card" content="summary" />
+    <!--OG-META-END-->
 
     <link rel="icon" href="/favicon.ico" sizes="any">
     <link rel="icon" href="/icon.svg" type="image/svg+xml">

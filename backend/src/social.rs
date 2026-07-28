@@ -95,6 +95,48 @@ pub async fn search_chefs(
     Ok(Json(rows))
 }
 
+#[derive(Serialize, sqlx::FromRow)]
+pub struct LeaderboardRow {
+    pub id: i64,
+    pub display_name: String,
+    pub avatar_theme: String,
+    pub avatar_photo_url: Option<String>,
+    pub tier: String,
+    /// The raw count behind the tier - fine to show here (unlike the vote
+    /// weight itself) since a leaderboard's whole point is a comparable
+    /// number; the tier is what actually matters for how much a vote counts
+    /// elsewhere, and that mapping is never exposed as a multiplier.
+    pub activity: i64,
+}
+
+/// Top contributors by reviews + recipe edits + ingredient edits combined -
+/// the exact three things `reputation_weight()` counts, so "why is this
+/// person ranked here" always has the same answer as "why does their vote
+/// count more."
+pub async fn leaderboard(State(state): State<AppState>) -> Result<Json<Vec<LeaderboardRow>>, StatusCode> {
+    let rows = sqlx::query_as::<_, LeaderboardRow>(
+        "SELECT * FROM (
+            SELECT u.id, u.display_name,
+                   u.cb_avatar_theme AS avatar_theme, u.cb_avatar_photo_url AS avatar_photo_url,
+                   contributor_tier(u.id) AS tier,
+                   ((SELECT count(*) FROM reviews WHERE user_id=u.id) +
+                    (SELECT count(*) FROM meal_revisions WHERE editor_id=u.id AND kind IN ('created','edit')) +
+                    (SELECT count(*) FROM ingredient_edits WHERE author_id=u.id)) AS activity
+            FROM users u
+         ) ranked
+         WHERE activity > 0
+         ORDER BY activity DESC, display_name
+         LIMIT 20",
+    )
+    .fetch_all(&state.db)
+    .await
+    .map_err(|e| {
+        tracing::error!("leaderboard query failed: {e}");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+    Ok(Json(rows))
+}
+
 pub async fn following(
     State(state): State<AppState>,
     CurrentUser(user): CurrentUser,
@@ -274,6 +316,10 @@ pub struct ChefProfile {
     pub following_count: i64,
     pub is_following: bool,
     pub is_me: bool,
+    /// 'novice' | 'trusted' | 'veteran' - a label for the same tier that
+    /// already silently weights this person's votes (migration 0007). Never
+    /// the raw weight or activity count, just the tier.
+    pub contributor_tier: String,
 }
 
 pub async fn profile(
@@ -282,14 +328,15 @@ pub async fn profile(
     Path(id): Path<i64>,
 ) -> Result<Json<ChefProfile>, StatusCode> {
     let viewer = user.map(|u| u.0.id);
-    let r = sqlx::query_as::<_, (i64, String, Option<String>, Option<String>, Option<String>, String, Option<String>, String, Option<String>, String, Option<String>, i64, i64, bool)>(
+    let r = sqlx::query_as::<_, (i64, String, Option<String>, Option<String>, Option<String>, String, Option<String>, String, Option<String>, String, Option<String>, i64, i64, bool, String)>(
         "SELECT u.id, u.display_name, u.bio, u.cb_title, u.cb_bio,
                 u.cb_avatar_theme, u.cb_avatar_photo_url,
                 u.cb_page_theme, u.cb_page_photo_url,
                 u.cb_hero_theme, u.cb_hero_photo_url,
                 (SELECT count(*) FROM follows WHERE followee_id=u.id),
                 (SELECT count(*) FROM follows WHERE follower_id=u.id),
-                EXISTS (SELECT 1 FROM follows WHERE follower_id=$2 AND followee_id=u.id)
+                EXISTS (SELECT 1 FROM follows WHERE follower_id=$2 AND followee_id=u.id),
+                contributor_tier(u.id)
          FROM users u WHERE u.id = $1",
     )
     .bind(id)
@@ -315,6 +362,7 @@ pub async fn profile(
         following_count: r.12,
         is_following: r.13,
         is_me: viewer == Some(r.0),
+        contributor_tier: r.14,
     }))
 }
 

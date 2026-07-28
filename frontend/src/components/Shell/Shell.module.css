@@ -464,3 +464,19 @@
 .toastMobile {
   bottom: 100px;
 }
+
+/* Print: none of the app's own chrome belongs on a page meant to sit next
+   to a cutting board - hiding it here (rather than per-page) covers every
+   printable screen at once, not just the recipe page that prompted this. */
+@media print {
+  .sidebar,
+  .topbar,
+  .tabbar {
+    display: none !important;
+  }
+
+  .root {
+    display: block;
+    background: #fff;
+  }
+}

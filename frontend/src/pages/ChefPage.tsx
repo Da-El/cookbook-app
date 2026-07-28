@@ -7,6 +7,7 @@ import { useToast } from '../components/Toast/ToastContext';
 import { Avatar } from '../components/Avatar/Avatar';
 import { EmptyStatic } from '../components/Empty/Empty';
 import { ChevronLeft } from '../components/Icon/Icon';
+import { ContributorBadge, type ContributorTier } from '../components/ContributorBadge/ContributorBadge';
 import { mealBackground } from '../lib/imagery';
 import styles from './ChefPage.module.css';
 
@@ -22,6 +23,7 @@ interface ChefProfile {
   following_count: number;
   is_following: boolean;
   is_me: boolean;
+  contributor_tier: ContributorTier;
 }
 
 interface ChefMeal {
@@ -117,7 +119,9 @@ export function ChefPage() {
           shape="rounded"
         />
         <div style={{ minWidth: 0 }}>
-          <div className={styles.name}>{chef.display_name}</div>
+          <div className={styles.name}>
+            {chef.display_name} <ContributorBadge tier={chef.contributor_tier} />
+          </div>
           {chef.bio && <div className={styles.bio}>{chef.bio}</div>}
           <div className={styles.followerCount}>{chef.follower_count} followers</div>
         </div>

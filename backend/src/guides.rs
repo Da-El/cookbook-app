@@ -343,19 +343,39 @@ pub async fn delete_edit(
 /// stands: unlike description/photo, there's no "blank" fallback for a
 /// guide's teaching content.
 pub(crate) async fn apply_winner(tx: &mut sqlx::Transaction<'_, sqlx::Postgres>, guide_id: i64) -> Result<(), sqlx::Error> {
-    let winner: Option<String> = sqlx::query_scalar(
-        "SELECT body FROM guide_edits WHERE guide_id = $1 ORDER BY votes DESC, id ASC LIMIT 1",
+    let winner: Option<(i64, Option<i64>, String)> = sqlx::query_as(
+        "SELECT id, author_id, body FROM guide_edits WHERE guide_id = $1 ORDER BY votes DESC, id ASC LIMIT 1",
     )
     .bind(guide_id)
     .fetch_optional(&mut **tx)
     .await?;
 
-    if let Some(body) = winner {
+    if let Some((edit_id, author_id, body)) = winner {
         sqlx::query("UPDATE guides SET body = $1 WHERE id = $2")
             .bind(body)
             .bind(guide_id)
             .execute(&mut **tx)
             .await?;
+
+        // No linkable subject: guides are routed by slug, not the numeric id
+        // notifications carry, so this is copy-only, same as new_follower.
+        let newly_won: Option<bool> = sqlx::query_scalar(
+            "UPDATE guide_edits SET notified_win = true WHERE id = $1 AND notified_win = false RETURNING true",
+        )
+        .bind(edit_id)
+        .fetch_optional(&mut **tx)
+        .await?;
+        if newly_won.is_some() {
+            if let Some(author_id) = author_id {
+                sqlx::query(
+                    "INSERT INTO notifications (recipient_id, actor_id, type) VALUES ($1, NULL, 'edit_won')",
+                )
+                .bind(author_id)
+                .execute(&mut **tx)
+                .await
+                .ok();
+            }
+        }
     }
     Ok(())
 }

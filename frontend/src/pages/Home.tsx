@@ -69,6 +69,8 @@ const ACTIVITY_GLYPH: Record<string, { glyph: string; bg: string }> = {
   meal_cooked: { glyph: '★', bg: 'var(--amber)' },
   meal_saved: { glyph: '♡', bg: 'var(--ink)' },
   new_follower: { glyph: '+', bg: 'var(--green)' },
+  content_removed: { glyph: '⚑', bg: 'var(--warn)' },
+  flag_resolved: { glyph: '✓', bg: 'var(--muted)' },
 };
 
 function activityCopy(a: ActivityItem): string {
@@ -79,6 +81,8 @@ function activityCopy(a: ActivityItem): string {
     case 'meal_saved': return `${who} saved one of your meals`;
     case 'edit_suggested': return `${who} suggested an edit`;
     case 'edit_won': return 'Your edit is now the top answer';
+    case 'content_removed': return 'A moderator removed something you posted';
+    case 'flag_resolved': return 'A moderator resolved a flag you raised';
     default: return 'New activity';
   }
 }
@@ -324,13 +328,25 @@ export function Home() {
                 </div>
               </section>
             )}
+            <button className={styles.leaderboardLinkMobile} onClick={() => navigate('/leaderboard')}>
+              🏆 See top contributors
+            </button>
           </>
         ) : (
           activityBody
         )}
       </div>
 
-      {isDesktop && <aside className={styles.rightRail}>{chefsToFollow}</aside>}
+      {isDesktop && (
+        <aside className={styles.rightRail}>
+          {chefsToFollow}
+          <div className={styles.railCard}>
+            <button className={styles.leaderboardLink} onClick={() => navigate('/leaderboard')}>
+              🏆 Top contributors
+            </button>
+          </div>
+        </aside>
+      )}
       {user && null}
     </div>
   );

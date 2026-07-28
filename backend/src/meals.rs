@@ -30,6 +30,8 @@ pub struct MealCard {
     /// counted (same "don't claim more than is known" rule nutrition.rs
     /// uses). Empty when nothing is matched yet, not "compatible with nothing."
     pub diet_tags: Vec<String>,
+    /// "easy" | "medium" | "hard" - heuristic, see `meal_difficulty_sql!`.
+    pub difficulty: String,
 }
 
 /// Appended to a `MealCard`-shaped SELECT: true only for the single meal in
@@ -72,6 +74,28 @@ macro_rules! meal_diet_tags_sql {
     };
 }
 
+/// Appended alongside `is_top_in_cuisine_sql!`/`meal_diet_tags_sql!`: a
+/// rough difficulty label with no dedicated column behind it, in the same
+/// spirit as diet.rs's heuristic - derived from what's already on the row
+/// (step count, time) rather than asking every author to self-rate
+/// something notoriously inconsistent between people. Self-contained (only
+/// reads `m.steps`/`m.time_minutes`), so it drops into any query that
+/// already has `m` in scope without needing sibling aliases computed first.
+macro_rules! meal_difficulty_case_sql {
+    () => {
+        "CASE
+            WHEN COALESCE(array_length(m.steps, 1), 0) <= 4 AND m.time_minutes <= 25 THEN 'easy'
+            WHEN COALESCE(array_length(m.steps, 1), 0) > 10 OR m.time_minutes > 75 THEN 'hard'
+            ELSE 'medium'
+          END"
+    };
+}
+macro_rules! meal_difficulty_sql {
+    () => {
+        concat!("(", meal_difficulty_case_sql!(), ") AS difficulty")
+    };
+}
+
 #[derive(Deserialize)]
 pub struct BrowseParams {
     pub search: Option<String>,
@@ -80,8 +104,12 @@ pub struct BrowseParams {
     /// One of diet.rs's ALL_DIET_FLAGS, e.g. "vegan" - single-select, like
     /// cuisine/meal_type, not a set (mirrors the chip-row filter UI).
     pub diet: Option<String>,
-    /// "top" (default) | "canmake" | "fastest"
+    /// "top" (default) | "canmake" | "fastest" | "rising"
     pub sort: Option<String>,
+    /// Upper bound on `time_minutes`, e.g. 30 for "30 minutes or less".
+    pub max_time: Option<i32>,
+    /// "easy" | "medium" | "hard" - see `meal_difficulty_sql!`.
+    pub difficulty: Option<String>,
 }
 
 pub async fn browse(
@@ -93,6 +121,7 @@ pub async fn browse(
     let sort = match p.sort.as_deref() {
         Some("fastest") => "fastest",
         Some("canmake") => "canmake",
+        Some("rising") => "rising",
         _ => "top",
     };
 
@@ -103,7 +132,7 @@ pub async fn browse(
         "SELECT m.id, m.name, m.author_id, u.display_name AS author_name, m.cuisine, m.meal_type,
                 m.time_minutes, m.rating::float8 AS rating, m.rating_count, m.photo_url,
                 COALESCE(m.have_count, 0) AS have_count, COALESCE(m.total_count, 0) AS total_count,
-                ", is_top_in_cuisine_sql!(), ", ", meal_diet_tags_sql!(), "
+                ", is_top_in_cuisine_sql!(), ", ", meal_diet_tags_sql!(), ", ", meal_difficulty_sql!(), "
          FROM (
            SELECT m.*,
              (SELECT count(*) FROM meal_ingredients mi
@@ -123,12 +152,23 @@ pub async fn browse(
                      AND NOT ($6 = ANY(i2.diet_flags))
                  ) AND EXISTS (SELECT 1 FROM meal_ingredients mi3
                                 WHERE mi3.meal_id = m.id AND mi3.ingredient_id IS NOT NULL))
+             AND ($7::int IS NULL OR m.time_minutes <= $7)
+             AND ($8::text IS NULL OR (", meal_difficulty_case_sql!(), ") = $8)
          ) m
          JOIN users u ON u.id = m.author_id
          ORDER BY
            CASE WHEN $5 = 'fastest' THEN m.time_minutes END ASC NULLS LAST,
            CASE WHEN $5 = 'canmake'
                 THEN (m.have_count::float8 / NULLIF(m.total_count, 0)) END DESC NULLS LAST,
+           -- Rising sort: a fresh meal's Bayesian score alone doesn't have enough
+           -- ratings yet to compete with an established favorite, so this adds
+           -- a boost that's strongest the day it's posted and fades to nothing
+           -- over two weeks - long enough to catch a reasonable first look,
+           -- short enough that lasting placement still has to be earned on
+           -- ranked_score like everything else.
+           CASE WHEN $5 = 'rising'
+                THEN m.ranked_score + GREATEST(0, 14 - EXTRACT(DAY FROM (now() - m.created_at))) * 0.15
+                END DESC NULLS LAST,
            m.ranked_score DESC, m.rating_count DESC
          LIMIT 200"
         ),
@@ -139,6 +179,8 @@ pub async fn browse(
         .bind(p.meal_type.as_deref().filter(|s| !s.is_empty()))
         .bind(sort)
         .bind(p.diet.as_deref().filter(|s| !s.is_empty()))
+        .bind(p.max_time)
+        .bind(p.difficulty.as_deref().filter(|s| !s.is_empty()))
         .fetch_all(&state.db)
         .await
         .map_err(|e| {
@@ -191,6 +233,22 @@ pub struct MealDetail {
     pub source_name: Option<String>,
     pub nutrition: crate::nutrition::MealNutrition,
     pub rating_distribution: RatingDistribution,
+    /// Present only when this recipe is itself a fork. `meal_id`/`author_id`
+    /// go NULL if the source was since deleted or its author's account
+    /// removed - the name/author_name stay put either way (denormalised at
+    /// fork time), so attribution never just disappears.
+    pub forked_from: Option<ForkSource>,
+    /// Whether the viewer can fork this recipe - false when it's already
+    /// theirs (forking your own recipe is a no-op the UI shouldn't offer).
+    pub can_fork: bool,
+}
+
+#[derive(Serialize)]
+pub struct ForkSource {
+    pub meal_id: Option<i64>,
+    pub name: String,
+    pub author_id: Option<i64>,
+    pub author_name: String,
 }
 
 #[derive(Serialize, sqlx::FromRow)]
@@ -245,7 +303,7 @@ pub async fn detail(
                      AND EXISTS (SELECT 1 FROM fridge_items f
                                  WHERE f.user_id = $2 AND f.ingredient_id = mi.ingredient_id)) AS have_count,
                 (SELECT count(*) FROM meal_ingredients mi WHERE mi.meal_id = m.id) AS total_count,
-                ", is_top_in_cuisine_sql!(), ", ", meal_diet_tags_sql!(), "
+                ", is_top_in_cuisine_sql!(), ", ", meal_diet_tags_sql!(), ", ", meal_difficulty_sql!(), "
          FROM meals m JOIN users u ON u.id = m.author_id
          WHERE m.id = $1 AND m.status = 'live'"
     ))
@@ -256,8 +314,9 @@ pub async fn detail(
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
     .ok_or(StatusCode::NOT_FOUND)?;
 
-    let extra = sqlx::query_as::<_, (String, Vec<String>, Option<String>, String, Option<String>, Option<String>)>(
-        "SELECT description, steps, serves, visibility, source_url, source_name
+    let extra = sqlx::query_as::<_, (String, Vec<String>, Option<String>, String, Option<String>, Option<String>, Option<i64>, Option<String>, Option<i64>, Option<String>)>(
+        "SELECT description, steps, serves, visibility, source_url, source_name,
+                forked_from_id, forked_from_name, forked_from_author_id, forked_from_author_name
          FROM meals WHERE id = $1",
     )
     .bind(id)
@@ -326,6 +385,14 @@ pub async fn detail(
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
 
+    let author_id = card.author_id;
+    let forked_from = extra.7.map(|name| ForkSource {
+        meal_id: extra.6,
+        name,
+        author_id: extra.8,
+        author_name: extra.9.unwrap_or_else(|| "a former user".into()),
+    });
+
     Ok(Json(MealDetail {
         card,
         description: extra.0,
@@ -340,6 +407,8 @@ pub async fn detail(
         source_name: extra.5,
         nutrition,
         rating_distribution,
+        forked_from,
+        can_fork: viewer.is_some() && viewer != Some(author_id),
     }))
 }
 
@@ -370,7 +439,7 @@ pub async fn discover(
                         m.rating_count, m.photo_url, \
                         COALESCE(m.have_count, 0) AS have_count, \
                         COALESCE(m.total_count, 0) AS total_count, \
-                        ", is_top_in_cuisine_sql!(), ", ", meal_diet_tags_sql!(), " \
+                        ", is_top_in_cuisine_sql!(), ", ", meal_diet_tags_sql!(), ", ", meal_difficulty_sql!(), " \
                  FROM ( \
                    SELECT m.*, \
                      (SELECT count(*) FROM meal_ingredients mi \
@@ -675,6 +744,82 @@ pub async fn create(
     Ok((StatusCode::CREATED, Json(serde_json::json!({ "id": meal_id }))))
 }
 
+/// Copies a public recipe into the caller's own cookbook as a fully
+/// independent, fully-owned meal - not a suggestion routed through the
+/// propose-and-vote edit system, a real fork the way GitHub's is: the
+/// forker can rename it, gut the ingredient list, take it wherever they
+/// want, and the original is never touched. Attribution back to the source
+/// is denormalised onto the new row at fork time (see migration 0014) so it
+/// survives the original later being edited, deleted, or its author's
+/// account removed.
+pub async fn fork(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Path(id): Path<i64>,
+) -> Result<(StatusCode, Json<serde_json::Value>), (StatusCode, Json<serde_json::Value>)> {
+    let mut tx = state.db.begin().await.map_err(|_| oops())?;
+
+    let original = sqlx::query_as::<_, (String, String, String, i32, Option<String>, String, Vec<String>, Option<String>, i64, String)>(
+        "SELECT m.name, m.cuisine, m.meal_type, m.time_minutes, m.serves, m.description, m.steps, m.photo_url,
+                m.author_id, u.display_name
+         FROM meals m JOIN users u ON u.id = m.author_id
+         WHERE m.id = $1 AND m.status = 'live' AND m.visibility = 'public'",
+    )
+    .bind(id)
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(|_| oops())?;
+
+    let Some((name, cuisine, meal_type, time_minutes, serves, description, steps, photo_url, author_id, author_name)) = original
+    else {
+        return Err((StatusCode::NOT_FOUND, Json(serde_json::json!({ "error": "Recipe not found." }))));
+    };
+    if author_id == user.id {
+        return Err(bad("This is already your recipe."));
+    }
+
+    let new_id: i64 = sqlx::query_scalar(
+        "INSERT INTO meals (name, author_id, cuisine, meal_type, time_minutes, serves,
+                            description, steps, photo_url, visibility,
+                            forked_from_id, forked_from_name, forked_from_author_id, forked_from_author_name)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'public',$10,$11,$12,$13) RETURNING id",
+    )
+    .bind(&name)
+    .bind(user.id)
+    .bind(&cuisine)
+    .bind(&meal_type)
+    .bind(time_minutes)
+    .bind(&serves)
+    .bind(&description)
+    .bind(&steps)
+    .bind(&photo_url)
+    .bind(id)
+    .bind(&name)
+    .bind(author_id)
+    .bind(&author_name)
+    .fetch_one(&mut *tx)
+    .await
+    .map_err(|e| {
+        tracing::error!("fork meal failed: {e}");
+        oops()
+    })?;
+
+    sqlx::query(
+        "INSERT INTO meal_ingredients (meal_id, ingredient_id, raw_name, amount, unit, note, position)
+         SELECT $1, ingredient_id, raw_name, amount, unit, note, position
+         FROM meal_ingredients WHERE meal_id = $2",
+    )
+    .bind(new_id)
+    .bind(id)
+    .execute(&mut *tx)
+    .await
+    .map_err(|_| oops())?;
+
+    tx.commit().await.map_err(|_| oops())?;
+
+    Ok((StatusCode::CREATED, Json(serde_json::json!({ "id": new_id }))))
+}
+
 // ------------------------------------------------------ editing & history
 //
 // Two rules here are non-negotiable, borrowed from wiki practice: nothing is
@@ -938,6 +1083,8 @@ pub struct RevisionRow {
     pub vote_count: i64,
     /// How the viewer voted, so the UI can show their own choice back to them.
     pub your_vote: Option<i16>,
+    /// NULL alongside a NULL editor_id (former user) - nothing to badge.
+    pub editor_tier: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -977,7 +1124,8 @@ pub async fn revisions(
                           FROM revision_votes v WHERE v.revision_id = r.id), 0)::bigint AS score,
                 (SELECT count(*) FROM revision_votes v WHERE v.revision_id = r.id) AS vote_count,
                 (SELECT v.value FROM revision_votes v
-                  WHERE v.revision_id = r.id AND v.user_id = $2) AS your_vote
+                  WHERE v.revision_id = r.id AND v.user_id = $2) AS your_vote,
+                CASE WHEN r.editor_id IS NULL THEN NULL ELSE contributor_tier(r.editor_id) END AS editor_tier
          FROM meal_revisions r
          WHERE r.meal_id = $1
          ORDER BY r.created_at DESC LIMIT 50",
@@ -1303,6 +1451,15 @@ pub async fn toggle_save(
             .bind(user.id).bind(id)
             .execute(&state.db).await
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+        // WHERE author_id <> $1 both skips notifying yourself for saving your
+        // own recipe and no-ops harmlessly if the meal doesn't exist.
+        sqlx::query(
+            "INSERT INTO notifications (recipient_id, actor_id, type, subject_type, subject_id)
+             SELECT author_id, $1, 'meal_saved', 'meal', $2 FROM meals WHERE id = $2 AND author_id <> $1",
+        )
+        .bind(user.id).bind(id)
+        .execute(&state.db).await.ok();
     }
 
     Ok(Json(serde_json::json!({ "saved": deleted == 0 })))
@@ -1323,9 +1480,21 @@ pub async fn cook(
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     let mut tx = state.db.begin().await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    sqlx::query("INSERT INTO cooked_meals (user_id, meal_id) VALUES ($1,$2) ON CONFLICT DO NOTHING")
+    let first_cook = sqlx::query("INSERT INTO cooked_meals (user_id, meal_id) VALUES ($1,$2) ON CONFLICT DO NOTHING")
         .bind(user.id).bind(id).execute(&mut *tx).await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .rows_affected() > 0;
+
+    // Only the first time - re-marking an already-cooked meal (e.g. after
+    // editing the note) shouldn't re-notify the author every time.
+    if first_cook {
+        sqlx::query(
+            "INSERT INTO notifications (recipient_id, actor_id, type, subject_type, subject_id)
+             SELECT author_id, $1, 'meal_cooked', 'meal', $2 FROM meals WHERE id = $2 AND author_id <> $1",
+        )
+        .bind(user.id).bind(id)
+        .execute(&mut *tx).await.ok();
+    }
 
     // Cooking it fulfils the intent to save it, so drop it from the saved list.
     sqlx::query("DELETE FROM saved_meals WHERE user_id=$1 AND meal_id=$2")
@@ -1469,6 +1638,7 @@ pub struct MealReview {
     pub is_current_version: bool,
     pub helpful_count: i32,
     pub your_helpful_vote: bool,
+    pub author_tier: String,
 }
 
 /// Public, multi-author reviews for a recipe - the actual "Reviews" section a
@@ -1499,7 +1669,8 @@ pub async fn meal_reviews(
                 r.meal_revision_count = $2 AS is_current_version,
                 r.helpful_count,
                 EXISTS (SELECT 1 FROM review_votes v
-                        WHERE v.review_id = r.id AND v.user_id = $3) AS your_helpful_vote
+                        WHERE v.review_id = r.id AND v.user_id = $3) AS your_helpful_vote,
+                contributor_tier(u.id) AS author_tier
          FROM reviews r JOIN users u ON u.id = r.user_id
          WHERE r.meal_id = $1 AND r.is_public = true AND r.note IS NOT NULL
          ORDER BY r.helpful_count DESC, r.cooked_at DESC LIMIT 100",

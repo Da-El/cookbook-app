@@ -139,6 +139,21 @@ fn user_agent_of(headers: &HeaderMap) -> Option<String> {
         .map(|s| s.chars().take(200).collect())
 }
 
+/// Render sits behind a proxy, so the real client address (what a user
+/// would recognize as "was this me") is in the forwarded-for header, not
+/// the TCP peer address axum would otherwise see - `X-Forwarded-For` can
+/// carry a chain of proxies, so only the first (closest-to-client) entry
+/// is the one that matters here.
+fn client_ip(headers: &HeaderMap) -> Option<String> {
+    headers
+        .get("x-forwarded-for")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| s.split(',').next())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+}
+
 async fn create_session(state: &AppState, user_id: i64, user_agent: Option<&str>) -> Result<String, StatusCode> {
     let token = new_token();
     let expires = Utc::now() + Duration::days(SESSION_DAYS);
@@ -301,6 +316,7 @@ pub async fn login(
     let parsed = PasswordHash::new(&password_hash).map_err(|_| invalid())?;
     if Argon2::default().verify_password(body.password.as_bytes(), &parsed).is_err() {
         record_attempt(&state, &email).await;
+        record_history(&state, id, false, &headers).await;
         return Err(invalid());
     }
 
@@ -309,6 +325,7 @@ pub async fn login(
         .execute(&state.db)
         .await
         .ok();
+    record_history(&state, id, true, &headers).await;
 
     let token = create_session(&state, id, user_agent_of(&headers).as_deref())
         .await
@@ -332,6 +349,22 @@ async fn record_attempt(state: &AppState, email: &str) {
         .execute(&state.db)
         .await
         .ok();
+}
+
+/// Durable record for the account's own "recent sign-in activity" list -
+/// separate from `record_attempt`'s rate-limit counter, which gets cleared
+/// on every success and would erase this history if reused for it.
+async fn record_history(state: &AppState, user_id: i64, success: bool, headers: &HeaderMap) {
+    sqlx::query(
+        "INSERT INTO login_history (user_id, success, ip, user_agent) VALUES ($1,$2,$3,$4)",
+    )
+    .bind(user_id)
+    .bind(success)
+    .bind(client_ip(headers))
+    .bind(user_agent_of(headers))
+    .execute(&state.db)
+    .await
+    .ok();
 }
 
 pub async fn logout(State(state): State<AppState>, jar: CookieJar) -> (CookieJar, StatusCode) {
@@ -558,12 +591,17 @@ pub async fn forgot_password(
         .await;
 
         if inserted.is_ok() {
-            // Deliberately not behind `tracing::debug!` - this is the entire
-            // delivery mechanism right now, not a debug aid, so it needs to
-            // survive at whatever level production logging runs at.
-            tracing::info!(
-                "password reset requested for {email}: /reset-password?token={token} (expires in {RESET_TOKEN_HOURS}h)"
-            );
+            let link = crate::email::app_url(&format!("/reset-password?token={token}"));
+            crate::email::send(
+                &email,
+                "Reset your Cookbook password",
+                &format!(
+                    "Reset your password: {link}\n\n\
+                     This link expires in {RESET_TOKEN_HOURS} hour(s). If you didn't request this, \
+                     you can safely ignore this message - your password hasn't been changed."
+                ),
+            )
+            .await;
         }
     }
 
@@ -646,6 +684,46 @@ pub struct SessionRow {
     pub created_at: DateTime<Utc>,
     pub last_seen_at: DateTime<Utc>,
     pub is_current: bool,
+}
+
+#[derive(Serialize)]
+pub struct LoginHistoryRow {
+    pub id: i64,
+    pub device: String,
+    pub ip: Option<String>,
+    pub success: bool,
+    pub attempted_at: DateTime<Utc>,
+}
+
+/// The account-security half of "recent activity": every login attempt
+/// against this specific account, successes and failures both - separate
+/// from `list_sessions`, which only shows sessions currently live, not
+/// attempts that never got that far or that have long since expired.
+pub async fn login_history(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+) -> Result<Json<Vec<LoginHistoryRow>>, StatusCode> {
+    let rows: Vec<(i64, Option<String>, Option<String>, bool, DateTime<Utc>)> = sqlx::query_as(
+        "SELECT id, user_agent, ip, success, attempted_at
+         FROM login_history WHERE user_id = $1
+         ORDER BY attempted_at DESC LIMIT 20",
+    )
+    .bind(user.id)
+    .fetch_all(&state.db)
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    Ok(Json(
+        rows.into_iter()
+            .map(|(id, ua, ip, success, attempted_at)| LoginHistoryRow {
+                id,
+                device: friendly_device(ua.as_deref()),
+                ip,
+                success,
+                attempted_at,
+            })
+            .collect(),
+    ))
 }
 
 pub async fn list_sessions(

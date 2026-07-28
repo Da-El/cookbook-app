@@ -20,14 +20,24 @@ const ING_CATEGORIES = ['All', 'Vegetable', 'Fruit', 'Herb', 'Aromatic', 'Protei
 const DIET_CHIPS = ['All', 'Vegetarian', 'Vegan', 'Pescatarian', 'Gluten-free', 'Dairy-free', 'Nut-free'];
 const SORTS: [string, string][] = [
   ['top', 'Top rated'],
+  ['rising', 'Rising'],
   ['canmake', 'Can make'],
   ['fastest', 'Fastest'],
+];
+const DIFFICULTY_CHIPS = ['All', 'Easy', 'Medium', 'Hard'];
+const TIME_CHIPS: [string, number | null][] = [
+  ['Any time', null],
+  ['15 min', 15],
+  ['30 min', 30],
+  ['45 min', 45],
+  ['60 min', 60],
 ];
 
 interface MealRow extends MealCardData {
   author_name: string;
   meal_type: string;
   is_top_in_cuisine?: boolean;
+  difficulty?: string;
 }
 
 interface IngredientHit extends IngredientSummary {
@@ -63,6 +73,8 @@ export function Browse() {
   const [category, setCategory] = useState('All');
   const [diet, setDiet] = useState('All');
   const [sort, setSort] = useState('top');
+  const [difficulty, setDifficulty] = useState('All');
+  const [maxTime, setMaxTime] = useState<number | null>(null);
 
   // The desktop topbar searches by pushing ?q=, so mirror it into local state.
   const urlQuery = params.get('q');
@@ -82,12 +94,14 @@ export function Browse() {
   });
 
   const { data: browseMeals = [], isLoading: browseMealsLoading } = useQuery({
-    queryKey: ['meals', mealType, diet, sort],
+    queryKey: ['meals', mealType, diet, sort, difficulty, maxTime],
     queryFn: () => {
       const q = new URLSearchParams();
       if (mealType !== 'All') q.set('meal_type', mealType);
       if (diet !== 'All') q.set('diet', diet.toLowerCase());
       q.set('sort', sort);
+      if (difficulty !== 'All') q.set('difficulty', difficulty.toLowerCase());
+      if (maxTime != null) q.set('max_time', String(maxTime));
       return api.get<MealRow[]>(`/meals?${q}`);
     },
     enabled: tab === 'meals' && trimmedSearch.length === 0,
@@ -112,7 +126,9 @@ export function Browse() {
     ? (searchResults?.meals ?? []).filter(
         (m) =>
           (mealType === 'All' || m.meal_type === mealType) &&
-          (diet === 'All' || (m.diet_tags ?? []).includes(diet.toLowerCase())),
+          (diet === 'All' || (m.diet_tags ?? []).includes(diet.toLowerCase())) &&
+          (difficulty === 'All' || m.difficulty === difficulty.toLowerCase()) &&
+          (maxTime == null || m.time_minutes <= maxTime),
       )
     : browseMeals;
   const ingredients = trimmedSearch
@@ -209,6 +225,29 @@ export function Browse() {
               key={d}
               className={`${styles.chip} ${diet === d ? styles.chipActive : ''}`}
               onClick={() => setDiet(d)}
+            >
+              {d}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {tab === 'meals' && (
+        <div className={`${styles.chipRow} hscroll`}>
+          {TIME_CHIPS.map(([label, value]) => (
+            <button
+              key={label}
+              className={`${styles.chip} ${maxTime === value ? styles.chipActive : ''}`}
+              onClick={() => setMaxTime(value)}
+            >
+              {label}
+            </button>
+          ))}
+          {DIFFICULTY_CHIPS.map((d) => (
+            <button
+              key={d}
+              className={`${styles.chip} ${difficulty === d ? styles.chipActive : ''}`}
+              onClick={() => setDifficulty(d)}
             >
               {d}
             </button>

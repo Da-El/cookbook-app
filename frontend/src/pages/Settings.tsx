@@ -16,6 +16,14 @@ interface Session {
   is_current: boolean;
 }
 
+interface LoginHistoryRow {
+  id: number;
+  device: string;
+  ip: string | null;
+  success: boolean;
+  attempted_at: string;
+}
+
 function relativeTime(iso: string) {
   const diffMs = Date.now() - new Date(iso).getTime();
   const mins = Math.round(diffMs / 60000);
@@ -73,6 +81,11 @@ export function Settings() {
   const { data: sessions = [] } = useQuery({
     queryKey: ['sessions'],
     queryFn: () => api.get<Session[]>('/auth/sessions'),
+  });
+
+  const { data: loginHistory = [] } = useQuery({
+    queryKey: ['login-history'],
+    queryFn: () => api.get<LoginHistoryRow[]>('/auth/login-history'),
   });
 
   useEffect(() => {
@@ -280,6 +293,32 @@ export function Settings() {
           )
         )}
       </div>
+
+      {loginHistory.length > 0 && (
+        <div className={styles.section}>
+          <div className={styles.sectionTitle}>Recent sign-in activity</div>
+          <p className={styles.securityHint}>
+            Every sign-in attempt on this account, successful or not - if something here doesn't
+            look like you, change your password above and sign out of other sessions.
+          </p>
+          <div className={styles.sessionList}>
+            {loginHistory.map((h) => (
+              <div key={h.id} className={styles.sessionRow}>
+                <div>
+                  <div className={styles.visLabel}>
+                    {h.device}
+                    {!h.success && <span className={styles.failedBadge}>Failed</span>}
+                  </div>
+                  <div className={styles.visSub}>
+                    {relativeTime(h.attempted_at)}
+                    {h.ip ? ` · ${h.ip}` : ''}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className={styles.section}>
         <div className={styles.sectionTitle}>Diet preferences</div>

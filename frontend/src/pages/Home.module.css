@@ -388,6 +388,30 @@
   color: var(--ink);
 }
 
+.leaderboardLink {
+  width: 100%;
+  border: none;
+  background: transparent;
+  text-align: left;
+  color: var(--ink);
+  font: 700 14.5px var(--font-ui);
+  cursor: pointer;
+  padding: 2px;
+}
+
+.leaderboardLinkMobile {
+  margin-top: 22px;
+  width: 100%;
+  padding: 13px;
+  border-radius: 14px;
+  border: 1.5px solid var(--border-card);
+  background: var(--surface-card);
+  color: var(--ink);
+  font: 700 13.5px var(--font-ui);
+  cursor: pointer;
+  text-align: center;
+}
+
 .chefRail {
   margin-top: 12px;
   display: flex;

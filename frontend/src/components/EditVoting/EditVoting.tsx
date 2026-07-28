@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../api/client';
 import { pickImage } from '../../lib/photo';
 import { FlagButton } from '../Flag/FlagButton';
+import { ContributorBadge, type ContributorTier } from '../ContributorBadge/ContributorBadge';
 import styles from './EditVoting.module.css';
 
 interface EditRow {
@@ -15,6 +16,7 @@ interface EditRow {
   votes: number;
   voted_by_me: boolean;
   is_mine: boolean;
+  author_tier: ContributorTier | null;
 }
 
 const CATEGORIES = ['Vegetable', 'Fruit', 'Herb', 'Aromatic', 'Protein', 'Dairy', 'Grain', 'Pantry'];
@@ -154,7 +156,8 @@ export function TextEditSection({
                       </Link>
                     ) : (
                       row.author_name
-                    )}
+                    )}{' '}
+                    <ContributorBadge tier={row.author_tier} />
                   </span>
                 )}
               </span>

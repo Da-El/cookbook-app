@@ -72,6 +72,28 @@ export const PencilIcon = (p: IconProps) =>
 export const CloseIcon = (p: IconProps) =>
   svg(<><path d="M6 6l12 12" /><path d="M18 6L6 18" /></>, p);
 
+/** Branching Y - forking a recipe into your own copy. */
+export const ForkIcon = (p: IconProps) =>
+  svg(
+    <>
+      <circle cx="7" cy="6" r="2.2" />
+      <circle cx="17" cy="6" r="2.2" />
+      <circle cx="12" cy="18" r="2.2" />
+      <path d="M7 8.2v2c0 1.8 1.4 3 3 3M17 8.2v2c0 1.8-1.4 3-3 3M12 13.2V16" />
+    </>,
+    p,
+  );
+
+export const PrintIcon = (p: IconProps) =>
+  svg(
+    <>
+      <path d="M7 8.5V4h10v4.5" />
+      <rect x="4" y="8.5" width="16" height="8" rx="1.6" />
+      <path d="M7 14h10v6H7z" />
+    </>,
+    p,
+  );
+
 export const HeartIcon = ({ filled, ...p }: IconProps & { filled?: boolean }) => (
   <svg
     width={p.size ?? 20}

@@ -144,6 +144,15 @@
   color: var(--accent-dark);
   font: 600 12.5px var(--font-ui);
   text-decoration: none;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+}
+.sourceLink:disabled {
+  cursor: default;
+  color: var(--muted-2);
 }
 
 .historyLink {
@@ -789,4 +798,57 @@
   color: var(--muted-2);
   text-transform: uppercase;
   letter-spacing: .04em;
+}
+
+/* Print: keep the recipe itself - title, meta, ingredients, method - and
+   drop everything about browsing the app or talking to other people using
+   it (nav chrome is handled separately, in Shell.module.css). Interactive
+   controls are hidden individually rather than their whole section, since
+   several (servings, ingredient checkoff) sit inside content worth keeping. */
+@media print {
+  .noPrint,
+  .actionBtn,
+  .rightCluster,
+  .ratingCard,
+  .toggleRow,
+  .servingBtn,
+  .servingReset,
+  .ingChipMark,
+  .addMissingBtn,
+  .cookModeBtn,
+  .historyLink,
+  .sourceLink {
+    display: none !important;
+  }
+
+  .page {
+    max-width: none;
+  }
+
+  .photoHeader {
+    height: auto;
+    background: none !important;
+    box-shadow: none;
+  }
+
+  .scrim {
+    display: none;
+  }
+
+  .headerCaption {
+    position: static;
+    color: var(--ink);
+  }
+
+  .eyebrow {
+    color: var(--secondary);
+  }
+
+  .ingChip {
+    break-inside: avoid;
+  }
+
+  .stepRow {
+    break-inside: avoid;
+  }
 }

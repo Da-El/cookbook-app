@@ -4,10 +4,11 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 import { useToast } from '../components/Toast/ToastContext';
-import { ChevronLeft, CameraIcon, ShareIcon, PlayIcon, PencilIcon } from '../components/Icon/Icon';
+import { ChevronLeft, CameraIcon, ShareIcon, PlayIcon, PencilIcon, ForkIcon, PrintIcon } from '../components/Icon/Icon';
 import { Avatar } from '../components/Avatar/Avatar';
 import { LoadingState, ErrorState } from '../components/PageState/PageState';
 import { FlagButton } from '../components/Flag/FlagButton';
+import { ContributorBadge, type ContributorTier } from '../components/ContributorBadge/ContributorBadge';
 import { mealBackground, ingredientBackground } from '../lib/imagery';
 import { pickImage } from '../lib/photo';
 import styles from './MealDetail.module.css';
@@ -76,6 +77,8 @@ interface MealDetailData {
   nutrition: MealNutrition;
   rating_distribution: RatingDistribution;
   diet_tags: string[];
+  forked_from: { meal_id: number | null; name: string; author_id: number | null; author_name: string } | null;
+  can_fork: boolean;
 }
 
 /** Mirrors the server's units::format_amount: "2", "1.5", never "2.4999999". */
@@ -112,6 +115,7 @@ interface MealReview {
   is_current_version: boolean;
   helpful_count: number;
   your_helpful_vote: boolean;
+  author_tier: ContributorTier;
 }
 
 function formatDate(iso: string) {
@@ -222,6 +226,16 @@ export function MealDetail() {
     },
   });
 
+  const fork = useMutation({
+    mutationFn: () => api.post<{ id: number }>(`/meals/${id}/fork`),
+    onSuccess: (res) => {
+      toast('Forked into your cookbook');
+      qc.invalidateQueries({ queryKey: ['cookbook'] });
+      navigate(`/meals/${res.id}`);
+    },
+    onError: (e) => toast(e instanceof ApiError ? e.message : 'Could not fork that.'),
+  });
+
   if (isLoading) return <LoadingState label="Loading recipe…" />;
   if (isError || !meal) {
     const notFound = error instanceof ApiError && error.status === 404;
@@ -312,6 +326,19 @@ export function MealDetail() {
               <CameraIcon size={18} strokeWidth={1.8} />
             </button>
           )}
+          {meal.can_fork && (
+            <button
+              className={styles.actionBtn}
+              title="Fork into your own cookbook"
+              disabled={fork.isPending}
+              onClick={() => fork.mutate()}
+            >
+              <ForkIcon size={17} strokeWidth={1.8} />
+            </button>
+          )}
+          <button className={styles.actionBtn} title="Print this recipe" onClick={() => window.print()}>
+            <PrintIcon size={17} strokeWidth={1.8} />
+          </button>
           <button
             className={styles.actionBtn}
             title="Share"
@@ -381,6 +408,17 @@ export function MealDetail() {
         >
           Imported from {meal.source_name ?? meal.source_url}
         </a>
+      )}
+
+      {meal.forked_from && (
+        <button
+          className={styles.sourceLink}
+          onClick={() => meal.forked_from!.meal_id && navigate(`/meals/${meal.forked_from!.meal_id}`)}
+          disabled={!meal.forked_from.meal_id}
+        >
+          Forked from {meal.forked_from.name}
+          {meal.forked_from.author_name ? ` by ${meal.forked_from.author_name}` : ''}
+        </button>
       )}
 
       <button className={styles.historyLink} onClick={() => navigate(`/meals/${id}/history`)}>
@@ -608,7 +646,7 @@ export function MealDetail() {
       </div>
 
       {related.filter((m) => m.id !== meal.id).length > 0 && (
-        <>
+        <div className={styles.noPrint}>
           <h2 className={styles.relatedTitle}>More {meal.cuisine}</h2>
           <div className={styles.relatedGrid}>
             {related
@@ -628,11 +666,11 @@ export function MealDetail() {
                 </button>
               ))}
           </div>
-        </>
+        </div>
       )}
 
       {reviews.length > 0 && (
-        <>
+        <div className={styles.noPrint}>
           <div className={styles.sectionHeadRow}>
             <h2 className={styles.sectionTitle}>Reviews</h2>
             <span className={styles.reviewCount}>{reviews.length}</span>
@@ -658,6 +696,7 @@ export function MealDetail() {
                     <button className={styles.reviewAuthorName} onClick={() => navigate(`/chefs/${r.user_id}`)}>
                       {r.author_name}
                     </button>
+                    <ContributorBadge tier={r.author_tier} />
                     {r.score != null && <span className={styles.reviewStars}>★ {r.score}/10</span>}
                     <span className={styles.reviewWhen}>{relativeTime(r.cooked_at)}</span>
                   </span>
@@ -680,11 +719,11 @@ export function MealDetail() {
               </div>
             ))}
           </div>
-        </>
+        </div>
       )}
 
       {journal.length > 0 && (
-        <>
+        <div className={styles.noPrint}>
           <h2 className={styles.journalTitle}>Your cooking notes</h2>
           {journal.map((j) => (
             <div key={j.id} className={styles.journalEntry}>
@@ -692,7 +731,7 @@ export function MealDetail() {
               <div className={styles.journalNote}>{j.note}</div>
             </div>
           ))}
-        </>
+        </div>
       )}
     </div>
   );

@@ -233,14 +233,15 @@ pub async fn resolve_flag(
 
     let mut tx = state.db.begin().await.map_err(|_| oops())?;
 
-    let flag: Option<(String, i64, bool)> =
-        sqlx::query_as("SELECT content_type, content_id, resolved FROM content_flags WHERE id = $1 FOR UPDATE")
-            .bind(flag_id)
-            .fetch_optional(&mut *tx)
-            .await
-            .map_err(|_| oops())?;
+    let flag: Option<(String, i64, bool, Option<i64>)> = sqlx::query_as(
+        "SELECT content_type, content_id, resolved, flagged_by FROM content_flags WHERE id = $1 FOR UPDATE",
+    )
+    .bind(flag_id)
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(|_| oops())?;
 
-    let Some((content_type, content_id, already_resolved)) = flag else {
+    let Some((content_type, content_id, already_resolved, flagged_by)) = flag else {
         return Err((StatusCode::NOT_FOUND, Json(serde_json::json!({ "error": "Flag not found." }))));
     };
     if already_resolved {
@@ -263,8 +264,43 @@ pub async fn resolve_flag(
     .await
     .map_err(|_| oops())?;
 
+    // Told back to the flagger regardless of which way it went - "removed"
+    // vindicates the report, "dismissed" says a human looked and disagreed.
+    // No admin_id as actor: this is the system's answer, not a personal one.
+    if let Some(flagged_by) = flagged_by {
+        sqlx::query("INSERT INTO notifications (recipient_id, actor_id, type) VALUES ($1, NULL, 'flag_resolved')")
+            .bind(flagged_by)
+            .execute(&mut *tx)
+            .await
+            .ok();
+    }
+
     tx.commit().await.map_err(|_| oops())?;
     Ok(StatusCode::NO_CONTENT)
+}
+
+/// Tells whoever authored the removed content that it's gone - a moderator
+/// acting on their work without a word back would just look like it
+/// vanished on its own. `author_id` is `None` for content whose author
+/// already left (FK `SET NULL`), which is a no-op here, same as everywhere
+/// else attribution can go missing.
+async fn notify_removed(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    author_id: Option<i64>,
+    subject_type: Option<&str>,
+    subject_id: Option<i64>,
+) {
+    let Some(author_id) = author_id else { return };
+    sqlx::query(
+        "INSERT INTO notifications (recipient_id, actor_id, type, subject_type, subject_id)
+         VALUES ($1, NULL, 'content_removed', $2, $3)",
+    )
+    .bind(author_id)
+    .bind(subject_type)
+    .bind(subject_id)
+    .execute(&mut **tx)
+    .await
+    .ok();
 }
 
 async fn remove_content(
@@ -276,10 +312,18 @@ async fn remove_content(
 ) -> Result<(), sqlx::Error> {
     match content_type {
         "review" => {
+            let target: Option<(i64, i64)> =
+                sqlx::query_as("SELECT user_id, meal_id FROM reviews WHERE id = $1")
+                    .bind(content_id)
+                    .fetch_optional(&mut **tx)
+                    .await?;
             sqlx::query("UPDATE reviews SET is_public = FALSE WHERE id = $1")
                 .bind(content_id)
                 .execute(&mut **tx)
                 .await?;
+            if let Some((user_id, meal_id)) = target {
+                notify_removed(tx, Some(user_id), Some("meal"), Some(meal_id)).await;
+            }
         }
         // Removing a bad revision means undoing exactly the edit it
         // recorded - which is precisely what reverting *to* it does, since
@@ -287,52 +331,74 @@ async fn remove_content(
         // edit was applied. Same core as the author-facing revert, just
         // authorized differently and worded differently in the trail.
         "meal_revision" => {
-            let meal_id: Option<i64> = sqlx::query_scalar("SELECT meal_id FROM meal_revisions WHERE id = $1")
-                .bind(content_id)
-                .fetch_optional(&mut **tx)
-                .await?;
-            if let Some(meal_id) = meal_id {
-                meals::revert_to_revision(tx, meal_id, content_id, admin_id, admin_name, "removed by a moderator")
-                    .await?;
-            }
-        }
-        "ingredient_edit" => {
-            let target: Option<(i64, String)> =
-                sqlx::query_as("SELECT ingredient_id, field FROM ingredient_edits WHERE id = $1")
+            let target: Option<(i64, Option<i64>)> =
+                sqlx::query_as("SELECT meal_id, editor_id FROM meal_revisions WHERE id = $1")
                     .bind(content_id)
                     .fetch_optional(&mut **tx)
                     .await?;
-            if let Some((ingredient_id, field)) = target {
+            if let Some((meal_id, editor_id)) = target {
+                meals::revert_to_revision(tx, meal_id, content_id, admin_id, admin_name, "removed by a moderator")
+                    .await?;
+                notify_removed(tx, editor_id, Some("meal"), Some(meal_id)).await;
+            }
+        }
+        "ingredient_edit" => {
+            let target: Option<(i64, String, Option<i64>)> =
+                sqlx::query_as("SELECT ingredient_id, field, author_id FROM ingredient_edits WHERE id = $1")
+                    .bind(content_id)
+                    .fetch_optional(&mut **tx)
+                    .await?;
+            if let Some((ingredient_id, field, author_id)) = target {
                 sqlx::query("DELETE FROM ingredient_edits WHERE id = $1")
                     .bind(content_id)
                     .execute(&mut **tx)
                     .await?;
                 ingredients::apply_winner(tx, ingredient_id, &field).await?;
+                notify_removed(tx, author_id, Some("ingredient"), Some(ingredient_id)).await;
             }
         }
         "alias" => {
+            let target: Option<(i64, Option<i64>)> =
+                sqlx::query_as("SELECT ingredient_id, author_id FROM ingredient_aliases WHERE id = $1")
+                    .bind(content_id)
+                    .fetch_optional(&mut **tx)
+                    .await?;
             sqlx::query("UPDATE ingredient_aliases SET status = 'withdrawn' WHERE id = $1")
                 .bind(content_id)
                 .execute(&mut **tx)
                 .await?;
+            if let Some((ingredient_id, author_id)) = target {
+                notify_removed(tx, author_id, Some("ingredient"), Some(ingredient_id)).await;
+            }
         }
         "substitute" => {
+            let target: Option<(i64, Option<i64>)> =
+                sqlx::query_as("SELECT ingredient_id, author_id FROM ingredient_substitutes WHERE id = $1")
+                    .bind(content_id)
+                    .fetch_optional(&mut **tx)
+                    .await?;
             sqlx::query("UPDATE ingredient_substitutes SET status = 'withdrawn' WHERE id = $1")
                 .bind(content_id)
                 .execute(&mut **tx)
                 .await?;
+            if let Some((ingredient_id, author_id)) = target {
+                notify_removed(tx, author_id, Some("ingredient"), Some(ingredient_id)).await;
+            }
         }
         "guide_edit" => {
-            let guide_id: Option<i64> = sqlx::query_scalar("SELECT guide_id FROM guide_edits WHERE id = $1")
-                .bind(content_id)
-                .fetch_optional(&mut **tx)
-                .await?;
-            if let Some(guide_id) = guide_id {
+            let target: Option<(i64, Option<i64>)> =
+                sqlx::query_as("SELECT guide_id, author_id FROM guide_edits WHERE id = $1")
+                    .bind(content_id)
+                    .fetch_optional(&mut **tx)
+                    .await?;
+            if let Some((guide_id, author_id)) = target {
                 sqlx::query("DELETE FROM guide_edits WHERE id = $1")
                     .bind(content_id)
                     .execute(&mut **tx)
                     .await?;
                 guides::apply_winner(tx, guide_id).await?;
+                // No subject: guides route by slug, not the numeric id here.
+                notify_removed(tx, author_id, None, None).await;
             }
         }
         _ => {}

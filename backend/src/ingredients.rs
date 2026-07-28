@@ -318,6 +318,7 @@ pub struct EditRow {
     pub votes: i32,
     pub voted_by_me: bool,
     pub is_mine: bool,
+    pub author_tier: Option<String>,
 }
 
 pub async fn list_edits(
@@ -332,7 +333,8 @@ pub async fn list_edits(
     let rows = sqlx::query_as::<_, EditRow>(
         "SELECT e.id, e.value, u.display_name AS author_name, e.author_id, e.votes,
                 EXISTS (SELECT 1 FROM edit_votes v WHERE v.user_id = $3 AND v.edit_id = e.id) AS voted_by_me,
-                COALESCE(e.author_id = $3, false) AS is_mine
+                COALESCE(e.author_id = $3, false) AS is_mine,
+                CASE WHEN e.author_id IS NULL THEN NULL ELSE contributor_tier(e.author_id) END AS author_tier
          FROM ingredient_edits e LEFT JOIN users u ON u.id = e.author_id
          WHERE e.ingredient_id = $1 AND e.field = $2
          ORDER BY e.votes DESC, e.id ASC
@@ -450,8 +452,8 @@ pub(crate) async fn apply_winner(
     ingredient_id: i64,
     field: &str,
 ) -> Result<(), sqlx::Error> {
-    let winner: Option<serde_json::Value> = sqlx::query_scalar(
-        "SELECT value FROM ingredient_edits WHERE ingredient_id = $1 AND field = $2
+    let winner: Option<(i64, Option<i64>, serde_json::Value)> = sqlx::query_as(
+        "SELECT id, author_id, value FROM ingredient_edits WHERE ingredient_id = $1 AND field = $2
          ORDER BY votes DESC, id ASC LIMIT 1",
     )
     .bind(ingredient_id)
@@ -463,7 +465,7 @@ pub(crate) async fn apply_winner(
     // materialized column has no "original" to fall back to for category/
     // nutrition (a winning edit overwrites it with nothing kept in reserve),
     // so those are left as-is. description/photo do have a clean default.
-    let Some(value) = winner else {
+    let Some((edit_id, author_id, value)) = winner else {
         match field {
             "description" => {
                 sqlx::query("UPDATE ingredients SET description = '' WHERE id = $1")
@@ -560,6 +562,31 @@ pub(crate) async fn apply_winner(
         }
         _ => {}
     }
+
+    // Only the edit that JUST became the winner gets notified - apply_winner
+    // runs after every vote on this field, so without the flag an edit that
+    // won once and stayed on top would re-notify its author on every
+    // subsequent vote, which is spam, not news.
+    let newly_won: Option<bool> = sqlx::query_scalar(
+        "UPDATE ingredient_edits SET notified_win = true WHERE id = $1 AND notified_win = false RETURNING true",
+    )
+    .bind(edit_id)
+    .fetch_optional(&mut **tx)
+    .await?;
+    if newly_won.is_some() {
+        if let Some(author_id) = author_id {
+            sqlx::query(
+                "INSERT INTO notifications (recipient_id, actor_id, type, subject_type, subject_id)
+                 VALUES ($1, NULL, 'edit_won', 'ingredient', $2)",
+            )
+            .bind(author_id)
+            .bind(ingredient_id)
+            .execute(&mut **tx)
+            .await
+            .ok();
+        }
+    }
+
     Ok(())
 }
 

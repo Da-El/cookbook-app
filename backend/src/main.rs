@@ -1,6 +1,7 @@
 mod aliases;
 mod auth;
 mod diet;
+mod email;
 mod guides;
 mod import;
 mod ingredients;
@@ -8,6 +9,7 @@ mod kitchen;
 mod meals;
 mod moderation;
 mod nutrition;
+mod og;
 mod planner;
 mod search;
 mod seed;
@@ -36,11 +38,23 @@ async fn main() -> anyhow::Result<()> {
         .with_env_filter(EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()))
         .init();
 
-    let state = AppState::connect().await?;
+    let mut state = AppState::connect().await?;
     sqlx::migrate!().run(&state.db).await?;
     seed::seed_ingredients(&state.db).await?;
     seed::seed_guides(&state.db).await?;
     seed::backfill_diet_flags(&state.db).await?;
+
+    // Computed before `state` moves into `api`'s `.with_state()` below, so
+    // the og:: routes (registered after api, once static_dir is known) can
+    // still get their own clone of it with the template attached.
+    let static_dir = std::env::var("STATIC_DIR").unwrap_or_else(|_| "static".into());
+    let has_static = Path::new(&static_dir).is_dir();
+    if has_static {
+        if let Ok(content) = std::fs::read_to_string(format!("{static_dir}/index.html")) {
+            state.index_template = Some(std::sync::Arc::new(content));
+        }
+    }
+    let og_state = state.clone();
 
     let api = Router::new()
         .route("/health", get(health))
@@ -51,6 +65,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/auth/account", post(auth::update_account).delete(auth::delete_account))
         .route("/auth/forgot-password", post(auth::forgot_password))
         .route("/auth/reset-password", post(auth::reset_password))
+        .route("/auth/login-history", get(auth::login_history))
         .route("/auth/sessions", get(auth::list_sessions))
         .route("/auth/sessions/revoke-others", post(auth::revoke_other_sessions))
         .route("/auth/sessions/{id}", delete(auth::revoke_session))
@@ -78,6 +93,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/meals/filters", get(meals::filters))
         .route("/meals/discover", get(meals::discover))
         .route("/meals/{id}", get(meals::detail).post(meals::update).delete(meals::delete))
+        .route("/meals/{id}/fork", post(meals::fork))
         .route("/meals/{id}/save", post(meals::toggle_save))
         .route("/meals/{id}/photo", post(meals::update_photo))
         .route("/meals/{id}/cook", post(meals::cook))
@@ -129,6 +145,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/activity", get(social::activity).post(social::mark_activity_seen))
         .route("/chefs", get(social::search_chefs))
         .route("/chefs/suggested", get(social::suggested_chefs))
+        .route("/chefs/leaderboard", get(social::leaderboard))
         .route("/chefs/following", get(social::following))
         .route("/chefs/{id}", get(social::profile))
         .route("/chefs/{id}/follow", post(social::toggle_follow))
@@ -148,10 +165,19 @@ async fn main() -> anyhow::Result<()> {
 
     // In production the built frontend is copied next to the binary; unknown paths
     // fall back to index.html so client-side routes survive a hard refresh.
-    let static_dir = std::env::var("STATIC_DIR").unwrap_or_else(|_| "static".into());
-    if Path::new(&static_dir).is_dir() {
+    if has_static {
         let index = format!("{static_dir}/index.html");
-        app = app.fallback_service(ServeDir::new(&static_dir).fallback(ServeFile::new(index)));
+        // These three paths get real per-page meta tags spliced into the
+        // same shell (see og.rs) instead of falling straight through to the
+        // generic static file below - everything else still does.
+        let og_router = Router::new()
+            .route("/meals/{id}", get(og::meal_page))
+            .route("/ingredients/{id}", get(og::ingredient_page))
+            .route("/guides/{slug}", get(og::guide_page))
+            .with_state(og_state);
+        app = app
+            .merge(og_router)
+            .fallback_service(ServeDir::new(&static_dir).fallback(ServeFile::new(index)));
         tracing::info!("serving frontend from {static_dir}");
     }
 

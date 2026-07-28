@@ -6,6 +6,7 @@ import { useToast } from '../components/Toast/ToastContext';
 import { ChevronLeft } from '../components/Icon/Icon';
 import { EmptyLine } from '../components/Empty/Empty';
 import { FlagButton } from '../components/Flag/FlagButton';
+import { ContributorBadge, type ContributorTier } from '../components/ContributorBadge/ContributorBadge';
 import styles from './MealHistory.module.css';
 
 interface Revision {
@@ -20,6 +21,7 @@ interface Revision {
   score: number;
   vote_count: number;
   your_vote: number | null;
+  editor_tier: ContributorTier | null;
 }
 
 interface RevisionHistory {
@@ -148,7 +150,8 @@ export function MealHistory() {
                   </Link>
                 ) : (
                   r.editor_name ?? 'a former user'
-                )}
+                )}{' '}
+                <ContributorBadge tier={r.editor_tier} />
               </div>
 
               <div className={styles.voteRow}>

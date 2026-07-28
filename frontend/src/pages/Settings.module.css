@@ -195,6 +195,25 @@
   letter-spacing: .04em;
 }
 
+.failedBadge {
+  margin-left: 8px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #FBEFEC;
+  color: #8A4137;
+  font: 700 10px var(--font-ui);
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+
+.securityHint {
+  margin-top: 4px;
+  margin-bottom: 12px;
+  color: var(--muted);
+  font: 400 12.5px var(--font-ui);
+  line-height: 1.5;
+}
+
 .sessionRevoke {
   flex: none;
   padding: 8px 14px;

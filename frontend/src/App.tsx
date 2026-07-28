@@ -29,6 +29,7 @@ import { Plan } from './pages/Plan';
 import { Discover } from './pages/Discover';
 import { Guides, GuidePage } from './pages/Guides';
 import { Admin } from './pages/Admin';
+import { Leaderboard } from './pages/Leaderboard';
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { refetchOnWindowFocus: false } },
@@ -95,6 +96,7 @@ function Routed() {
       <Route path="/guides" element={<Bare><Guides /></Bare>} />
       <Route path="/guides/:slug" element={<Bare><GuidePage /></Bare>} />
       <Route path="/admin" element={<Bare><Admin /></Bare>} />
+      <Route path="/leaderboard" element={<Bare><Leaderboard /></Bare>} />
 
       {/* Full-screen, no chrome on either platform. */}
       <Route path="/meals/:id/cook" element={<CookMode />} />
