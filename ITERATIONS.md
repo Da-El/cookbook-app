@@ -184,3 +184,59 @@ in this environment reports `document.hasFocus() === false`, so the actual
 keyboard-driven focus ring couldn't be observed rendering; the CSS was
 instead hand-verified against the same clipping/border-radius pitfalls
 called out in Batch 1's onboarding a11y work.
+
+---
+
+## Batch 5 — Iterations 21–25
+
+**Commit:** `11cb35d` (local only — not pushed/deployed this batch, per standing
+instruction) · **Migrations:** 0020–0022 · **Tests:** 55 backend, passing
+
+21. **Review quality + sorting** — reviews turned out to already be
+    cook-gated by construction (the only insert path runs inside `cook()`),
+    so this iteration built what was actually missing: sort options
+    (helpful/recent/highest/lowest) and author-only review editing with an
+    "(edited)" indicator. Caught a real bug while building it — a note-only
+    edit was about to null out the review's existing score by always
+    binding the edit's `Option<i16>` regardless of whether a new score was
+    sent — fixed before it shipped.
+22. **Notification preferences** — every notification type has landed in
+    the bell/Activity tab since the original build, but none had ever sent
+    email. A new opt-in `notification_email_prefs` table plus a shared
+    `notify.rs` module wires real email delivery into all seven types
+    across five files. `apply_winner()` in ingredients.rs/guides.rs now
+    returns who just won an edit vote instead of emailing from inside a
+    bare transaction, so the caller sends it only once the win is actually
+    committed.
+23. **Dark mode** — a real second theme via CSS custom properties,
+    `prefers-color-scheme` plus a persisted Settings toggle (Light/Dark/
+    System), with a flash-prevention inline script. Caught and fixed a
+    genuine cross-cutting bug along the way: ~20 "filled dark pill"
+    components (active chips, primary buttons, toasts) styled
+    `background: var(--ink); color: #fff`, which goes white-on-white the
+    moment dark mode inverts `--ink` — fixed with a new fixed
+    `--ink-solid`/`--on-ink-solid` pair. Also caught the Cookbook hero card
+    rendering literal dark-ink text over a literal light gradient
+    regardless of theme. Verified with an automated contrast-ratio sweep
+    across 7 pages, not just eyeballing it.
+24. **Command palette (Cmd/Ctrl+K)** — an app-wide search-and-navigate
+    overlay that reuses the existing ranked `/search` endpoint rather than
+    building a second search implementation, with quick actions when
+    empty and arrow-key/Enter navigation through live results.
+25. **Measurement units + shopping list export** — a per-account
+    `unit_system` preference (as written/metric/imperial) that the grocery
+    list's existing unit-summing logic now honors via a magnitude-based
+    `preferred_unit()` chooser, overriding the prior "whichever unit
+    recipes used most" heuristic only when a system is explicitly set.
+    Plus a "Share list" button (Web Share on mobile, clipboard elsewhere)
+    producing a plain-text, aisle-grouped copy of the list.
+
+**Verified:** all five iterations tested end-to-end against live data —
+review sort/edit and the note-preserves-score fix via curl and real
+browser UI; all seven notification-email paths confirmed actually firing
+(and correctly suppressed when not opted in) by checking the log-only
+email fallback; dark mode's automated contrast sweep across 7 pages in
+both themes; the command palette's keyboard shortcut, live search, and
+Enter-to-navigate through a real browser session; and unit conversion
+confirmed at the API level for both metric and imperial before checking
+the same numbers rendered correctly in the Plan page and its exported text.
