@@ -649,3 +649,67 @@ cycle, including that applying a preset actually restores every
 filter's value and that the "Save this search" control only appears
 once a filter is non-default, confirmed in the browser with direct
 `localStorage` inspection alongside the UI.
+
+---
+
+## Batch 12 — Iterations 56–60
+
+**Commit:** local only — not pushed/deployed this batch, per standing
+instruction · **Migrations:** none (56, 59, 60) / 0041–0042 (57–58) ·
+**Tests:** 61 backend, passing
+
+56. **Un-rate meals and guides** — `rate()` on both meals and guides
+    could only ever change a rating's value, never withdraw it. A new
+    `remove_rating()` helper mirrors `upsert_rating()`'s cache-recompute
+    logic (both now delegate to a shared `recompute_rating_cache()`)
+    but deletes the row instead of writing one; a "Remove" link next to
+    the "You: N/10" pill calls it via `DELETE /meals/{id}/rate` and
+    `DELETE /guides/{slug}/rate`.
+57. **Reorder meals within a collection** — collections had an implicit,
+    unchangeable insertion order. Same `position` + swap-with-neighbor
+    pattern as iteration 54's meal-plan reordering, applied to
+    `meal_collection_items`; ▲/▼ buttons overlay each card's top-left
+    corner (the existing × remove button already owns top-right).
+58. **Guide progress tracking** — deliberately distinct from iteration
+    52's bookmarking: saving is "come back to this," a new
+    `guide_progress` table is "I've actually read this." A "Mark as
+    read" toggle on the guide page, an "N of M read" count per topic on
+    the list page computed client-side from the same `is_completed`
+    flag bookmarking's `is_saved` already established the pattern for.
+59. **Password strength meter** — signup and the account password-
+    change form enforced `minLength=8` server-side but gave no feedback
+    beyond a rejected submission. A length-and-character-variety
+    heuristic (not real entropy estimation - no dictionary attack
+    modeling, just enough to nudge away from "password1") scores 0-4,
+    rendered as a 4-segment bar plus a text label; a short common-
+    password list clamps straight to "Very weak" regardless of what the
+    heuristic alone would say.
+60. **Bulk shopping list actions** — clearing a shopping list after a
+    real trip meant removing rows one at a time. A single
+    `DELETE /shopping/clear` (scoped to the caller, a no-op on an
+    already-empty list) backs a "Clear list" button that arms a confirm
+    card before executing - the same "explicit second step for a bulk-
+    destructive action" pattern Settings' "log out of all other
+    sessions" already uses.
+
+**Verified:** un-rating's full cycle via curl for both meals and guides
+- rating cache correctly recomputing to 0/0 and `your_rating` returning
+to null, a second un-rate correctly 404ing - then the "Remove"
+affordance confirmed in the browser on both pages;
+collection reordering's swap, both-edges-no-op, and cross-user 404 all
+confirmed via curl against three real meals in a real collection, then
+the ▲/▼ overlay buttons (including disabled state at the edges)
+confirmed in the browser; guide progress's independent per-guide
+toggle state confirmed via curl across two guides sharing a topic, then
+the "N of M read" topic count, the card checkmark, and the "Mark as
+read" ↔ "✓ Read" button confirmed in the browser; the password
+strength meter's tiering confirmed directly against known inputs (a
+blocklisted password forced to "Very weak" despite passing the length
+check, a repetitive-but-long password landing at "Weak," a long
+high-variety password reaching "Strong") on both the signup form and
+the Settings password field, plus the meter correctly not rendering at
+all against an empty field; and bulk shopping clear's per-user scoping
+(clearing one account's list via curl left an unrelated account's item
+untouched) and the empty-list no-op confirmed via curl, then the arm-
+then-confirm card and the list actually emptying confirmed in the
+browser.
