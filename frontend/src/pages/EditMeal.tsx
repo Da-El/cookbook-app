@@ -18,6 +18,7 @@ interface EditableMeal {
   description: string;
   steps: string[];
   photo_url: string | null;
+  photos: string[];
   visibility: string;
   ingredients: { ingredient_id: number | null; name: string; amount: number | null; unit: string | null }[];
 }
@@ -40,6 +41,7 @@ function toForm(m: EditableMeal): MealFormValue {
     steps: m.steps.length > 0 ? m.steps : [''],
     description: m.description,
     photo: m.photo_url ?? '',
+    photos: m.photos,
   };
 }
 
@@ -117,6 +119,7 @@ export function EditMeal() {
       steps: realSteps,
       ingredients: toIngredientPayload(f.picked),
       photo_url: f.photo || null,
+      photos: f.photos,
       visibility: f.visibility,
     });
   }

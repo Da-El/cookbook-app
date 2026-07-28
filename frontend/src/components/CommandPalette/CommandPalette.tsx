@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../../api/client';
 import { useEscapeKey } from '../../hooks/useEscapeKey';
+import { addRecentSearch, clearRecentSearches, getRecentSearches, removeRecentSearch } from '../../lib/searchHistory';
 import {
   BookIcon, CalendarIcon, CompassIcon, HomeIcon, PlusIcon, SearchIcon,
 } from '../Icon/Icon';
@@ -52,6 +53,7 @@ export function CommandPalette() {
   const [query, setQuery] = useState('');
   const [debounced, setDebounced] = useState('');
   const [activeIndex, setActiveIndex] = useState(0);
+  const [recent, setRecent] = useState<string[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEscapeKey(() => setOpen(false), open);
@@ -72,6 +74,7 @@ export function CommandPalette() {
       setQuery('');
       setDebounced('');
       setActiveIndex(0);
+      setRecent(getRecentSearches());
       // Focus after the overlay has actually mounted.
       setTimeout(() => inputRef.current?.focus(), 0);
     }
@@ -108,21 +111,34 @@ export function CommandPalette() {
   // group an item visually belongs to.
   const flatItems = useMemo(() => {
     if (debounced.length === 0) {
-      return ACTIONS.map((a) => ({ kind: 'action' as const, action: a }));
+      return [
+        ...recent.map((term) => ({ kind: 'recent' as const, term })),
+        ...ACTIONS.map((a) => ({ kind: 'action' as const, action: a })),
+      ];
     }
     return [
       ...meals.map((m) => ({ kind: 'meal' as const, meal: m })),
       ...ingredients.map((i) => ({ kind: 'ingredient' as const, ingredient: i })),
       ...guides.map((g) => ({ kind: 'guide' as const, guide: g })),
     ];
-  }, [debounced, ACTIONS, meals, ingredients, guides]);
+  }, [debounced, recent, ACTIONS, meals, ingredients, guides]);
 
   function activate(item: (typeof flatItems)[number]) {
+    if (item.kind === 'recent') {
+      // Re-run a past search rather than closing - selecting a recent term
+      // is the start of a new lookup, not a destination in itself.
+      setQuery(item.term);
+      setActiveIndex(0);
+      return;
+    }
     setOpen(false);
     if (item.kind === 'action') item.action.go();
     else if (item.kind === 'meal') navigate(`/meals/${item.meal.id}`);
     else if (item.kind === 'ingredient') navigate(`/ingredients/${item.ingredient.id}`);
     else navigate(`/guides/${item.guide.slug}`);
+    if (debounced.length > 0) {
+      addRecentSearch(debounced);
+    }
   }
 
   function onKeyDown(e: React.KeyboardEvent) {
@@ -162,23 +178,67 @@ export function CommandPalette() {
 
         <div className={styles.results}>
           {debounced.length === 0 ? (
-            <div className={styles.group}>
-              <div className={styles.groupLabel}>Quick actions</div>
-              {ACTIONS.map((a) => {
-                const idx = flatCursor++;
-                return (
-                  <button
-                    key={a.key}
-                    className={`${styles.row} ${idx === activeIndex ? styles.rowActive : ''}`}
-                    onMouseEnter={() => setActiveIndex(idx)}
-                    onClick={() => activate({ kind: 'action', action: a })}
-                  >
-                    <a.Icon size={17} strokeWidth={1.8} />
-                    <span>{a.label}</span>
-                  </button>
-                );
-              })}
-            </div>
+            <>
+              {recent.length > 0 && (
+                <div className={styles.group}>
+                  <div className={styles.groupLabel}>
+                    <span>Recent searches</span>
+                    <button
+                      className={styles.clearLink}
+                      onClick={() => { clearRecentSearches(); setRecent([]); }}
+                    >
+                      Clear
+                    </button>
+                  </div>
+                  {recent.map((term, i) => {
+                    const idx = flatCursor++;
+                    return (
+                      <div
+                        key={term}
+                        className={`${styles.row} ${styles.recentRow} ${idx === activeIndex ? styles.rowActive : ''}`}
+                        onMouseEnter={() => setActiveIndex(idx)}
+                      >
+                        <button
+                          className={styles.recentTerm}
+                          onClick={() => activate({ kind: 'recent', term })}
+                        >
+                          <SearchIcon size={15} strokeWidth={1.8} />
+                          <span>{term}</span>
+                        </button>
+                        <button
+                          className={styles.recentRemove}
+                          aria-label={`Remove "${term}" from recent searches`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            removeRecentSearch(term);
+                            setRecent((r) => r.filter((_, j) => j !== i));
+                          }}
+                        >
+                          ×
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              <div className={styles.group}>
+                <div className={styles.groupLabel}>Quick actions</div>
+                {ACTIONS.map((a) => {
+                  const idx = flatCursor++;
+                  return (
+                    <button
+                      key={a.key}
+                      className={`${styles.row} ${idx === activeIndex ? styles.rowActive : ''}`}
+                      onMouseEnter={() => setActiveIndex(idx)}
+                      onClick={() => activate({ kind: 'action', action: a })}
+                    >
+                      <a.Icon size={17} strokeWidth={1.8} />
+                      <span>{a.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </>
           ) : (
             <>
               {meals.length === 0 && ingredients.length === 0 && guides.length === 0 && (

@@ -35,12 +35,14 @@ export interface MealFormValue {
   steps: string[];
   description: string;
   photo: string;
+  /** Extra gallery photos beyond the cover - shown on the meal's own page only. */
+  photos: string[];
 }
 
 export function emptyMealForm(): MealFormValue {
   return {
     name: '', serves: '', time: '', cuisine: 'Italian', mealType: 'Dinner',
-    visibility: 'public', picked: [], steps: [''], description: '', photo: '',
+    visibility: 'public', picked: [], steps: [''], description: '', photo: '', photos: [],
   };
 }
 
@@ -120,6 +122,32 @@ export function MealForm({
           <span>Take or upload a photo</span>
         </button>
       )}
+
+      <div className={styles.field}>
+        <div className={styles.pickerHead}>
+          <label className={styles.label} style={{ marginBottom: 0 }}>More photos</label>
+          <span className={styles.pickerCount}>{value.photos.length} added</span>
+        </div>
+        <div className={styles.galleryRow}>
+          {value.photos.map((url, i) => (
+            <div key={i} className={styles.galleryThumb} style={{ background: `center/cover no-repeat url("${url}")` }}>
+              <button
+                className={styles.galleryRemove}
+                onClick={() => set('photos', value.photos.filter((_, j) => j !== i))}
+                aria-label={`Remove photo ${i + 1}`}
+              >
+                ×
+              </button>
+            </div>
+          ))}
+          <button
+            className={styles.galleryAdd}
+            onClick={() => pickImage((url) => set('photos', [...value.photos, url]))}
+          >
+            + Add
+          </button>
+        </div>
+      </div>
 
       <div className={styles.field}>
         <label className={styles.label}>Meal name</label>

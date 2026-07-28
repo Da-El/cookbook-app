@@ -145,6 +145,11 @@ pub async fn browse(
              (SELECT count(*) FROM meal_ingredients mi WHERE mi.meal_id = m.id) AS total_count
            FROM meals m
            WHERE m.visibility = 'public' AND m.status = 'live'
+             AND ($1::bigint IS NULL OR NOT EXISTS (
+                   SELECT 1 FROM blocked_users b
+                   WHERE (b.blocker_id = $1 AND b.blocked_id = m.author_id)
+                      OR (b.blocker_id = m.author_id AND b.blocked_id = $1)
+                 ))
              AND ($2::text IS NULL OR m.name ILIKE '%' || $2 || '%')
              AND ($3::text IS NULL OR m.cuisine = $3)
              AND ($4::text IS NULL OR m.meal_type = $4)
@@ -248,6 +253,9 @@ pub struct MealDetail {
     /// Whether the viewer can fork this recipe - false when it's already
     /// theirs (forking your own recipe is a no-op the UI shouldn't offer).
     pub can_fork: bool,
+    /// Extra gallery photos beyond `card.photo_url` (the cover) - see
+    /// `meal_photos`' doc comment. Ordered, may be empty.
+    pub photos: Vec<String>,
 }
 
 #[derive(Serialize)]
@@ -400,6 +408,14 @@ pub async fn detail(
         author_name: extra.9.unwrap_or_else(|| "a former user".into()),
     });
 
+    let photos: Vec<String> = sqlx::query_scalar(
+        "SELECT photo_url FROM meal_photos WHERE meal_id = $1 ORDER BY position",
+    )
+    .bind(id)
+    .fetch_all(&state.db)
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
     Ok(Json(MealDetail {
         card,
         description: extra.0,
@@ -416,6 +432,7 @@ pub async fn detail(
         rating_distribution,
         forked_from,
         can_fork: viewer.is_some() && viewer != Some(author_id),
+        photos,
     }))
 }
 
@@ -604,6 +621,9 @@ pub struct NewMeal {
     pub steps: Vec<String>,
     pub ingredients: Vec<NewMealIngredient>,
     pub photo_url: Option<String>,
+    /// Extra gallery photos beyond the cover - see `meal_photos`' doc comment.
+    #[serde(default)]
+    pub photos: Vec<String>,
     pub visibility: Option<String>,
     pub rating: Option<i16>,
     /// Set when the meal came from an import, for attribution on the page.
@@ -658,6 +678,26 @@ async fn insert_ingredients(
             tracing::error!("insert meal ingredient failed: {e}");
             oops()
         })?;
+    }
+    Ok(())
+}
+
+async fn insert_photos(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    meal_id: i64,
+    photos: &[String],
+) -> Result<(), (StatusCode, Json<serde_json::Value>)> {
+    for (idx, url) in photos.iter().map(|s| s.trim()).filter(|s| !s.is_empty()).enumerate() {
+        sqlx::query("INSERT INTO meal_photos (meal_id, photo_url, position) VALUES ($1,$2,$3)")
+            .bind(meal_id)
+            .bind(url)
+            .bind(idx as i32)
+            .execute(&mut **tx)
+            .await
+            .map_err(|e| {
+                tracing::error!("insert meal photo failed: {e}");
+                oops()
+            })?;
     }
     Ok(())
 }
@@ -725,6 +765,7 @@ pub async fn create(
     })?;
 
     insert_ingredients(&mut tx, meal_id, &body.ingredients).await?;
+    insert_photos(&mut tx, meal_id, &body.photos).await?;
 
     if let Some(import_id) = body.import_id {
         sqlx::query(
@@ -815,6 +856,16 @@ pub async fn fork(
         "INSERT INTO meal_ingredients (meal_id, ingredient_id, raw_name, amount, unit, note, position)
          SELECT $1, ingredient_id, raw_name, amount, unit, note, position
          FROM meal_ingredients WHERE meal_id = $2",
+    )
+    .bind(new_id)
+    .bind(id)
+    .execute(&mut *tx)
+    .await
+    .map_err(|_| oops())?;
+
+    sqlx::query(
+        "INSERT INTO meal_photos (meal_id, photo_url, position)
+         SELECT $1, photo_url, position FROM meal_photos WHERE meal_id = $2",
     )
     .bind(new_id)
     .bind(id)
@@ -943,6 +994,8 @@ pub struct UpdateMeal {
     pub steps: Vec<String>,
     pub ingredients: Vec<NewMealIngredient>,
     pub photo_url: Option<String>,
+    #[serde(default)]
+    pub photos: Vec<String>,
     pub visibility: Option<String>,
 }
 
@@ -1028,6 +1081,13 @@ pub async fn update(
         .await
         .map_err(|_| oops())?;
     insert_ingredients(&mut tx, id, &body.ingredients).await?;
+
+    sqlx::query("DELETE FROM meal_photos WHERE meal_id = $1")
+        .bind(id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|_| oops())?;
+    insert_photos(&mut tx, id, &body.photos).await?;
 
     tx.commit().await.map_err(|_| oops())?;
     Ok(StatusCode::NO_CONTENT)

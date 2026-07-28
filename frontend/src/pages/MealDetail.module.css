@@ -82,6 +82,25 @@
   flex-wrap: wrap;
 }
 
+.photoGallery {
+  display: flex;
+  gap: 8px;
+  margin-top: 14px;
+  overflow-x: auto;
+}
+
+.galleryPhoto {
+  width: 92px;
+  height: 92px;
+  border-radius: 16px;
+  flex: none;
+  box-shadow: var(--shadow-thumb);
+}
+
+@media (min-width: 900px) {
+  .galleryPhoto { width: 110px; height: 110px; }
+}
+
 .metaRating {
   color: var(--amber);
 }

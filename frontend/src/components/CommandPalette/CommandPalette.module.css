@@ -67,6 +67,64 @@
   text-transform: uppercase;
   letter-spacing: .05em;
   color: var(--muted-3);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.clearLink {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--accent);
+  font: 700 10.5px var(--font-ui);
+  text-transform: none;
+  letter-spacing: normal;
+  cursor: pointer;
+}
+
+.recentRow {
+  padding: 0 4px 0 10px;
+}
+
+.recentTerm {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  border: none;
+  background: none;
+  padding: 10px 0;
+  color: var(--ink);
+  font: 500 14px var(--font-ui);
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.recentTerm span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.recentRemove {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border: none;
+  background: none;
+  color: var(--muted-3);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  border-radius: 50%;
+}
+
+.recentRemove:hover {
+  background: var(--chip-bg);
+  color: var(--ink);
 }
 
 .row {

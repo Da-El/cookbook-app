@@ -74,3 +74,10 @@
   color: var(--ink);
   border-color: var(--border-card);
 }
+
+.youTag {
+  flex: none;
+  padding: 8px 13px;
+  font: 700 12.5px var(--font-ui);
+  color: var(--muted-2);
+}

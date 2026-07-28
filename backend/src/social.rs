@@ -36,6 +36,8 @@ pub async fn suggested_chefs(
          WHERE u.id <> $1
            AND NOT EXISTS (SELECT 1 FROM follows f WHERE f.follower_id=$1 AND f.followee_id=u.id)
            AND EXISTS (SELECT 1 FROM meals m WHERE m.author_id=u.id AND m.visibility='public' AND m.status='live')
+           AND NOT EXISTS (SELECT 1 FROM blocked_users b
+                            WHERE (b.blocker_id=$1 AND b.blocked_id=u.id) OR (b.blocker_id=u.id AND b.blocked_id=$1))
          -- Ordered by the shrunk score, not the displayed raw best: one lucky
          -- 10/10 shouldn't outrank a chef with a shelf of well-attested 9s.
          ORDER BY (SELECT max(m.ranked_score) FROM meals m
@@ -77,6 +79,8 @@ pub async fn search_chefs(
          FROM users u
          WHERE u.id <> $1
            AND ($2::text IS NULL OR u.display_name ILIKE '%' || $2 || '%')
+           AND NOT EXISTS (SELECT 1 FROM blocked_users b
+                            WHERE (b.blocker_id=$1 AND b.blocked_id=u.id) OR (b.blocker_id=u.id AND b.blocked_id=$1))
          ORDER BY meal_count DESC,
                   (SELECT max(m.ranked_score) FROM meals m
                    WHERE m.author_id=u.id AND m.visibility='public' AND m.status='live')
@@ -158,6 +162,17 @@ pub async fn following(
     Ok(Json(rows))
 }
 
+async fn is_blocked_either_way(db: &sqlx::PgPool, a: i64, b: i64) -> Result<bool, sqlx::Error> {
+    sqlx::query_scalar(
+        "SELECT EXISTS (SELECT 1 FROM blocked_users
+                         WHERE (blocker_id=$1 AND blocked_id=$2) OR (blocker_id=$2 AND blocked_id=$1))",
+    )
+    .bind(a)
+    .bind(b)
+    .fetch_one(db)
+    .await
+}
+
 pub async fn toggle_follow(
     State(state): State<AppState>,
     CurrentUser(user): CurrentUser,
@@ -165,6 +180,12 @@ pub async fn toggle_follow(
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     if id == user.id {
         return Err(StatusCode::BAD_REQUEST);
+    }
+    if is_blocked_either_way(&state.db, user.id, id)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+    {
+        return Err(StatusCode::FORBIDDEN);
     }
     let deleted = sqlx::query("DELETE FROM follows WHERE follower_id=$1 AND followee_id=$2")
         .bind(user.id).bind(id)
@@ -194,6 +215,71 @@ pub async fn toggle_follow(
     }
 
     Ok(Json(serde_json::json!({ "following": deleted == 0 })))
+}
+
+/// Blocking severs any existing follow in either direction - there's no
+/// sense leaving a stale follow row for a relationship the block just ended,
+/// and it keeps `feed()` (which is driven entirely by `follows`) correct for
+/// free without needing its own blocked-user filter.
+pub async fn toggle_block(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Path(id): Path<i64>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    if id == user.id {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+    let mut tx = state.db.begin().await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let deleted = sqlx::query("DELETE FROM blocked_users WHERE blocker_id=$1 AND blocked_id=$2")
+        .bind(user.id).bind(id)
+        .execute(&mut *tx).await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .rows_affected();
+
+    if deleted == 0 {
+        sqlx::query("INSERT INTO blocked_users (blocker_id, blocked_id) VALUES ($1,$2) ON CONFLICT DO NOTHING")
+            .bind(user.id).bind(id)
+            .execute(&mut *tx).await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+        sqlx::query(
+            "DELETE FROM follows WHERE (follower_id=$1 AND followee_id=$2) OR (follower_id=$2 AND followee_id=$1)",
+        )
+        .bind(user.id).bind(id)
+        .execute(&mut *tx).await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    }
+
+    tx.commit().await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(Json(serde_json::json!({ "blocked": deleted == 0 })))
+}
+
+#[derive(Serialize, sqlx::FromRow)]
+pub struct BlockedUser {
+    pub id: i64,
+    pub display_name: String,
+    pub avatar_theme: String,
+    pub avatar_photo_url: Option<String>,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+}
+
+pub async fn blocked_list(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+) -> Result<Json<Vec<BlockedUser>>, StatusCode> {
+    let rows = sqlx::query_as::<_, BlockedUser>(
+        "SELECT u.id, u.display_name, u.cb_avatar_theme AS avatar_theme,
+                u.cb_avatar_photo_url AS avatar_photo_url, b.created_at
+         FROM blocked_users b JOIN users u ON u.id = b.blocked_id
+         WHERE b.blocker_id = $1
+         ORDER BY b.created_at DESC",
+    )
+    .bind(user.id)
+    .fetch_all(&state.db)
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(Json(rows))
 }
 
 #[derive(Serialize, sqlx::FromRow)]
@@ -329,6 +415,11 @@ pub struct ChefProfile {
     /// already silently weights this person's votes (migration 0007). Never
     /// the raw weight or activity count, just the tier.
     pub contributor_tier: String,
+    /// True only when the viewer themselves has blocked this chef - never
+    /// the reverse. Whether *they've* blocked the viewer isn't exposed;
+    /// blocking here only ever affects what the blocker sees, not what the
+    /// blocked party can see of them (see `toggle_block`'s doc comment).
+    pub is_blocked: bool,
 }
 
 pub async fn profile(
@@ -355,6 +446,18 @@ pub async fn profile(
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
     .ok_or(StatusCode::NOT_FOUND)?;
 
+    let is_blocked = match viewer {
+        Some(v) => sqlx::query_scalar(
+            "SELECT EXISTS (SELECT 1 FROM blocked_users WHERE blocker_id=$1 AND blocked_id=$2)",
+        )
+        .bind(v)
+        .bind(id)
+        .fetch_one(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?,
+        None => false,
+    };
+
     Ok(Json(ChefProfile {
         id: r.0,
         display_name: r.1,
@@ -372,6 +475,7 @@ pub async fn profile(
         is_following: r.13,
         is_me: viewer == Some(r.0),
         contributor_tier: r.14,
+        is_blocked,
     }))
 }
 
@@ -452,6 +556,59 @@ pub async fn chef_reviews(
          ORDER BY r.cooked_at DESC",
     )
     .bind(id)
+    .fetch_all(&state.db)
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(Json(rows))
+}
+
+/// Who follows this chef - viewer-relative `is_following` (do *I* follow
+/// this person in the list), not the profile owner's relationship to them.
+pub async fn chef_followers(
+    State(state): State<AppState>,
+    viewer: Option<CurrentUser>,
+    Path(id): Path<i64>,
+) -> Result<Json<Vec<ChefCard>>, StatusCode> {
+    let viewer_id = viewer.map(|u| u.0.id);
+    let rows = sqlx::query_as::<_, ChefCard>(
+        "SELECT u.id, u.display_name, u.cb_avatar_theme AS avatar_theme,
+                u.cb_avatar_photo_url AS avatar_photo_url,
+                (SELECT count(*) FROM meals m WHERE m.author_id=u.id AND m.visibility='public' AND m.status='live') AS meal_count,
+                NULL::text AS top_cuisine, NULL::float8 AS best_rating,
+                ($2::bigint IS NOT NULL AND EXISTS (SELECT 1 FROM follows f2 WHERE f2.follower_id=$2 AND f2.followee_id=u.id)) AS is_following
+         FROM follows f JOIN users u ON u.id = f.follower_id
+         WHERE f.followee_id = $1
+         ORDER BY u.display_name",
+    )
+    .bind(id)
+    .bind(viewer_id)
+    .fetch_all(&state.db)
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(Json(rows))
+}
+
+/// Who this chef follows - same viewer-relative shape as `chef_followers`,
+/// but public (anyone can see who anyone follows), unlike the self-only
+/// `following()` above which is the viewer's own sidebar list.
+pub async fn chef_following(
+    State(state): State<AppState>,
+    viewer: Option<CurrentUser>,
+    Path(id): Path<i64>,
+) -> Result<Json<Vec<ChefCard>>, StatusCode> {
+    let viewer_id = viewer.map(|u| u.0.id);
+    let rows = sqlx::query_as::<_, ChefCard>(
+        "SELECT u.id, u.display_name, u.cb_avatar_theme AS avatar_theme,
+                u.cb_avatar_photo_url AS avatar_photo_url,
+                (SELECT count(*) FROM meals m WHERE m.author_id=u.id AND m.visibility='public' AND m.status='live') AS meal_count,
+                NULL::text AS top_cuisine, NULL::float8 AS best_rating,
+                ($2::bigint IS NOT NULL AND EXISTS (SELECT 1 FROM follows f2 WHERE f2.follower_id=$2 AND f2.followee_id=u.id)) AS is_following
+         FROM follows f JOIN users u ON u.id = f.followee_id
+         WHERE f.follower_id = $1
+         ORDER BY u.display_name",
+    )
+    .bind(id)
+    .bind(viewer_id)
     .fetch_all(&state.db)
     .await
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;

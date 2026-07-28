@@ -23,6 +23,7 @@ import { IngredientDetail } from './pages/IngredientDetail';
 import { MealDetail } from './pages/MealDetail';
 import { CookMode } from './pages/CookMode';
 import { ChefPage } from './pages/ChefPage';
+import { ChefConnections } from './pages/ChefConnections';
 import { Settings } from './pages/Settings';
 import { Legal } from './pages/Legal';
 import { Import } from './pages/Import';
@@ -93,6 +94,8 @@ function Routed() {
       <Route path="/meals/:id/edit" element={<Bare><EditMeal /></Bare>} />
       <Route path="/meals/:id/history" element={<Bare><MealHistory /></Bare>} />
       <Route path="/chefs/:id" element={<Bare><ChefPage /></Bare>} />
+      <Route path="/chefs/:id/followers" element={<Bare><ChefConnections kind="followers" /></Bare>} />
+      <Route path="/chefs/:id/following" element={<Bare><ChefConnections kind="following" /></Bare>} />
       <Route path="/settings" element={<Bare><Settings /></Bare>} />
       <Route path="/legal" element={<Bare><Legal /></Bare>} />
       <Route path="/reset-password" element={<ResetPassword />} />

@@ -24,6 +24,7 @@ interface ChefProfile {
   is_following: boolean;
   is_me: boolean;
   contributor_tier: ContributorTier;
+  is_blocked: boolean;
 }
 
 interface ChefMeal {
@@ -69,19 +70,19 @@ export function ChefPage() {
   const { data: published = [] } = useQuery({
     queryKey: ['chef-published', id],
     queryFn: () => api.get<ChefMeal[]>(`/chefs/${id}/published`),
-    enabled: Boolean(id),
+    enabled: Boolean(id) && !chef?.is_blocked,
   });
 
   const { data: cooked = [] } = useQuery({
     queryKey: ['chef-cooked', id],
     queryFn: () => api.get<ChefMeal[]>(`/chefs/${id}/cooked`),
-    enabled: Boolean(id),
+    enabled: Boolean(id) && !chef?.is_blocked,
   });
 
   const { data: reviews = [] } = useQuery({
     queryKey: ['chef-reviews', id],
     queryFn: () => api.get<ChefReview[]>(`/chefs/${id}/reviews`),
-    enabled: Boolean(id),
+    enabled: Boolean(id) && !chef?.is_blocked,
   });
 
   const follow = useMutation({
@@ -91,6 +92,18 @@ export function ChefPage() {
       qc.invalidateQueries({ queryKey: ['chef', id] });
       qc.invalidateQueries({ queryKey: ['chefs-suggested'] });
       qc.invalidateQueries({ queryKey: ['chefs-following'] });
+      qc.invalidateQueries({ queryKey: ['feed'] });
+    },
+  });
+
+  const block = useMutation({
+    mutationFn: () => api.post<{ blocked: boolean }>(`/chefs/${id}/block`),
+    onSuccess: (res) => {
+      toast(res.blocked ? `Blocked ${chef?.display_name}` : `Unblocked ${chef?.display_name}`);
+      qc.invalidateQueries({ queryKey: ['chef', id] });
+      qc.invalidateQueries({ queryKey: ['chefs-suggested'] });
+      qc.invalidateQueries({ queryKey: ['chefs-following'] });
+      qc.invalidateQueries({ queryKey: ['chefs-blocked'] });
       qc.invalidateQueries({ queryKey: ['feed'] });
     },
   });
@@ -123,33 +136,53 @@ export function ChefPage() {
             {chef.display_name} <ContributorBadge tier={chef.contributor_tier} />
           </div>
           {chef.bio && <div className={styles.bio}>{chef.bio}</div>}
-          <div className={styles.followerCount}>{chef.follower_count} followers</div>
+          <div className={styles.followerCount}>
+            <button className={styles.followerCountLink} onClick={() => navigate(`/chefs/${id}/followers`)}>
+              {chef.follower_count} follower{chef.follower_count === 1 ? '' : 's'}
+            </button>
+            <button className={styles.followerCountLink} onClick={() => navigate(`/chefs/${id}/following`)}>
+              {chef.following_count} following
+            </button>
+          </div>
         </div>
       </div>
 
-      <button
-        className={`${styles.followBtn} ${chef.is_following ? styles.followBtnOn : ''}`}
-        onClick={() => follow.mutate()}
-      >
-        {chef.is_following ? 'Following' : 'Follow'}
+      {!chef.is_blocked && (
+        <button
+          className={`${styles.followBtn} ${chef.is_following ? styles.followBtnOn : ''}`}
+          onClick={() => follow.mutate()}
+        >
+          {chef.is_following ? 'Following' : 'Follow'}
+        </button>
+      )}
+
+      <button className={styles.blockLink} onClick={() => block.mutate()}>
+        {chef.is_blocked ? 'Unblock this chef' : 'Block this chef'}
       </button>
 
-      <div className={styles.tabs}>
-        {(['published', 'cooked', 'reviews'] as Tab[]).map((t) => (
-          <button
-            key={t}
-            className={`${styles.tab} ${tab === t ? styles.tabActive : ''}`}
-            onClick={() => setTab(t)}
-          >
-            {t.charAt(0).toUpperCase() + t.slice(1)}
-            <span className={styles.tabCount}>
-              {t === 'published' ? published.length : t === 'cooked' ? cooked.length : reviews.length}
-            </span>
-          </button>
-        ))}
-      </div>
+      {chef.is_blocked ? (
+        <div className={styles.blockedBanner}>
+          You've blocked {chef.display_name}. You won't see their recipes in Browse or your feed,
+          and they can't follow you.
+        </div>
+      ) : (
+        <>
+          <div className={styles.tabs}>
+            {(['published', 'cooked', 'reviews'] as Tab[]).map((t) => (
+              <button
+                key={t}
+                className={`${styles.tab} ${tab === t ? styles.tabActive : ''}`}
+                onClick={() => setTab(t)}
+              >
+                {t.charAt(0).toUpperCase() + t.slice(1)}
+                <span className={styles.tabCount}>
+                  {t === 'published' ? published.length : t === 'cooked' ? cooked.length : reviews.length}
+                </span>
+              </button>
+            ))}
+          </div>
 
-      {tab === 'published' &&
+          {tab === 'published' &&
         (published.length > 0 ? (
           <div className={styles.mealList}>
             {published.map((m) => (
@@ -211,6 +244,8 @@ export function ChefPage() {
             <EmptyStatic>No public reviews yet.</EmptyStatic>
           </div>
         ))}
+        </>
+      )}
     </div>
   );
 }

@@ -29,6 +29,12 @@ interface NotificationPref {
   email_enabled: boolean;
 }
 
+interface BlockedUser {
+  id: number;
+  display_name: string;
+  created_at: string;
+}
+
 interface LoginHistoryRow {
   id: number;
   device: string;
@@ -135,6 +141,11 @@ export function Settings() {
   const { data: loginHistory = [] } = useQuery({
     queryKey: ['login-history'],
     queryFn: () => api.get<LoginHistoryRow[]>('/auth/login-history'),
+  });
+
+  const { data: blockedUsers = [] } = useQuery({
+    queryKey: ['chefs-blocked'],
+    queryFn: () => api.get<BlockedUser[]>('/chefs/blocked'),
   });
 
   const { data: notificationPrefs = [] } = useQuery({
@@ -251,6 +262,11 @@ export function Settings() {
       setConfirmLogoutAll(false);
       qc.invalidateQueries({ queryKey: ['sessions'] });
     },
+  });
+
+  const unblock = useMutation({
+    mutationFn: (id: number) => api.post<{ blocked: boolean }>(`/chefs/${id}/block`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['chefs-blocked'] }),
   });
 
   if (!user || !settings) return null;
@@ -404,6 +420,32 @@ export function Settings() {
           )
         )}
       </div>
+
+      {blockedUsers.length > 0 && (
+        <div className={styles.section}>
+          <div className={styles.sectionTitle}>Blocked accounts</div>
+          <div className={styles.sessionList}>
+            {blockedUsers.map((b) => (
+              <div key={b.id} className={styles.sessionRow}>
+                <button
+                  className={styles.visLabel}
+                  style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left' }}
+                  onClick={() => navigate(`/chefs/${b.id}`)}
+                >
+                  {b.display_name}
+                </button>
+                <button
+                  className={styles.sessionRevoke}
+                  onClick={() => unblock.mutate(b.id)}
+                  disabled={unblock.isPending}
+                >
+                  Unblock
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {settings && (
         <div className={styles.section}>

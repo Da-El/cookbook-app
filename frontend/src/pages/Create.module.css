@@ -207,6 +207,49 @@
   border-radius: 999px;
 }
 
+.galleryRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.galleryThumb {
+  width: 76px;
+  height: 76px;
+  border-radius: 14px;
+  flex: none;
+  position: relative;
+}
+
+.galleryRemove {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 22px;
+  height: 22px;
+  border: none;
+  background: rgba(20, 10, 4, .62);
+  color: #fff;
+  border-radius: 50%;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+}
+
+.galleryAdd {
+  width: 76px;
+  height: 76px;
+  border-radius: 14px;
+  flex: none;
+  border: 2px dashed var(--muted-4);
+  background: var(--surface-card);
+  color: var(--muted-3);
+  font: 600 12px var(--font-ui);
+  cursor: pointer;
+}
+
 /* ---------- chips ---------- */
 
 .chipRow {
@@ -629,5 +672,55 @@
   background: var(--surface-card);
   color: var(--ink);
   font: 700 13px var(--font-ui);
+  cursor: pointer;
+}
+
+.draftBanner {
+  margin-top: 18px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  border: 1.5px solid var(--accent);
+  background: var(--amber-tint);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.draftBannerTitle {
+  color: var(--ink);
+  font: 700 14px var(--font-ui);
+}
+
+.draftBannerSub {
+  color: var(--muted);
+  font: 400 12.5px var(--font-ui);
+  margin-top: 2px;
+}
+
+.draftBannerActions {
+  display: flex;
+  gap: 8px;
+  flex: none;
+}
+
+.draftResume {
+  padding: 9px 16px;
+  border: none;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font: 700 12.5px var(--font-ui);
+  cursor: pointer;
+}
+
+.draftDiscard {
+  padding: 9px 16px;
+  border: 1.5px solid var(--border-card);
+  border-radius: 999px;
+  background: var(--surface-card);
+  color: var(--ink);
+  font: 700 12.5px var(--font-ui);
   cursor: pointer;
 }

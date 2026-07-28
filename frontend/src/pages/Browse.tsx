@@ -11,6 +11,7 @@ import { ChefList, ChefRow, type Chef } from '../components/ChefRow/ChefRow';
 import { EmptyLine } from '../components/Empty/Empty';
 import { SearchIcon } from '../components/Icon/Icon';
 import { ingredientBackground } from '../lib/imagery';
+import { addRecentSearch, clearRecentSearches, getRecentSearches } from '../lib/searchHistory';
 import styles from './Browse.module.css';
 
 const MEAL_TYPES = ['All', 'Breakfast', 'Lunch', 'Dinner', 'Dessert', 'Snack'];
@@ -89,12 +90,25 @@ export function Browse() {
   const [difficulty, setDifficulty] = useState('All');
   const [maxTime, setMaxTime] = useState<number | null>(null);
   const [occasion, setOccasion] = useState('All');
+  const [recent, setRecent] = useState<string[]>(() => getRecentSearches());
 
   // The desktop topbar searches by pushing ?q=, so mirror it into local state.
   const urlQuery = params.get('q');
   useEffect(() => {
-    if (urlQuery !== null) setSearch(urlQuery);
+    if (urlQuery !== null) {
+      setSearch(urlQuery);
+      if (urlQuery.trim()) {
+        addRecentSearch(urlQuery);
+        setRecent(getRecentSearches());
+      }
+    }
   }, [urlQuery]);
+
+  function commitSearch(term: string) {
+    if (!term.trim()) return;
+    addRecentSearch(term);
+    setRecent(getRecentSearches());
+  }
 
   // A typed query does double duty: it's the entry point for both tabs at
   // once, so one request covers what used to be two. Below, each tab reads
@@ -229,8 +243,28 @@ export function Browse() {
               placeholder="Search…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') commitSearch(search); }}
+              onBlur={() => commitSearch(search)}
             />
           </div>
+          {trimmedSearch.length === 0 && recent.length > 0 && (
+            <div className={styles.recentRow}>
+              <span className={styles.recentLabel}>Recent:</span>
+              <div className={`${styles.recentChips} hscroll`}>
+                {recent.map((term) => (
+                  <button key={term} className={styles.recentChip} onClick={() => setSearch(term)}>
+                    {term}
+                  </button>
+                ))}
+              </div>
+              <button
+                className={styles.recentClear}
+                onClick={() => { clearRecentSearches(); setRecent([]); }}
+              >
+                Clear
+              </button>
+            </div>
+          )}
           {tab === 'meals' && (
             <button
               className={styles.surpriseBtn}

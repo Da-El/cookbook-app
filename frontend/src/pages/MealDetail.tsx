@@ -66,6 +66,7 @@ interface MealDetailData {
   rating: number;
   rating_count: number;
   photo_url: string | null;
+  photos: string[];
   description: string;
   steps: string[];
   serves: string | null;
@@ -413,6 +414,18 @@ export function MealDetail() {
           <div className={styles.title}>{meal.name}</div>
         </div>
       </div>
+
+      {meal.photos.length > 0 && (
+        <div className={styles.photoGallery}>
+          {meal.photos.map((url, i) => (
+            <div
+              key={i}
+              className={styles.galleryPhoto}
+              style={{ background: `center/cover no-repeat url("${url}")` }}
+            />
+          ))}
+        </div>
+      )}
 
       <div className={styles.metaLine}>
         {meal.rating > 0 && (
