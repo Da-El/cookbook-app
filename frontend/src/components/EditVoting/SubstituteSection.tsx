@@ -145,12 +145,18 @@ export function SubstituteSection({ ingredientId }: { ingredientId: number }) {
 
       {subs.length > 0 && (
         <div className={styles.list}>
-          {subs.map((row) => (
+          {subs.map((row, i) => {
+            // The list already arrives sorted by score - "top pick" just
+            // names the row that's already leading, and only when there's
+            // an actual vote behind it and something else to be ahead of.
+            const isTopPick = i === 0 && subs.length > 1 && row.score > 0;
+            return (
             <div key={row.id} className={styles.row}>
               <span className={styles.rowValue}>
                 <Link to={`/ingredients/${row.substitute_id}`} className={styles.rowMetaLink} style={{ fontWeight: 700, color: 'var(--ink)' }}>
                   {row.substitute_name}
                 </Link>
+                {isTopPick && <span className={styles.topPickBadge}>★ Top pick</span>}
                 {row.note && <span className={styles.rowMeta}> — {row.note}</span>}
                 {row.author_name && <span className={styles.rowMeta}> · suggested by {row.author_name}</span>}
               </span>
@@ -189,7 +195,8 @@ export function SubstituteSection({ ingredientId }: { ingredientId: number }) {
                 <FlagButton contentType="substitute" contentId={row.id} />
               )}
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

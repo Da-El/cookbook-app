@@ -53,8 +53,14 @@
   border-color: var(--accent);
 }
 
-.bookmarkBtn {
+.headerActions {
   margin-left: auto;
+  display: flex;
+  gap: 8px;
+}
+
+.bookmarkBtn,
+.shareBtn {
   width: 40px;
   height: 40px;
   flex: none;

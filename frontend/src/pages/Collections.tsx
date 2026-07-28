@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api/client';
 import { LoadingState } from '../components/PageState/PageState';
 import { EmptyLine } from '../components/Empty/Empty';
-import { ChevronLeft } from '../components/Icon/Icon';
+import { ChevronLeft, FolderIcon } from '../components/Icon/Icon';
 import styles from './Collections.module.css';
 
 interface CollectionRow {
@@ -14,6 +14,7 @@ interface CollectionRow {
   meal_count: number;
   meal_ids: number[];
   is_public: boolean;
+  cover_photo_url: string | null;
 }
 
 interface FollowedCollectionRow {
@@ -21,6 +22,17 @@ interface FollowedCollectionRow {
   name: string;
   owner_name: string;
   meal_count: number;
+  cover_photo_url: string | null;
+}
+
+function CollectionThumb({ url }: { url: string | null }) {
+  return url ? (
+    <span className={styles.rowThumb} style={{ backgroundImage: `url(${url})` }} />
+  ) : (
+    <span className={styles.rowThumbEmpty}>
+      <FolderIcon size={16} strokeWidth={1.8} />
+    </span>
+  );
 }
 
 /**
@@ -111,12 +123,15 @@ export function Collections() {
           {collections.map((c) => (
             <div key={c.id} className={styles.row}>
               <button className={styles.rowMain} onClick={() => navigate(`/collections/${c.id}`)}>
-                <span className={styles.rowName}>
-                  {c.name}
-                  {c.is_public && <span className={styles.publicBadge}>Public</span>}
-                </span>
-                <span className={styles.rowCount}>
-                  {c.meal_count} meal{c.meal_count === 1 ? '' : 's'}
+                <CollectionThumb url={c.cover_photo_url} />
+                <span style={{ flex: 1, minWidth: 0 }}>
+                  <span className={styles.rowName} style={{ display: 'block' }}>
+                    {c.name}
+                    {c.is_public && <span className={styles.publicBadge}>Public</span>}
+                  </span>
+                  <span className={styles.rowCount} style={{ display: 'block' }}>
+                    {c.meal_count} meal{c.meal_count === 1 ? '' : 's'}
+                  </span>
                 </span>
               </button>
               <button
@@ -141,9 +156,12 @@ export function Collections() {
             {followed.map((c) => (
               <div key={c.id} className={styles.row}>
                 <button className={styles.rowMain} onClick={() => navigate(`/collections/${c.id}`)}>
-                  <span className={styles.rowName}>{c.name}</span>
-                  <span className={styles.rowCount}>
-                    {c.meal_count} meal{c.meal_count === 1 ? '' : 's'} · by {c.owner_name}
+                  <CollectionThumb url={c.cover_photo_url} />
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    <span className={styles.rowName} style={{ display: 'block' }}>{c.name}</span>
+                    <span className={styles.rowCount} style={{ display: 'block' }}>
+                      {c.meal_count} meal{c.meal_count === 1 ? '' : 's'} · by {c.owner_name}
+                    </span>
                   </span>
                 </button>
               </div>

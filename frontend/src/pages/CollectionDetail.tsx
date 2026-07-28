@@ -5,7 +5,8 @@ import { useToast } from '../components/Toast/ToastContext';
 import { MealCard, MealGrid } from '../components/MealCard/MealCard';
 import { LoadingState, ErrorState } from '../components/PageState/PageState';
 import { EmptyLine } from '../components/Empty/Empty';
-import { ChevronLeft } from '../components/Icon/Icon';
+import { ChevronLeft, CameraIcon } from '../components/Icon/Icon';
+import { pickImage } from '../lib/photo';
 import styles from './CollectionDetail.module.css';
 
 interface CollectionMeal {
@@ -26,6 +27,7 @@ interface CollectionDetailData {
   owner_name: string;
   follower_count: number;
   is_following: boolean;
+  cover_photo_url: string | null;
 }
 
 export function CollectionDetail() {
@@ -57,6 +59,11 @@ export function CollectionDetail() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['collection', id] }),
   });
 
+  const setCover = useMutation({
+    mutationFn: (photo_url: string | null) => api.post(`/collections/${id}/cover`, { photo_url }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['collection', id] }),
+  });
+
   const follow = useMutation({
     mutationFn: () => api.post<{ following: boolean }>(`/collections/${id}/follow`),
     onSuccess: (res) => {
@@ -74,6 +81,20 @@ export function CollectionDetail() {
 
   return (
     <div className={styles.page}>
+      {data?.cover_photo_url && (
+        <div className={styles.coverBanner} style={{ backgroundImage: `url(${data.cover_photo_url})` }}>
+          {data.is_mine && (
+            <button
+              className={styles.coverEditBtn}
+              onClick={() => pickImage((url) => setCover.mutate(url))}
+              title="Change cover photo"
+            >
+              <CameraIcon size={15} strokeWidth={1.8} /> Change cover
+            </button>
+          )}
+        </div>
+      )}
+
       <div className={styles.header}>
         <button className={styles.backBtn} onClick={() => navigate(-1)} aria-label="Back">
           <ChevronLeft size={18} strokeWidth={2.2} />
@@ -115,6 +136,14 @@ export function CollectionDetail() {
           {data.is_public && (
             <button className={styles.copyLinkBtn} onClick={copyLink}>
               Copy link
+            </button>
+          )}
+          {!data.cover_photo_url && (
+            <button
+              className={styles.copyLinkBtn}
+              onClick={() => pickImage((url) => setCover.mutate(url))}
+            >
+              <CameraIcon size={13} strokeWidth={1.8} /> Add cover photo
             </button>
           )}
         </div>

@@ -111,6 +111,16 @@
   color: var(--muted-2);
 }
 
+.topPickBadge {
+  margin-left: 7px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--amber-tint);
+  color: var(--amber);
+  font: 700 10px var(--font-ui);
+  white-space: nowrap;
+}
+
 .rowMetaLink {
   font: inherit;
   color: var(--muted-2);

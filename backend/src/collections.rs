@@ -18,6 +18,7 @@ pub struct CollectionRow {
     /// without a second round trip per collection.
     pub meal_ids: Vec<i64>,
     pub is_public: bool,
+    pub cover_photo_url: Option<String>,
 }
 
 /// Always the caller's own, public or private alike - this is the owner's
@@ -27,7 +28,7 @@ pub async fn list(
     CurrentUser(user): CurrentUser,
 ) -> Result<Json<Vec<CollectionRow>>, StatusCode> {
     let rows = sqlx::query_as::<_, CollectionRow>(
-        "SELECT c.id, c.name, c.created_at, c.is_public,
+        "SELECT c.id, c.name, c.created_at, c.is_public, c.cover_photo_url,
                 count(i.meal_id) AS meal_count,
                 COALESCE(array_agg(i.meal_id) FILTER (WHERE i.meal_id IS NOT NULL), '{}') AS meal_ids
          FROM meal_collections c
@@ -97,6 +98,35 @@ pub async fn set_visibility(
     Ok(StatusCode::NO_CONTENT)
 }
 
+#[derive(Deserialize)]
+pub struct SetCover {
+    /// `None`/omitted clears the cover, falling back to whatever the
+    /// detail page shows in its absence (the same "no photo" state a
+    /// brand-new collection already starts in).
+    pub photo_url: Option<String>,
+}
+
+pub async fn set_cover(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Path(id): Path<i64>,
+    Json(body): Json<SetCover>,
+) -> Result<StatusCode, StatusCode> {
+    let updated = sqlx::query("UPDATE meal_collections SET cover_photo_url = $1 WHERE id = $2 AND user_id = $3")
+        .bind(body.photo_url.as_deref())
+        .bind(id)
+        .bind(user.id)
+        .execute(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .rows_affected();
+
+    if updated == 0 {
+        return Err(StatusCode::NOT_FOUND);
+    }
+    Ok(StatusCode::NO_CONTENT)
+}
+
 pub async fn delete(
     State(state): State<AppState>,
     CurrentUser(user): CurrentUser,
@@ -138,6 +168,7 @@ pub struct CollectionDetail {
     /// Always false for the owner - following your own collection is a
     /// no-op the UI doesn't offer (see `toggle_follow`).
     pub is_following: bool,
+    pub cover_photo_url: Option<String>,
 }
 
 /// Optional auth at the API level - the frontend router still gates every
@@ -154,8 +185,8 @@ pub async fn detail(
     Path(id): Path<i64>,
 ) -> Result<Json<CollectionDetail>, StatusCode> {
     let viewer_id = viewer.map(|u| u.0.id);
-    let row: Option<(String, i64, bool, String)> = sqlx::query_as(
-        "SELECT c.name, c.user_id, c.is_public, u.display_name
+    let row: Option<(String, i64, bool, String, Option<String>)> = sqlx::query_as(
+        "SELECT c.name, c.user_id, c.is_public, u.display_name, c.cover_photo_url
          FROM meal_collections c JOIN users u ON u.id = c.user_id
          WHERE c.id = $1",
     )
@@ -163,7 +194,9 @@ pub async fn detail(
     .fetch_optional(&state.db)
     .await
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    let Some((name, owner_id, is_public, owner_name)) = row else { return Err(StatusCode::NOT_FOUND) };
+    let Some((name, owner_id, is_public, owner_name, cover_photo_url)) = row else {
+        return Err(StatusCode::NOT_FOUND);
+    };
 
     let is_mine = viewer_id == Some(owner_id);
     if !is_public && !is_mine {
@@ -204,7 +237,9 @@ pub async fn detail(
         _ => false,
     };
 
-    Ok(Json(CollectionDetail { id, name, meals, is_public, is_mine, owner_name, follower_count, is_following }))
+    Ok(Json(CollectionDetail {
+        id, name, meals, is_public, is_mine, owner_name, follower_count, is_following, cover_photo_url,
+    }))
 }
 
 /// Public collections the caller follows - the counterpart to `list()`'s
@@ -217,6 +252,7 @@ pub struct FollowedCollectionRow {
     pub name: String,
     pub owner_name: String,
     pub meal_count: i64,
+    pub cover_photo_url: Option<String>,
 }
 
 pub async fn list_followed(
@@ -224,7 +260,7 @@ pub async fn list_followed(
     CurrentUser(user): CurrentUser,
 ) -> Result<Json<Vec<FollowedCollectionRow>>, StatusCode> {
     let rows = sqlx::query_as::<_, FollowedCollectionRow>(
-        "SELECT c.id, c.name, u.display_name AS owner_name,
+        "SELECT c.id, c.name, u.display_name AS owner_name, c.cover_photo_url,
                 (SELECT count(*) FROM meal_collection_items i WHERE i.collection_id = c.id) AS meal_count
          FROM collection_follows f
          JOIN meal_collections c ON c.id = f.collection_id

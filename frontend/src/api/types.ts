@@ -108,6 +108,13 @@ export interface PlanEntry {
   position: number;
 }
 
+export interface PlanTemplate {
+  id: number;
+  name: string;
+  created_at: string;
+  entry_count: number;
+}
+
 export interface GroceryItem {
   key: string;
   name: string;

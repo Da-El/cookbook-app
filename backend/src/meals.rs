@@ -528,6 +528,22 @@ pub async fn discover(
         viewer,
     )
     .await;
+    // Cook-event velocity over the trailing week, not all-time popularity -
+    // `meal_log` gets one row per cook (including repeats), unlike
+    // `cooked_meals` which only records the first time. A meal cooked twice
+    // this week outranks one cooked once a year ago and never again.
+    let trending = shelf(
+        &state.db,
+        shelf_sql!(
+            "WHERE (SELECT count(*) FROM meal_log ml WHERE ml.meal_id = m.id \
+                      AND ml.logged_at > now() - interval '7 days') > 0 \
+             ORDER BY (SELECT count(*) FROM meal_log ml WHERE ml.meal_id = m.id \
+                         AND ml.logged_at > now() - interval '7 days') DESC, \
+                      m.ranked_score DESC LIMIT 12"
+        ),
+        viewer,
+    )
+    .await;
     let ready = if viewer.is_some() {
         shelf(
             &state.db,
@@ -599,6 +615,14 @@ pub async fn discover(
             title: "For your diet".into(),
             subtitle: "Matches every preference on your profile.".into(),
             meals: for_diet,
+        });
+    }
+    if !trending.is_empty() {
+        sections.push(DiscoverSection {
+            key: "trending".into(),
+            title: "Trending this week".into(),
+            subtitle: "Getting cooked right now.".into(),
+            meals: trending,
         });
     }
     if !top.is_empty() {

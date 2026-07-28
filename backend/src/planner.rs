@@ -287,6 +287,189 @@ pub async fn update_plan_entry(
     Ok(StatusCode::NO_CONTENT)
 }
 
+// ------------------------------------------------------------ plan templates
+
+fn bad(msg: &str) -> (StatusCode, Json<serde_json::Value>) {
+    (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "error": msg })))
+}
+
+fn oops() -> (StatusCode, Json<serde_json::Value>) {
+    (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "error": "Something went wrong." })))
+}
+
+#[derive(Serialize, sqlx::FromRow)]
+pub struct PlanTemplate {
+    pub id: i64,
+    pub name: String,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub entry_count: i64,
+}
+
+pub async fn list_templates(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+) -> Result<Json<Vec<PlanTemplate>>, StatusCode> {
+    let rows = sqlx::query_as::<_, PlanTemplate>(
+        "SELECT t.id, t.name, t.created_at, count(e.id) AS entry_count
+         FROM plan_templates t
+         LEFT JOIN plan_template_entries e ON e.template_id = t.id
+         WHERE t.user_id = $1
+         GROUP BY t.id
+         ORDER BY t.created_at DESC",
+    )
+    .bind(user.id)
+    .fetch_all(&state.db)
+    .await
+    .map_err(db_err)?;
+    Ok(Json(rows))
+}
+
+#[derive(Deserialize)]
+pub struct SaveTemplate {
+    pub name: String,
+    pub from: NaiveDate,
+    pub to: NaiveDate,
+}
+
+/// Snapshots a week's worth of `meal_plan_entries` into a reusable template -
+/// `day_offset` is measured from `from` rather than storing real dates, so
+/// the same template can later be applied starting on any date.
+pub async fn save_template(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Json(b): Json<SaveTemplate>,
+) -> Result<(StatusCode, Json<serde_json::Value>), (StatusCode, Json<serde_json::Value>)> {
+    let name = b.name.trim();
+    if name.is_empty() || name.chars().count() > 60 {
+        return Err(bad("Give it a name, up to 60 characters."));
+    }
+    if b.to < b.from || (b.to - b.from).num_days() > 6 {
+        return Err(bad("A template covers a single week, at most 7 days."));
+    }
+
+    let entries: Vec<(NaiveDate, String, i64, i32)> = sqlx::query_as(
+        "SELECT plan_date, slot, meal_id, servings FROM meal_plan_entries
+         WHERE user_id = $1 AND plan_date BETWEEN $2 AND $3",
+    )
+    .bind(user.id)
+    .bind(b.from)
+    .bind(b.to)
+    .fetch_all(&state.db)
+    .await
+    .map_err(|_| oops())?;
+
+    if entries.is_empty() {
+        return Err(bad("That week doesn't have anything planned to save."));
+    }
+
+    let mut tx = state.db.begin().await.map_err(|_| oops())?;
+    let template_id: i64 = sqlx::query_scalar(
+        "INSERT INTO plan_templates (user_id, name) VALUES ($1,$2) RETURNING id",
+    )
+    .bind(user.id)
+    .bind(name)
+    .fetch_one(&mut *tx)
+    .await
+    .map_err(|_| oops())?;
+
+    for (plan_date, slot, meal_id, servings) in entries {
+        let day_offset = (plan_date - b.from).num_days() as i16;
+        sqlx::query(
+            "INSERT INTO plan_template_entries (template_id, day_offset, slot, meal_id, servings)
+             VALUES ($1,$2,$3,$4,$5)",
+        )
+        .bind(template_id)
+        .bind(day_offset)
+        .bind(&slot)
+        .bind(meal_id)
+        .bind(servings)
+        .execute(&mut *tx)
+        .await
+        .map_err(|_| oops())?;
+    }
+
+    tx.commit().await.map_err(|_| oops())?;
+    Ok((StatusCode::CREATED, Json(serde_json::json!({ "id": template_id }))))
+}
+
+pub async fn delete_template(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Path(id): Path<i64>,
+) -> Result<StatusCode, StatusCode> {
+    let deleted = sqlx::query("DELETE FROM plan_templates WHERE id = $1 AND user_id = $2")
+        .bind(id)
+        .bind(user.id)
+        .execute(&state.db)
+        .await
+        .map_err(db_err)?
+        .rows_affected();
+    if deleted == 0 {
+        return Err(StatusCode::NOT_FOUND);
+    }
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[derive(Deserialize)]
+pub struct ApplyTemplate {
+    pub start_date: NaiveDate,
+}
+
+/// Recreates the template's entries starting on `start_date` - silently
+/// skips any meal that's since been soft-deleted rather than failing the
+/// whole apply, the same "collections aren't the source of truth" reasoning
+/// `collections::detail` already applies to its own meals.
+pub async fn apply_template(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Path(id): Path<i64>,
+    Json(b): Json<ApplyTemplate>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    let owned: Option<i64> = sqlx::query_scalar("SELECT id FROM plan_templates WHERE id = $1 AND user_id = $2")
+        .bind(id)
+        .bind(user.id)
+        .fetch_optional(&state.db)
+        .await
+        .map_err(db_err)?;
+    if owned.is_none() {
+        return Err(StatusCode::NOT_FOUND);
+    }
+
+    let entries: Vec<(i16, String, i64, i32)> = sqlx::query_as(
+        "SELECT e.day_offset, e.slot, e.meal_id, e.servings
+         FROM plan_template_entries e JOIN meals m ON m.id = e.meal_id AND m.status = 'live'
+         WHERE e.template_id = $1",
+    )
+    .bind(id)
+    .fetch_all(&state.db)
+    .await
+    .map_err(db_err)?;
+
+    let mut applied = 0i64;
+    let mut tx = state.db.begin().await.map_err(db_err)?;
+    for (day_offset, slot, meal_id, servings) in entries {
+        let plan_date = b.start_date + chrono::Duration::days(day_offset as i64);
+        sqlx::query(
+            "INSERT INTO meal_plan_entries (user_id, plan_date, slot, meal_id, servings, position)
+             VALUES ($1,$2,$3,$4,$5,
+                     COALESCE((SELECT max(position) + 1 FROM meal_plan_entries
+                               WHERE user_id = $1 AND plan_date = $2 AND slot = $3), 0))",
+        )
+        .bind(user.id)
+        .bind(plan_date)
+        .bind(&slot)
+        .bind(meal_id)
+        .bind(servings)
+        .execute(&mut *tx)
+        .await
+        .map_err(db_err)?;
+        applied += 1;
+    }
+    tx.commit().await.map_err(db_err)?;
+
+    Ok(Json(serde_json::json!({ "applied": applied })))
+}
+
 // --------------------------------------------------------- grocery list
 
 #[derive(sqlx::FromRow)]

@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { api } from '../api/client';
-import type { GroceryItem, GroceryList, PlanEntry, PlanSlot, PlanSuggestion } from '../api/types';
+import { api, ApiError } from '../api/client';
+import type { GroceryItem, GroceryList, PlanEntry, PlanSlot, PlanSuggestion, PlanTemplate } from '../api/types';
 import type { CookbookMealLite } from '../api/types';
 import { Segmented } from '../components/Segmented/Segmented';
 import { EmptyLine } from '../components/Empty/Empty';
@@ -80,6 +80,8 @@ export function Plan() {
   // on click, so a swap doesn't need its own dialog built from scratch.
   const [picking, setPicking] = useState<{ date: string; slot: PlanSlot; swapId?: number } | null>(null);
   useEscapeKey(() => setPicking(null), picking !== null);
+  const [savingTemplate, setSavingTemplate] = useState(false);
+  const [templateName, setTemplateName] = useState('');
 
   const weekStart = useMemo(() => {
     const d = startOfWeek(new Date());
@@ -104,6 +106,12 @@ export function Plan() {
   const { data: entries = [] } = useQuery({
     queryKey: ['plan', from, to],
     queryFn: () => api.get<PlanEntry[]>(`/plan?from=${from}&to=${to}`),
+  });
+
+  const { data: templates = [] } = useQuery({
+    queryKey: ['plan-templates'],
+    queryFn: () => api.get<PlanTemplate[]>('/plan/templates'),
+    enabled: view === 'week',
   });
 
   const { data: grocery } = useQuery({
@@ -167,6 +175,30 @@ export function Plan() {
     mutationFn: ({ id, direction }: { id: number; direction: 'up' | 'down' }) =>
       api.post(`/plan/${id}/move`, { direction }),
     onSuccess: invalidate,
+  });
+
+  const saveTemplate = useMutation({
+    mutationFn: () => api.post('/plan/templates', { name: templateName.trim(), from, to }),
+    onSuccess: () => {
+      setSavingTemplate(false);
+      setTemplateName('');
+      toast('Saved as a template');
+      qc.invalidateQueries({ queryKey: ['plan-templates'] });
+    },
+    onError: (e) => toast(e instanceof ApiError ? e.message : 'Could not save that template.'),
+  });
+
+  const deleteTemplate = useMutation({
+    mutationFn: (id: number) => api.del(`/plan/templates/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['plan-templates'] }),
+  });
+
+  const applyTemplate = useMutation({
+    mutationFn: (id: number) => api.post<{ applied: number }>(`/plan/templates/${id}/apply`, { start_date: from }),
+    onSuccess: (r) => {
+      toast(`Added ${r.applied} meal${r.applied === 1 ? '' : 's'} to this week`);
+      invalidate();
+    },
   });
 
   const [ticked, setTicked] = useState<Set<string>>(new Set());
@@ -239,6 +271,62 @@ export function Plan() {
           ]}
         />
       </div>
+
+      {view === 'week' && (templates.length > 0 || entries.length > 0) && (
+        <div className={`${styles.templateRow} hscroll`}>
+          {templates.map((t) => (
+            <span key={t.id} className={styles.templateChip}>
+              <button
+                className={styles.templateChipApply}
+                onClick={() => applyTemplate.mutate(t.id)}
+                disabled={applyTemplate.isPending}
+                title={`Apply "${t.name}" to this week`}
+              >
+                {t.name} ({t.entry_count})
+              </button>
+              <button
+                className={styles.templateChipRemove}
+                onClick={() => {
+                  if (confirm(`Delete the template "${t.name}"? This doesn't touch any week already using it.`)) {
+                    deleteTemplate.mutate(t.id);
+                  }
+                }}
+                aria-label={`Delete template "${t.name}"`}
+              >
+                ×
+              </button>
+            </span>
+          ))}
+          {entries.length > 0 &&
+            (savingTemplate ? (
+              <span className={styles.templateSaveForm}>
+                <input
+                  className={styles.templateSaveInput}
+                  value={templateName}
+                  onChange={(e) => setTemplateName(e.target.value)}
+                  placeholder="Name this week…"
+                  maxLength={60}
+                  autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && templateName.trim()) saveTemplate.mutate();
+                    if (e.key === 'Escape') setSavingTemplate(false);
+                  }}
+                />
+                <button
+                  className={styles.templateSaveConfirm}
+                  disabled={!templateName.trim() || saveTemplate.isPending}
+                  onClick={() => saveTemplate.mutate()}
+                >
+                  Save
+                </button>
+              </span>
+            ) : (
+              <button className={styles.templateSaveBtn} onClick={() => setSavingTemplate(true)}>
+                + Save this week as template
+              </button>
+            ))}
+        </div>
+      )}
 
       {view === 'week' ? (
         <>

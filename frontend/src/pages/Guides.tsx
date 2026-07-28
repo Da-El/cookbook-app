@@ -5,7 +5,7 @@ import { api, ApiError } from '../api/client';
 import type { GuideDetail, GuideSummary } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
 import { useToast } from '../components/Toast/ToastContext';
-import { ChevronLeft, BookmarkIcon } from '../components/Icon/Icon';
+import { ChevronLeft, BookmarkIcon, ShareIcon } from '../components/Icon/Icon';
 import { LoadingState, ErrorState } from '../components/PageState/PageState';
 import { FlagButton } from '../components/Flag/FlagButton';
 import { mealBackground } from '../lib/imagery';
@@ -278,17 +278,30 @@ export function GuidePage() {
         <button className={styles.backBtn} onClick={() => navigate(-1)} aria-label="Back">
           <ChevronLeft size={18} strokeWidth={2.2} />
         </button>
-        {user && (
+        <div className={styles.headerActions}>
           <button
-            className={styles.bookmarkBtn}
-            onClick={() => toggleSave.mutate()}
-            aria-pressed={guide.is_saved}
-            aria-label={guide.is_saved ? 'Remove from saved guides' : 'Save this guide'}
-            title={guide.is_saved ? 'Remove from saved guides' : 'Save this guide'}
+            className={styles.shareBtn}
+            title="Share"
+            aria-label="Copy link to this guide"
+            onClick={() => {
+              navigator.clipboard?.writeText(window.location.href);
+              toast('Link copied');
+            }}
           >
-            <BookmarkIcon size={18} strokeWidth={1.8} filled={guide.is_saved} />
+            <ShareIcon size={18} strokeWidth={1.8} />
           </button>
-        )}
+          {user && (
+            <button
+              className={styles.bookmarkBtn}
+              onClick={() => toggleSave.mutate()}
+              aria-pressed={guide.is_saved}
+              aria-label={guide.is_saved ? 'Remove from saved guides' : 'Save this guide'}
+              title={guide.is_saved ? 'Remove from saved guides' : 'Save this guide'}
+            >
+              <BookmarkIcon size={18} strokeWidth={1.8} filled={guide.is_saved} />
+            </button>
+          )}
+        </div>
       </div>
 
       <div className={styles.eyebrow}>{guide.topic}</div>
