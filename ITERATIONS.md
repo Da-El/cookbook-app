@@ -364,3 +364,78 @@ gap (current resets, longest is preserved), and no history at all (card
 renders nothing) — each driven by real `meal_log` rows through curl, then
 the active and broken states re-confirmed visually in the browser in
 both light and dark mode.
+
+---
+
+## Batch 8 — Iterations 36–40
+
+**Commit:** local only — not pushed/deployed this batch, per standing
+instruction · **Migrations:** 0029–0030 · **Tests:** 61 backend, passing
+
+36. **Followers/following lists** — the chef profile's follower/following
+    counts were always displayed but never browsable. New `GET /chefs/{id}
+    /followers` and `/following` endpoints (viewer-relative `is_following`
+    per row, reusing the existing `ChefCard` shape) back a new
+    `ChefConnections` page, reusing the `ChefRow`/`ChefList` components
+    Browse's Chefs tab already had. The one real wrinkle: the signed-in
+    viewer can legitimately appear as a row in someone else's list, and a
+    "Follow" button on your own row would just 400 on click - `ChefRow`
+    gained an `isViewer` flag that swaps the button for a plain "You" tag.
+37. **Block a user** — trust-and-safety gap: reviews, ratings, follows, and
+    moderation flags all existed, but no way to just stop seeing someone.
+    A `blocked_users` table + `toggle_block()` (mirroring `toggle_follow`)
+    severs any existing follow in *either* direction the moment a block is
+    made, and blocks re-following in either direction afterward. Blocked
+    authors' meals are filtered out of Browse and chef search/suggestions
+    for the blocker; `ChefPage` shows a reduced "blocked" state (no follow
+    button, no content tabs) instead of a normal profile; Settings gained
+    a "Blocked accounts" list with per-row unblock. Deliberately scoped to
+    discovery surfaces only, not a full content firewall - a blocked
+    user's existing reviews on a meal you navigate to directly still show,
+    same as most apps' block semantics.
+38. **Multiple photos per meal** — `meals.photo_url` remains the cover
+    shown everywhere a thumbnail appears (MealCard, Browse, feed, chef
+    pages), left untouched so none of those query sites needed to change.
+    A new `meal_photos` table holds purely additive gallery photos, shown
+    only on the meal's own detail page; `create`/`update` handle them with
+    the same delete-then-reinsert wholesale-replace pattern the ingredient
+    list already used, and `fork` copies the gallery alongside everything
+    else it duplicates.
+39. **Draft autosave for meal creation** — a `localStorage`-backed draft
+    of the New Meal form, so a closed tab or a crashed browser doesn't
+    lose an in-progress recipe. Only saves once the form actually has
+    content (name, description, a step, an ingredient, or a photo) - a
+    fresh, untouched visit never nags with a "resume draft?" prompt.
+    Cleared on successful publish or explicit discard.
+40. **Search history** — recent search terms persisted client-side
+    (`localStorage`, capped at 8, most-recent-first, case-insensitive
+    de-duped) and surfaced in two places: the Cmd/Ctrl+K command palette's
+    empty state (above Quick Actions, with per-term remove and a Clear
+    action, arrow-key navigable like every other palette row) and Browse's
+    mobile search bar (a chip row shown once the search box is empty).
+    Recorded on a genuine commit signal (selecting a palette result,
+    pressing Enter, or blurring Browse's search field) rather than on
+    every keystroke, so typing "chicken" doesn't leave "c", "ch", "chi"
+    behind as separate history entries.
+
+**Verified:** followers/following lists confirmed correct for both
+directions of a real 3-user follow graph, including the self-appears-in-
+someone-elses-list edge case rendering "You" instead of a broken follow
+button; blocking's full effect chain via curl - an existing mutual follow
+severed, re-follow rejected with 403 in both directions, a blocked
+author's meal disappearing from Browse for the blocker and reappearing
+for an unrelated third user, then reappearing for the blocker too after
+unblocking - plus the ChefPage blocked-state banner and Settings' blocked-
+accounts list (with working unblock) confirmed in a real browser session;
+multi-photo create/update/fork all confirmed via curl against a real
+multi-photo meal (wholesale replace on update, correct copy on fork),
+then the gallery strip on the meal page and the add/remove UI on the
+edit form confirmed in the browser, including a removed photo actually
+persisting after save; draft autosave's full cycle - typing content,
+navigating away, returning to see the resume prompt, resuming to recover
+the exact typed content, discarding to clear it, and publishing clearing
+it automatically - all confirmed in a real browser session; and search
+history's recording-on-commit-not-on-keystroke behavior, per-term
+removal, and the "Clear all" action confirmed in both the command
+palette and Browse's mobile search, including that selecting a recent
+term actually re-runs the search rather than just closing the panel.
