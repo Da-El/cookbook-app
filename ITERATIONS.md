@@ -439,3 +439,69 @@ history's recording-on-commit-not-on-keystroke behavior, per-term
 removal, and the "Clear all" action confirmed in both the command
 palette and Browse's mobile search, including that selecting a recent
 term actually re-runs the search rather than just closing the panel.
+
+---
+
+## Batch 9 — Iterations 41–45
+
+**Commit:** local only — not pushed/deployed this batch, per standing
+instruction · **Migrations:** 0031–0034 · **Tests:** 61 backend, passing
+
+41. **Guide ratings** — guides had a helpful-vote toggle but no numeric
+    score. Extended the shared `ratings` table (`subject_type` CHECK) and
+    `upsert_rating()` with a `"guide"` branch, deliberately *not* wired
+    into any ranking recompute - guides are curator-ordered by topic and
+    reading sequence, never re-sorted by score (see guides.rs's own doc
+    comment), so a guide's rating is a trust signal next to the helpful
+    count, not a sort key the way it is for meals/ingredients.
+42. **Report a user profile** — flags existed for six kinds of community
+    content but not for an account itself, as a report distinct from
+    blocking. Added `"user_profile"` as a seventh flaggable type reusing
+    the existing `FlagButton` (now takes optional `label`/`placeholder`
+    props) and the same admin queue, with "Remove" specifically disabled
+    for profile reports (an account isn't something this flow deletes -
+    that needs a human, not an automated action) while "Dismiss" works
+    as normal.
+43. **Follow a public collection** — collections gained `is_public` in
+    Iteration 31 with a "a follow mechanism is a natural follow-up, not
+    folded in here" note in its own migration; this is that follow-up. A
+    `collection_follows` table, a "Following" section on the Collections
+    page, and a notification (`collection_meal_added`) to every follower
+    when the owner adds a new meal to a public collection they follow.
+    Caught and fixed a real bug during verification: the notification
+    INSERT had three `$` placeholders but only two `.bind()` calls, so
+    every notification silently failed via the `.ok()` error-swallow -
+    traced with a temporary debug trace, confirmed by testing the exact
+    SQL by hand, then fixed and re-verified end to end.
+44. **Shareable meal plans** — a `vis_plan` visibility setting (private by
+    default, unlike the other `vis_*` columns which default public - a
+    weekly cooking schedule is a different kind of exposure than "what
+    I've made"), a `GET /chefs/{id}/plan` endpoint reusing the existing
+    `can_view()` privacy gate, and a fourth "Plan" tab on the chef profile
+    page showing their public plan for the current week.
+45. **Recently viewed** — client-side history (`localStorage`, capped at
+    12, de-duped and moved-to-front on a repeat visit) recorded on every
+    meal and ingredient detail-page visit, surfaced as a small thumbnail
+    rail on the Home feed. Renders nothing until there's real history,
+    the same graceful-absence pattern `FeaturedMeal`/`TodayNutrition`
+    already established.
+
+**Verified:** guide rating's full cycle via curl (rate, average/count
+update, `your_rating` on repeat visits, out-of-range rejection) then the
+1–10 widget and list-page average confirmed in the browser, plus cleaned
+up two pieces of stale test data left over from an earlier session found
+along the way (orphaned guide comments, an unresolved test flag);
+reporting a profile's self-report guard, duplicate-report guard, and the
+full flag-to-admin-queue-to-dismiss cycle via curl, then the report form
+and the disabled "Remove" button (with its explanatory tooltip) confirmed
+in the browser; collection following's real bug caught mid-verification
+and fixed (see above), then the complete corrected flow re-verified -
+follow/self-follow-rejection, follower count, the notification firing
+exactly once per genuine new addition and not on a re-add or after an
+unfollow - via curl, and the "Following" section and notification
+click-through confirmed in the browser; shareable plans' private-by-
+default and public-after-toggle visibility confirmed via curl (including
+that the owner always sees their own plan regardless of the setting),
+then the Plan tab and the Settings toggle confirmed in the browser; and
+recently-viewed's recording, ordering, and de-duplication-on-revisit
+confirmed in the browser across both a meal and an ingredient page.
