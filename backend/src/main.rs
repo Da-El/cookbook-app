@@ -1,10 +1,13 @@
+mod aliases;
 mod auth;
 mod guides;
 mod import;
 mod ingredients;
 mod kitchen;
 mod meals;
+mod nutrition;
 mod planner;
+mod search;
 mod seed;
 mod social;
 mod state;
@@ -42,6 +45,11 @@ async fn main() -> anyhow::Result<()> {
         .route("/auth/logout", post(auth::logout))
         .route("/auth/me", get(auth::me))
         .route("/auth/account", post(auth::update_account).delete(auth::delete_account))
+        .route("/auth/forgot-password", post(auth::forgot_password))
+        .route("/auth/reset-password", post(auth::reset_password))
+        .route("/auth/sessions", get(auth::list_sessions))
+        .route("/auth/sessions/revoke-others", post(auth::revoke_other_sessions))
+        .route("/auth/sessions/{id}", delete(auth::revoke_session))
         .route("/settings", get(auth::settings))
         .route("/ingredients", get(ingredients::list).post(ingredients::create))
         .route("/ingredients/categories", get(ingredients::categories))
@@ -53,16 +61,27 @@ async fn main() -> anyhow::Result<()> {
             get(ingredients::list_edits).delete(ingredients::delete_edit),
         )
         .route("/ingredients/{id}/edits/{edit_id}/vote", post(ingredients::vote_edit))
+        .route("/ingredients/{id}/aliases", get(aliases::list).post(aliases::create))
+        .route("/ingredients/{id}/aliases/{alias_id}/vote", post(aliases::vote))
+        .route("/ingredients/{id}/aliases/{alias_id}", delete(aliases::withdraw))
+        // search
+        .route("/search", get(search::search))
         // meals
         .route("/meals", get(meals::browse).post(meals::create))
         .route("/meals/filters", get(meals::filters))
         .route("/meals/discover", get(meals::discover))
-        .route("/meals/{id}", get(meals::detail))
+        .route("/meals/{id}", get(meals::detail).post(meals::update).delete(meals::delete))
         .route("/meals/{id}/save", post(meals::toggle_save))
         .route("/meals/{id}/photo", post(meals::update_photo))
         .route("/meals/{id}/cook", post(meals::cook))
         .route("/meals/{id}/rate", post(meals::rate))
         .route("/meals/{id}/journal", get(meals::my_journal))
+        .route("/meals/{id}/reviews", get(meals::meal_reviews))
+        .route("/meals/{id}/reviews/{review_id}/helpful", post(meals::vote_review_helpful))
+        .route("/meals/{id}/revisions", get(meals::revisions))
+        .route("/meals/{id}/revisions/{rev_id}/revert", post(meals::revert))
+        .route("/meals/{id}/revisions/{rev_id}/vote", post(meals::vote_revision))
+        .route("/meals/{id}/restore", post(meals::restore))
         .route("/meals/{id}/like", post(social::toggle_like))
         // kitchen
         .route("/fridge", get(kitchen::fridge_list).post(kitchen::fridge_add))
@@ -78,6 +97,8 @@ async fn main() -> anyhow::Result<()> {
         .route("/cookbook/published", get(kitchen::published))
         .route("/cookbook/reviews", get(kitchen::my_reviews))
         .route("/cookbook/edits", get(kitchen::my_edits))
+        .route("/cookbook/ratings", get(kitchen::my_ratings))
+        .route("/cookbook/votes", get(kitchen::my_votes))
         // import
         .route("/import/url", post(import::import_url))
         .route("/import/text", post(import::import_text))

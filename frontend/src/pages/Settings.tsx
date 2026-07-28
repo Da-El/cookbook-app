@@ -8,6 +8,26 @@ import styles from './Settings.module.css';
 
 const DIET_PREFS = ['Vegetarian', 'Vegan', 'Pescatarian', 'Gluten-free', 'Dairy-free', 'Nut-free'];
 
+interface Session {
+  id: number;
+  device: string;
+  created_at: string;
+  last_seen_at: string;
+  is_current: boolean;
+}
+
+function relativeTime(iso: string) {
+  const diffMs = Date.now() - new Date(iso).getTime();
+  const mins = Math.round(diffMs / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.round(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.round(hours / 24);
+  if (days < 30) return `${days}d ago`;
+  return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
 interface SettingsProfile {
   display_name: string;
   email: string;
@@ -48,6 +68,12 @@ export function Settings() {
 
   const [diet, setDiet] = useState<string[]>([]);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [confirmLogoutAll, setConfirmLogoutAll] = useState(false);
+
+  const { data: sessions = [] } = useQuery({
+    queryKey: ['sessions'],
+    queryFn: () => api.get<Session[]>('/auth/sessions'),
+  });
 
   useEffect(() => {
     if (settings) {
@@ -102,6 +128,27 @@ export function Settings() {
     onSuccess: () => {
       logout();
       navigate('/', { replace: true });
+    },
+  });
+
+  const revokeSession = useMutation({
+    mutationFn: (id: number) => api.del(`/auth/sessions/${id}`),
+    onSuccess: (_data, id) => {
+      const wasCurrent = sessions.find((s) => s.id === id)?.is_current;
+      if (wasCurrent) {
+        logout();
+        navigate('/', { replace: true });
+        return;
+      }
+      qc.invalidateQueries({ queryKey: ['sessions'] });
+    },
+  });
+
+  const revokeOthers = useMutation({
+    mutationFn: () => api.post('/auth/sessions/revoke-others'),
+    onSuccess: () => {
+      setConfirmLogoutAll(false);
+      qc.invalidateQueries({ queryKey: ['sessions'] });
     },
   });
 
@@ -178,6 +225,51 @@ export function Settings() {
         >
           Save
         </button>
+      </div>
+
+      <div className={styles.section}>
+        <div className={styles.sectionTitle}>Sessions</div>
+        <div className={styles.sessionList}>
+          {sessions.map((s) => (
+            <div key={s.id} className={styles.sessionRow}>
+              <div>
+                <div className={styles.visLabel}>
+                  {s.device}
+                  {s.is_current && <span className={styles.sessionBadge}>This device</span>}
+                </div>
+                <div className={styles.visSub}>Active {relativeTime(s.last_seen_at)}</div>
+              </div>
+              <button
+                className={styles.sessionRevoke}
+                onClick={() => revokeSession.mutate(s.id)}
+                disabled={revokeSession.isPending}
+              >
+                {s.is_current ? 'Log out' : 'Revoke'}
+              </button>
+            </div>
+          ))}
+        </div>
+        {sessions.length > 1 && (
+          !confirmLogoutAll ? (
+            <button className={styles.sessionRevokeAll} onClick={() => setConfirmLogoutAll(true)}>
+              Log out of all other sessions
+            </button>
+          ) : (
+            <div className={styles.confirmCard}>
+              <p className={styles.confirmText}>
+                This signs out every session except the one you're using right now.
+              </p>
+              <div className={styles.confirmRow}>
+                <button className={styles.confirmCancel} onClick={() => setConfirmLogoutAll(false)}>
+                  Cancel
+                </button>
+                <button className={styles.confirmDelete} onClick={() => revokeOthers.mutate()}>
+                  {revokeOthers.isPending ? 'Logging out…' : 'Log out everywhere else'}
+                </button>
+              </div>
+            </div>
+          )
+        )}
       </div>
 
       <div className={styles.section}>

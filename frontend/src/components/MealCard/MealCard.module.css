@@ -96,3 +96,16 @@
   padding: 5px 10px;
   border-radius: 999px;
 }
+
+/* Opposite corner from .badge so ownership status and rank never collide. */
+.rankBadge {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  background: rgba(20, 10, 4, .72);
+  color: #fff;
+  font: 700 10px var(--font-ui);
+  letter-spacing: .02em;
+  padding: 5px 10px;
+  border-radius: 999px;
+}

@@ -105,6 +105,13 @@
   color: var(--muted-2);
 }
 
+.rowMetaLink {
+  font: inherit;
+  color: var(--muted-2);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 .voteBtn {
   flex: none;
   display: flex;
@@ -123,6 +130,42 @@
   background: var(--green);
   color: #fff;
   border-color: var(--green);
+}
+
+.voteGroup {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1.5px solid var(--border-card);
+  background: var(--surface-card);
+}
+
+.voteHalf {
+  border: none;
+  background: none;
+  color: var(--muted-2);
+  font-size: 11px;
+  line-height: 1;
+  padding: 4px;
+  cursor: pointer;
+}
+
+.voteUpOn {
+  color: var(--green);
+}
+
+.voteDownOn {
+  color: var(--danger, #c0392b);
+}
+
+.voteScore {
+  min-width: 16px;
+  text-align: center;
+  font: 700 12px var(--font-ui);
+  color: var(--ink);
 }
 
 .deleteBtn {

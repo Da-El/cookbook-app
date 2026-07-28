@@ -11,6 +11,11 @@ export interface MealCardData {
   photo_url: string | null;
   have_count?: number;
   total_count?: number;
+  /// Set server-side from the vote-and-volume-weighted ranking, not the raw
+  /// average - a meal with one 10/10 doesn't outrank one with fifty 9s just
+  /// because its displayed number is higher. Optional: only the handful of
+  /// endpoints that already compute ranked_score set it.
+  is_top_in_cuisine?: boolean;
 }
 
 export function MealGrid({ children }: { children: React.ReactNode }) {
@@ -36,6 +41,11 @@ export function MealCard({
         {badge && (
           <span className={styles.badge} style={{ color: badgeColor }}>
             {badge}
+          </span>
+        )}
+        {meal.is_top_in_cuisine && (
+          <span className={styles.rankBadge} title={`Top rated in ${meal.cuisine}`}>
+            ★ Top rated
           </span>
         )}
       </div>

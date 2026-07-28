@@ -27,16 +27,21 @@ pub async fn suggested_chefs(
     let rows = sqlx::query_as::<_, ChefCard>(
         "SELECT u.id, u.display_name, u.cb_avatar_theme AS avatar_theme,
                 u.cb_avatar_photo_url AS avatar_photo_url,
-                (SELECT count(*) FROM meals m WHERE m.author_id=u.id AND m.visibility='public') AS meal_count,
-                (SELECT m.cuisine FROM meals m WHERE m.author_id=u.id AND m.visibility='public'
+                (SELECT count(*) FROM meals m WHERE m.author_id=u.id AND m.visibility='public' AND m.status='live') AS meal_count,
+                (SELECT m.cuisine FROM meals m WHERE m.author_id=u.id AND m.visibility='public' AND m.status='live'
                  GROUP BY m.cuisine ORDER BY count(*) DESC LIMIT 1) AS top_cuisine,
-                (SELECT max(m.rating)::float8 FROM meals m WHERE m.author_id=u.id AND m.visibility='public') AS best_rating,
+                (SELECT max(m.rating)::float8 FROM meals m WHERE m.author_id=u.id AND m.visibility='public' AND m.status='live') AS best_rating,
                 FALSE AS is_following
          FROM users u
          WHERE u.id <> $1
            AND NOT EXISTS (SELECT 1 FROM follows f WHERE f.follower_id=$1 AND f.followee_id=u.id)
-           AND EXISTS (SELECT 1 FROM meals m WHERE m.author_id=u.id AND m.visibility='public')
-         ORDER BY best_rating DESC NULLS LAST, meal_count DESC
+           AND EXISTS (SELECT 1 FROM meals m WHERE m.author_id=u.id AND m.visibility='public' AND m.status='live')
+         -- Ordered by the shrunk score, not the displayed raw best: one lucky
+         -- 10/10 shouldn't outrank a chef with a shelf of well-attested 9s.
+         ORDER BY (SELECT max(m.ranked_score) FROM meals m
+                   WHERE m.author_id=u.id AND m.visibility='public' AND m.status='live')
+                  DESC NULLS LAST,
+                  meal_count DESC
          LIMIT 12",
     )
     .bind(user.id)
@@ -64,15 +69,19 @@ pub async fn search_chefs(
     let rows = sqlx::query_as::<_, ChefCard>(
         "SELECT u.id, u.display_name, u.cb_avatar_theme AS avatar_theme,
                 u.cb_avatar_photo_url AS avatar_photo_url,
-                (SELECT count(*) FROM meals m WHERE m.author_id=u.id AND m.visibility='public') AS meal_count,
-                (SELECT m.cuisine FROM meals m WHERE m.author_id=u.id AND m.visibility='public'
+                (SELECT count(*) FROM meals m WHERE m.author_id=u.id AND m.visibility='public' AND m.status='live') AS meal_count,
+                (SELECT m.cuisine FROM meals m WHERE m.author_id=u.id AND m.visibility='public' AND m.status='live'
                  GROUP BY m.cuisine ORDER BY count(*) DESC LIMIT 1) AS top_cuisine,
-                (SELECT max(m.rating)::float8 FROM meals m WHERE m.author_id=u.id AND m.visibility='public') AS best_rating,
+                (SELECT max(m.rating)::float8 FROM meals m WHERE m.author_id=u.id AND m.visibility='public' AND m.status='live') AS best_rating,
                 EXISTS (SELECT 1 FROM follows f WHERE f.follower_id=$1 AND f.followee_id=u.id) AS is_following
          FROM users u
          WHERE u.id <> $1
            AND ($2::text IS NULL OR u.display_name ILIKE '%' || $2 || '%')
-         ORDER BY meal_count DESC, best_rating DESC NULLS LAST, u.display_name
+         ORDER BY meal_count DESC,
+                  (SELECT max(m.ranked_score) FROM meals m
+                   WHERE m.author_id=u.id AND m.visibility='public' AND m.status='live')
+                  DESC NULLS LAST,
+                  u.display_name
          LIMIT 100",
     )
     .bind(user.id)
@@ -93,7 +102,7 @@ pub async fn following(
     let rows = sqlx::query_as::<_, ChefCard>(
         "SELECT u.id, u.display_name, u.cb_avatar_theme AS avatar_theme,
                 u.cb_avatar_photo_url AS avatar_photo_url,
-                (SELECT count(*) FROM meals m WHERE m.author_id=u.id AND m.visibility='public') AS meal_count,
+                (SELECT count(*) FROM meals m WHERE m.author_id=u.id AND m.visibility='public' AND m.status='live') AS meal_count,
                 NULL::text AS top_cuisine, NULL::float8 AS best_rating,
                 TRUE AS is_following
          FROM follows f JOIN users u ON u.id = f.followee_id
@@ -167,7 +176,7 @@ pub async fn feed(
          FROM meals m
          JOIN users u ON u.id = m.author_id
          JOIN follows f ON f.followee_id = m.author_id AND f.follower_id = $1
-         WHERE m.visibility = 'public'
+         WHERE m.visibility = 'public' AND m.status = 'live'
          ORDER BY m.created_at DESC
          LIMIT 100",
     )
@@ -331,7 +340,7 @@ pub async fn chef_published(
     }
     let rows = sqlx::query_as::<_, ChefMeal>(
         "SELECT id, name, cuisine, time_minutes, rating::float8 AS rating, photo_url
-         FROM meals WHERE author_id = $1 AND visibility = 'public'
+         FROM meals WHERE author_id = $1 AND visibility = 'public' AND status = 'live'
          ORDER BY created_at DESC",
     )
     .bind(id)
@@ -353,7 +362,7 @@ pub async fn chef_cooked(
     let rows = sqlx::query_as::<_, ChefMeal>(
         "SELECT m.id, m.name, m.cuisine, m.time_minutes, m.rating::float8 AS rating, m.photo_url
          FROM meals m JOIN cooked_meals c ON c.meal_id = m.id
-         WHERE c.user_id = $1
+         WHERE c.user_id = $1 AND m.status = 'live'
          ORDER BY c.cooked_at DESC",
     )
     .bind(id)
@@ -382,7 +391,7 @@ pub async fn chef_reviews(
     let rows = sqlx::query_as::<_, ChefReview>(
         "SELECT r.meal_id, m.name AS meal_name, m.photo_url, r.score, r.note, r.cooked_at
          FROM reviews r JOIN meals m ON m.id = r.meal_id
-         WHERE r.user_id = $1 AND r.is_public = true
+         WHERE r.user_id = $1 AND r.is_public = true AND m.status = 'live'
          ORDER BY r.cooked_at DESC",
     )
     .bind(id)

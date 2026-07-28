@@ -211,7 +211,7 @@ pub async fn cooked(
                 m.rating::float8 AS rating, m.photo_url
          FROM meals m JOIN users u ON u.id = m.author_id
          JOIN cooked_meals c ON c.meal_id = m.id
-         WHERE c.user_id = $1 ORDER BY c.cooked_at DESC",
+         WHERE c.user_id = $1 AND m.status = 'live' ORDER BY c.cooked_at DESC",
     )
     .bind(user.id).fetch_all(&state.db).await.map_err(db_err)?;
     Ok(Json(rows))
@@ -226,7 +226,7 @@ pub async fn saved(
                 m.rating::float8 AS rating, m.photo_url
          FROM meals m JOIN users u ON u.id = m.author_id
          JOIN saved_meals sm ON sm.meal_id = m.id
-         WHERE sm.user_id = $1 ORDER BY sm.saved_at DESC",
+         WHERE sm.user_id = $1 AND m.status = 'live' ORDER BY sm.saved_at DESC",
     )
     .bind(user.id).fetch_all(&state.db).await.map_err(db_err)?;
     Ok(Json(rows))
@@ -240,7 +240,7 @@ pub async fn published(
         "SELECT m.id, m.name, u.display_name AS author_name, m.cuisine, m.time_minutes,
                 m.rating::float8 AS rating, m.photo_url
          FROM meals m JOIN users u ON u.id = m.author_id
-         WHERE m.author_id = $1 ORDER BY m.created_at DESC",
+         WHERE m.author_id = $1 AND m.status = 'live' ORDER BY m.created_at DESC",
     )
     .bind(user.id).fetch_all(&state.db).await.map_err(db_err)?;
     Ok(Json(rows))
@@ -250,14 +250,17 @@ pub async fn counts(
     State(state): State<AppState>,
     CurrentUser(user): CurrentUser,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
-    let row = sqlx::query_as::<_, (i64, i64, i64, i64, i64, i64, i64)>(
+    let row = sqlx::query_as::<_, (i64, i64, i64, i64, i64, i64, i64, i64, i64)>(
         "SELECT (SELECT count(*) FROM cooked_meals WHERE user_id=$1),
                 (SELECT count(*) FROM saved_meals WHERE user_id=$1),
-                (SELECT count(*) FROM meals WHERE author_id=$1),
+                (SELECT count(*) FROM meals WHERE author_id=$1 AND status='live'),
                 (SELECT count(*) FROM fridge_items WHERE user_id=$1),
                 (SELECT count(*) FROM shopping_items WHERE user_id=$1),
                 (SELECT count(*) FROM reviews WHERE user_id=$1),
-                (SELECT count(*) FROM ingredient_edits WHERE author_id=$1)",
+                (SELECT count(*) FROM ingredient_edits WHERE author_id=$1),
+                (SELECT count(*) FROM ratings WHERE user_id=$1),
+                ((SELECT count(*) FROM revision_votes WHERE user_id=$1)
+                 + (SELECT count(*) FROM alias_votes WHERE user_id=$1))",
     )
     .bind(user.id)
     .fetch_one(&state.db)
@@ -267,7 +270,8 @@ pub async fn counts(
     Ok(Json(serde_json::json!({
         "cooked": row.0, "saved": row.1, "published": row.2,
         "fridge": row.3, "shopping": row.4,
-        "reviews": row.5, "edits": row.6
+        "reviews": row.5, "edits": row.6,
+        "ratings": row.7, "votes": row.8
     })))
 }
 
@@ -293,7 +297,7 @@ pub async fn my_reviews(
         "SELECT r.id, r.meal_id, m.name AS meal_name, m.photo_url, r.score, r.note,
                 r.is_public, r.cooked_at
          FROM reviews r JOIN meals m ON m.id = r.meal_id
-         WHERE r.user_id = $1
+         WHERE r.user_id = $1 AND m.status = 'live'
          ORDER BY r.cooked_at DESC",
     )
     .bind(user.id)
@@ -332,6 +336,88 @@ pub async fn my_edits(
          FROM ingredient_edits e JOIN ingredients ing ON ing.id = e.ingredient_id
          WHERE e.author_id = $1
          ORDER BY e.created_at DESC",
+    )
+    .bind(user.id)
+    .fetch_all(&state.db)
+    .await
+    .map_err(db_err)?;
+    Ok(Json(rows))
+}
+
+// ---------- the user's own rating and voting history ----------
+
+/// One row per meal the viewer has rated. Meal ratings are keyed
+/// `(user_id, subject_type, subject_id)` in `ratings` - one live value per
+/// meal, not a log of changes - so this is "what you currently have this
+/// recipe rated," not a change-by-change history. `updated_at` moves when a
+/// rating is revised, which is the honest signal available: it says *that*
+/// it changed, not what it changed from.
+#[derive(Serialize, sqlx::FromRow)]
+pub struct MyRating {
+    pub meal_id: i64,
+    pub meal_name: String,
+    pub photo_url: Option<String>,
+    pub value: i16,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub updated_at: chrono::DateTime<chrono::Utc>,
+}
+
+pub async fn my_ratings(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+) -> Result<Json<Vec<MyRating>>, StatusCode> {
+    let rows = sqlx::query_as::<_, MyRating>(
+        "SELECT r.subject_id AS meal_id, m.name AS meal_name, m.photo_url,
+                r.value, r.created_at, r.updated_at
+         FROM ratings r JOIN meals m ON m.id = r.subject_id
+         WHERE r.user_id = $1 AND r.subject_type = 'meal' AND m.status = 'live'
+         ORDER BY r.updated_at DESC",
+    )
+    .bind(user.id)
+    .fetch_all(&state.db)
+    .await
+    .map_err(db_err)?;
+    Ok(Json(rows))
+}
+
+/// A vote on a recipe edit and a vote on an ingredient alias are different
+/// tables with different shapes, so this normalises both into one feed with
+/// a `kind` discriminator - the person asking "what have I voted on" doesn't
+/// think in terms of the schema, they think in terms of one activity.
+#[derive(Serialize, sqlx::FromRow)]
+pub struct MyVote {
+    pub kind: String,
+    pub target_id: i64,
+    /// The meal (for a revision vote) or ingredient (for an alias vote) the
+    /// vote is ultimately about, so the client can always link somewhere.
+    pub subject_id: i64,
+    pub subject_name: String,
+    pub label: String,
+    pub value: i16,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+}
+
+pub async fn my_votes(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+) -> Result<Json<Vec<MyVote>>, StatusCode> {
+    let rows = sqlx::query_as::<_, MyVote>(
+        "SELECT 'revision' AS kind, v.revision_id AS target_id, r.meal_id AS subject_id,
+                m.name AS subject_name, COALESCE(NULLIF(r.summary, ''), 'an edit') AS label,
+                v.value, v.created_at
+         FROM revision_votes v
+         JOIN meal_revisions r ON r.id = v.revision_id
+         JOIN meals m ON m.id = r.meal_id
+         WHERE v.user_id = $1 AND m.status = 'live'
+         UNION ALL
+         SELECT 'alias' AS kind, v.alias_id AS target_id, a.ingredient_id AS subject_id,
+                i.name AS subject_name, a.name AS label,
+                v.value, v.created_at
+         FROM alias_votes v
+         JOIN ingredient_aliases a ON a.id = v.alias_id
+         JOIN ingredients i ON i.id = a.ingredient_id
+         WHERE v.user_id = $1
+         ORDER BY created_at DESC",
     )
     .bind(user.id)
     .fetch_all(&state.db)

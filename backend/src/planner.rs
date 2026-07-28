@@ -64,7 +64,7 @@ pub async fn list_plan(
     let rows = sqlx::query_as::<_, PlanEntry>(
         "SELECT e.id, e.plan_date, e.slot, e.meal_id, m.name AS meal_name, m.cuisine,
                 m.time_minutes, m.photo_url, e.servings
-         FROM meal_plan_entries e JOIN meals m ON m.id = e.meal_id
+         FROM meal_plan_entries e JOIN meals m ON m.id = e.meal_id AND m.status = 'live'
          WHERE e.user_id = $1 AND e.plan_date BETWEEN $2 AND $3
          ORDER BY e.plan_date, e.id",
     )
@@ -176,7 +176,7 @@ async fn planned_ingredients(
                 EXISTS (SELECT 1 FROM fridge_items f
                         WHERE f.user_id = $1 AND f.ingredient_id = mi.ingredient_id) AS in_fridge
          FROM meal_plan_entries e
-         JOIN meals m ON m.id = e.meal_id
+         JOIN meals m ON m.id = e.meal_id AND m.status = 'live'
          JOIN meal_ingredients mi ON mi.meal_id = m.id
          LEFT JOIN ingredients i ON i.id = mi.ingredient_id
          WHERE e.user_id = $1 AND e.plan_date BETWEEN $2 AND $3
@@ -465,14 +465,14 @@ pub async fn suggestions(
          FROM meals m
          JOIN meal_ingredients mi ON mi.meal_id = m.id
          LEFT JOIN ingredients i ON i.id = mi.ingredient_id
-         WHERE m.visibility = 'public'
+         WHERE m.visibility = 'public' AND m.status = 'live'
            AND m.id NOT IN (SELECT meal_id FROM already)
          GROUP BY m.id
          HAVING count(*) FILTER (WHERE mi.ingredient_id IN (SELECT ingredient_id FROM planned)) > 0
          ORDER BY shared DESC,
                   (count(*) FILTER (WHERE mi.ingredient_id IN (SELECT ingredient_id FROM planned))::float8
                    / NULLIF(count(*), 0)) DESC,
-                  m.rating DESC
+                  m.ranked_score DESC
          LIMIT 12",
     )
     .bind(user.id)

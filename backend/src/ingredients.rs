@@ -66,8 +66,15 @@ pub async fn list(
     let rows = sqlx::query_as::<_, IngredientSummary>(
         "SELECT id, name, category, food_group, food_subgroup,
                 rating::float8 AS rating, rating_count
-         FROM ingredients
-         WHERE ($1::text IS NULL OR name ILIKE '%' || $1 || '%')
+         FROM ingredients i
+         WHERE ($1::text IS NULL OR name ILIKE '%' || $1 || '%'
+                -- An endorsed alias counts as a name match too, so searching
+                -- \"cilantro\" finds \"Coriander, leaves, raw\" here, not just
+                -- through the dedicated /search endpoint.
+                OR ($1::text IS NOT NULL AND EXISTS (
+                     SELECT 1 FROM ingredient_aliases a
+                     WHERE a.ingredient_id = i.id AND a.status = 'live' AND a.score >= $5
+                       AND a.name ILIKE '%' || $1 || '%')))
            AND ($2::text IS NULL OR category = $2)
          ORDER BY name
          LIMIT $3 OFFSET $4",
@@ -76,6 +83,7 @@ pub async fn list(
     .bind(params.category.as_deref().filter(|s| !s.is_empty()))
     .bind(limit)
     .bind(offset)
+    .bind(crate::aliases::SEARCH_THRESHOLD)
     .fetch_all(&state.db)
     .await
     .map_err(|e| {
@@ -285,6 +293,9 @@ pub struct EditRow {
     pub id: i64,
     pub value: serde_json::Value,
     pub author_name: Option<String>,
+    /// NULL for a former user (account deleted, FK `SET NULL`) - present so
+    /// the byline can link to a profile when there's one to link to.
+    pub author_id: Option<i64>,
     pub votes: i32,
     pub voted_by_me: bool,
     pub is_mine: bool,
@@ -300,7 +311,7 @@ pub async fn list_edits(
     }
     let viewer_id = viewer.map(|u| u.0.id);
     let rows = sqlx::query_as::<_, EditRow>(
-        "SELECT e.id, e.value, u.display_name AS author_name, e.votes,
+        "SELECT e.id, e.value, u.display_name AS author_name, e.author_id, e.votes,
                 EXISTS (SELECT 1 FROM edit_votes v WHERE v.user_id = $3 AND v.edit_id = e.id) AS voted_by_me,
                 COALESCE(e.author_id = $3, false) AS is_mine
          FROM ingredient_edits e LEFT JOIN users u ON u.id = e.author_id
@@ -390,8 +401,15 @@ pub async fn vote_edit(
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     }
 
+    // Weighted by each voter's reputation - an edit endorsed by five
+    // brand-new accounts and one endorsed by five people with a track record
+    // of good edits shouldn't necessarily tie. The per-voter weight itself
+    // never leaves the server; `votes` is the already-combined result.
     sqlx::query(
-        "UPDATE ingredient_edits SET votes = (SELECT count(*) FROM edit_votes WHERE edit_id = $1) WHERE id = $1",
+        "UPDATE ingredient_edits SET votes = (
+           SELECT COALESCE(round(sum(reputation_weight(v.user_id))), 0)
+           FROM edit_votes v WHERE v.edit_id = $1
+         ) WHERE id = $1",
     )
     .bind(edit_id)
     .execute(&mut *tx)
@@ -530,8 +548,8 @@ pub async fn used_in_meals(
                 ) AS can_make
          FROM meals m
          JOIN meal_ingredients mi ON mi.meal_id = m.id
-         WHERE mi.ingredient_id = $1 AND m.visibility = 'public'
-         ORDER BY m.rating DESC
+         WHERE mi.ingredient_id = $1 AND m.visibility = 'public' AND m.status = 'live'
+         ORDER BY m.ranked_score DESC
          LIMIT 30",
     )
     .bind(id)

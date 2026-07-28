@@ -123,6 +123,25 @@
   margin-top: 14px;
 }
 
+.sourceLink {
+  display: inline-block;
+  margin-top: 8px;
+  color: var(--accent-dark);
+  font: 600 12.5px var(--font-ui);
+  text-decoration: none;
+}
+
+.historyLink {
+  display: block;
+  margin-top: 10px;
+  color: var(--muted-2);
+  font: 600 12px var(--font-ui);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+
 /* ---------- rating card ---------- */
 
 .ratingCard {
@@ -475,6 +494,111 @@
   font: 500 12px var(--font-ui);
 }
 
+/* ---------- reviews ---------- */
+
+.reviewCount {
+  font: 700 13px var(--font-ui);
+  color: var(--muted-2);
+}
+
+.reviewList {
+  margin-top: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.reviewRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  padding: 13px 14px;
+  border-radius: 16px;
+  border: 1px solid var(--border-hairline);
+  background: var(--surface-card);
+}
+
+.reviewAuthorBtn {
+  flex: none;
+  border: none;
+  background: none;
+  padding: 0;
+  cursor: pointer;
+  border-radius: 999px;
+}
+
+.reviewBody {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.reviewHead {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.reviewAuthor {
+  font: 700 13.5px var(--font-ui);
+  color: var(--ink);
+}
+
+.reviewAuthorName {
+  border: none;
+  background: none;
+  padding: 0;
+  font: 700 13.5px var(--font-ui);
+  color: var(--ink);
+  cursor: pointer;
+  text-align: left;
+}
+
+.helpfulBtn {
+  align-self: flex-start;
+  margin-top: 8px;
+  padding: 5px 11px;
+  border-radius: 999px;
+  border: 1.5px solid var(--border-card);
+  background: var(--surface-card);
+  color: var(--muted-2);
+  font: 700 11px var(--font-ui);
+  cursor: pointer;
+}
+
+.helpfulBtnOn {
+  background: var(--green-tint);
+  color: var(--green);
+  border-color: var(--green);
+}
+
+.reviewStars {
+  font: 700 12px var(--font-ui);
+  color: var(--amber);
+}
+
+.reviewWhen {
+  font: 500 11.5px var(--font-ui);
+  color: var(--muted-2);
+  margin-left: auto;
+}
+
+.reviewNote {
+  margin-top: 3px;
+  color: var(--body);
+  font: 400 13.5px var(--font-ui);
+  line-height: 1.5;
+}
+
+.reviewStale {
+  margin-top: 5px;
+  color: var(--muted-2);
+  font: 600 11px var(--font-ui);
+  font-style: italic;
+}
+
 /* ---------- journal ---------- */
 
 .journalTitle {
@@ -504,4 +628,143 @@
   font: 400 14px var(--font-ui);
   line-height: 1.5;
   margin-top: 4px;
+}
+
+/* ---------- rating distribution ---------- */
+
+.medianNote {
+  margin-top: 10px;
+  color: var(--secondary);
+  font: 500 12px var(--font-ui);
+  line-height: 1.4;
+}
+
+.histogram {
+  margin-top: 12px;
+  display: flex;
+  align-items: flex-end;
+  gap: 5px;
+  height: 56px;
+}
+
+.histBar {
+  flex: 1;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 4px;
+}
+
+.histFill {
+  width: 100%;
+  min-height: 3px;
+  border-radius: 3px;
+  background: var(--amber);
+}
+
+.histLabel {
+  font: 600 9px var(--font-ui);
+  color: var(--muted-3);
+}
+
+/* ---------- serving stepper ---------- */
+
+.servingStepper {
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.servingLabel {
+  color: var(--muted-2);
+  font: 600 12.5px var(--font-ui);
+}
+
+.servingBtn {
+  width: 28px;
+  height: 28px;
+  border-radius: 9px;
+  border: 1.5px solid var(--border-card);
+  background: var(--surface-card);
+  color: var(--ink);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+}
+
+.servingBtn:disabled {
+  opacity: .4;
+  cursor: default;
+}
+
+.servingCount {
+  min-width: 20px;
+  text-align: center;
+  font: 700 15px var(--font-ui);
+  color: var(--ink);
+}
+
+.servingReset {
+  margin-left: 4px;
+  color: var(--accent-dark);
+  font: 600 11.5px var(--font-ui);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+}
+
+/* ---------- nutrition ---------- */
+
+.nutritionCard {
+  margin-top: 4px;
+}
+
+.nutriPer {
+  color: var(--muted-3);
+  font: 600 11px var(--font-ui);
+  text-transform: uppercase;
+  letter-spacing: .05em;
+}
+
+.nutriCoverage {
+  margin-top: 8px;
+  color: var(--muted-2);
+  font: 400 12px var(--font-ui);
+  line-height: 1.5;
+}
+
+.nutriGrid {
+  margin-top: 14px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px 8px;
+}
+
+.nutriStat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 12px 6px;
+  border-radius: 14px;
+  background: var(--surface-card);
+  border: 1px solid var(--border-hairline);
+}
+
+.nutriValue {
+  font-family: var(--font-display);
+  font-size: 20px;
+  color: var(--ink);
+}
+
+.nutriLabel {
+  margin-top: 2px;
+  font: 600 10.5px var(--font-ui);
+  color: var(--muted-2);
+  text-transform: uppercase;
+  letter-spacing: .04em;
 }

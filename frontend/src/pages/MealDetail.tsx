@@ -1,20 +1,54 @@
 import { useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { api } from '../api/client';
+import { api, ApiError } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 import { useToast } from '../components/Toast/ToastContext';
-import { ChevronLeft, CameraIcon, ShareIcon, PlayIcon } from '../components/Icon/Icon';
+import { ChevronLeft, CameraIcon, ShareIcon, PlayIcon, PencilIcon } from '../components/Icon/Icon';
+import { Avatar } from '../components/Avatar/Avatar';
+import { LoadingState, ErrorState } from '../components/PageState/PageState';
 import { mealBackground, ingredientBackground } from '../lib/imagery';
 import { pickImage } from '../lib/photo';
 import styles from './MealDetail.module.css';
 
 interface MealIngredient {
-  ingredient_id: number;
+  // Null for a line an import couldn't match, or one added without a catalog
+  // page - it still belongs on the page, it just isn't a link anywhere.
+  ingredient_id: number | null;
   name: string;
   category: string;
+  amount: number | null;
+  unit: string | null;
   qty: string | null;
   in_fridge: boolean;
+}
+
+interface NutritionTotals {
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+  fiber: number;
+  sugar: number;
+  vit_c_mg: number;
+  calcium_mg: number;
+  iron_mg: number;
+  potassium_mg: number;
+  magnesium_mg: number;
+  sodium_mg: number;
+}
+
+interface MealNutrition {
+  per_serving: NutritionTotals;
+  total: NutritionTotals;
+  servings: number;
+  counted: number;
+  total_ingredients: number;
+}
+
+interface RatingDistribution {
+  counts: number[];
+  median: number | null;
 }
 
 interface MealDetailData {
@@ -36,6 +70,16 @@ interface MealDetailData {
   is_cooked: boolean;
   is_saved: boolean;
   your_rating: number | null;
+  source_url: string | null;
+  source_name: string | null;
+  nutrition: MealNutrition;
+  rating_distribution: RatingDistribution;
+}
+
+/** Mirrors the server's units::format_amount: "2", "1.5", never "2.4999999". */
+function formatAmount(v: number): string {
+  const r = Math.round(v * 1000) / 1000;
+  return Math.abs(r - Math.round(r)) < 0.005 ? String(Math.round(r)) : String(r);
 }
 
 interface RelatedMeal {
@@ -53,8 +97,31 @@ interface JournalEntry {
   cooked_at: string;
 }
 
+interface MealReview {
+  id: number;
+  user_id: number;
+  author_name: string;
+  avatar_theme: 'green' | 'terracotta' | 'navy' | 'plum';
+  avatar_photo_url: string | null;
+  score: number | null;
+  note: string | null;
+  cooked_at: string;
+  meal_revision_count: number;
+  is_current_version: boolean;
+  helpful_count: number;
+  your_helpful_vote: boolean;
+}
+
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function relativeTime(iso: string) {
+  const days = Math.round((Date.now() - new Date(iso).getTime()) / 86400000);
+  if (days < 1) return 'today';
+  if (days === 1) return '1 day ago';
+  if (days < 30) return `${days} days ago`;
+  return new Date(iso).toLocaleDateString(undefined, { month: 'short', year: 'numeric' });
 }
 
 export function MealDetail() {
@@ -66,11 +133,22 @@ export function MealDetail() {
   const [params, setParams] = useSearchParams();
   const [showPrompt, setShowPrompt] = useState(params.get('justCooked') === '1');
   const [note, setNote] = useState('');
+  // null until the recipe's own serving count is known, so the stepper opens
+  // on "however many this recipe actually makes" rather than an arbitrary 4.
+  const [cookingFor, setCookingFor] = useState<number | null>(null);
 
-  const { data: meal, isLoading } = useQuery({
+  const { data: meal, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['meal', id],
     queryFn: () => api.get<MealDetailData>(`/meals/${id}`),
     enabled: Boolean(id),
+    // A 404 is permanent - retrying it just delays showing the "not found"
+    // state for no benefit. Genuine network blips still get a couple of
+    // attempts, which the default retry:3 would otherwise also spend on a
+    // recipe that was deleted five minutes ago.
+    retry: (failureCount, err) => {
+      if (err instanceof ApiError) return false;
+      return failureCount < 2;
+    },
   });
 
   const { data: related = [] } = useQuery({
@@ -78,6 +156,17 @@ export function MealDetail() {
     queryFn: () =>
       api.get<RelatedMeal[]>(`/meals?cuisine=${encodeURIComponent(meal!.cuisine)}&sort=top`),
     enabled: Boolean(meal),
+  });
+
+  const { data: reviews = [] } = useQuery({
+    queryKey: ['meal-reviews', id],
+    queryFn: () => api.get<MealReview[]>(`/meals/${id}/reviews`),
+    enabled: Boolean(id),
+  });
+
+  const voteHelpful = useMutation({
+    mutationFn: (reviewId: number) => api.post(`/meals/${id}/reviews/${reviewId}/helpful`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['meal-reviews', id] }),
   });
 
   const { data: journal = [] } = useQuery({
@@ -131,10 +220,48 @@ export function MealDetail() {
     },
   });
 
-  if (isLoading || !meal) return null;
+  if (isLoading) return <LoadingState label="Loading recipe…" />;
+  if (isError || !meal) {
+    const notFound = error instanceof ApiError && error.status === 404;
+    return notFound ? (
+      <ErrorState
+        title="This recipe isn't here"
+        text="It may have been deleted, or the link is wrong."
+        actionLabel="Back to Browse"
+        onAction={() => navigate('/browse')}
+      />
+    ) : (
+      <ErrorState
+        title="Couldn't load this recipe"
+        text="The connection may have dropped. Try again."
+        actionLabel="Try again"
+        onAction={() => refetch()}
+      />
+    );
+  }
 
   const missing = meal.ingredients.filter((i) => !i.in_fridge);
   const haveCount = meal.ingredients.length - missing.length;
+  // Only catalog-linked lines can go on the shopping list - a name with no
+  // page has nowhere for "got it" to point.
+  const missingLinkedIds = missing
+    .map((m) => m.ingredient_id)
+    .filter((id): id is number => id != null);
+
+  // Scaling ingredient amounts and scaling nutrition totals are the same
+  // multiplication, driven by one number: how many servings the cook wants
+  // versus how many the recipe as written makes. Per-serving nutrition never
+  // moves - doubling the batch doesn't change what's in one plate of it.
+  const recipeServings = meal.nutrition.servings;
+  const effectiveServings = cookingFor ?? recipeServings;
+  const scale = effectiveServings / recipeServings;
+
+  function scaledQty(i: MealIngredient): string | null {
+    if (i.amount == null) return i.qty;
+    const scaledAmount = formatAmount(i.amount * scale);
+    return i.unit ? `${scaledAmount} ${i.unit}` : scaledAmount;
+  }
+  const isAuthor = meal.author_id === user?.id;
 
   function markCooked() {
     cook.mutate({});
@@ -165,7 +292,16 @@ export function MealDetail() {
           <ChevronLeft size={19} strokeWidth={2.2} />
         </button>
         <div className={styles.rightCluster}>
-          {meal.author_id === user?.id && (
+          {isAuthor && (
+            <button
+              className={styles.actionBtn}
+              title="Edit this meal"
+              onClick={() => navigate(`/meals/${id}/edit`)}
+            >
+              <PencilIcon size={17} strokeWidth={1.8} />
+            </button>
+          )}
+          {isAuthor && (
             <button
               className={styles.actionBtn}
               title="Add your photo"
@@ -224,23 +360,68 @@ export function MealDetail() {
 
       <p className={styles.description}>{meal.description}</p>
 
+      {meal.source_url && (
+        <a
+          className={styles.sourceLink}
+          href={meal.source_url}
+          target="_blank"
+          rel="noreferrer noopener"
+        >
+          Imported from {meal.source_name ?? meal.source_url}
+        </a>
+      )}
+
+      <button className={styles.historyLink} onClick={() => navigate(`/meals/${id}/history`)}>
+        View edit history
+      </button>
+
       <div className={styles.ratingCard}>
         <div className={styles.ratingScoreRow}>
           <span className={styles.ratingScore}>{meal.rating > 0 ? meal.rating.toFixed(1) : '—'}</span>
           <span className={styles.ratingOf}>/10 overall · {meal.rating_count} ratings</span>
         </div>
+
+        {meal.rating_count >= 3 && (
+          <>
+            {/* The mean and median only pull apart on a genuinely split
+                verdict - a straightforward average doesn't need a second
+                number stealing its thunder. */}
+            {meal.rating_distribution.median != null &&
+              Math.abs(meal.rating_distribution.median - meal.rating) >= 1 && (
+                <div className={styles.medianNote}>
+                  Median {meal.rating_distribution.median.toFixed(1)} — opinions here are split
+                  rather than clustered.
+                </div>
+              )}
+            <div className={styles.histogram}>
+              {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => {
+                const count = meal.rating_distribution.counts[n] ?? 0;
+                const max = Math.max(...meal.rating_distribution.counts.slice(1), 1);
+                return (
+                  <div key={n} className={styles.histBar} title={`${count} rated this ${n}/10`}>
+                    <div className={styles.histFill} style={{ height: `${(count / max) * 100}%` }} />
+                    <span className={styles.histLabel}>{n}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        )}
+
         {meal.your_rating != null && (
           <div className={styles.yourRatingPill}>You: {meal.your_rating}/10</div>
         )}
         <div className={styles.rateLabel}>
           {meal.your_rating != null ? 'Tap to update your rating' : 'Rate this meal (1–10)'}
         </div>
-        <div className={styles.rateRow}>
+        <div className={styles.rateRow} role="group" aria-label="Rate this meal from 1 to 10">
           {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
             <button
               key={n}
               className={`${styles.rateBtn} ${meal.your_rating != null && n <= meal.your_rating ? styles.rateBtnOn : ''}`}
               onClick={() => rate.mutate(n)}
+              aria-label={`Rate ${n} out of 10`}
+              aria-pressed={meal.your_rating === n}
             >
               {n}
             </button>
@@ -287,33 +468,114 @@ export function MealDetail() {
         </span>
       </div>
 
-      <div className={styles.ingChips}>
-        {meal.ingredients.map((i) => (
-          <button
-            key={i.ingredient_id}
-            className={`${styles.ingChip} ${!i.in_fridge ? styles.ingChipMissing : ''}`}
-            onClick={() => navigate(`/ingredients/${i.ingredient_id}`)}
-          >
-            <span
-              className={styles.ingChipThumb}
-              style={{ background: ingredientBackground(null, i.category) }}
-            />
-            <span className={styles.ingChipName}>{i.name}</span>
-            {i.qty && <span className={styles.ingChipQty}>{i.qty}</span>}
-            <span className={`${styles.ingChipMark} ${i.in_fridge ? styles.markHave : styles.markMissing}`}>
-              {i.in_fridge ? '✓' : '○'}
-            </span>
+      <div className={styles.servingStepper}>
+        <span className={styles.servingLabel}>Cooking for</span>
+        <button
+          className={styles.servingBtn}
+          disabled={effectiveServings <= 1}
+          onClick={() => setCookingFor(Math.max(1, effectiveServings - 1))}
+          aria-label="Fewer servings"
+        >
+          −
+        </button>
+        <span className={styles.servingCount}>{effectiveServings}</span>
+        <button
+          className={styles.servingBtn}
+          onClick={() => setCookingFor(effectiveServings + 1)}
+          aria-label="More servings"
+        >
+          +
+        </button>
+        {cookingFor != null && cookingFor !== recipeServings && (
+          <button className={styles.servingReset} onClick={() => setCookingFor(null)}>
+            Reset to {recipeServings}
           </button>
-        ))}
+        )}
       </div>
 
-      {missing.length > 0 && (
+      <div className={styles.ingChips}>
+        {meal.ingredients.map((i, idx) => {
+          const linked = i.ingredient_id != null;
+          return (
+            <button
+              key={i.ingredient_id ?? `unlinked-${idx}`}
+              className={`${styles.ingChip} ${!i.in_fridge ? styles.ingChipMissing : ''}`}
+              onClick={() => linked && navigate(`/ingredients/${i.ingredient_id}`)}
+              title={linked ? undefined : 'Not linked to a catalog page'}
+              style={linked ? undefined : { cursor: 'default' }}
+            >
+              <span
+                className={styles.ingChipThumb}
+                style={{ background: ingredientBackground(null, i.category) }}
+              />
+              <span className={styles.ingChipName}>{i.name}</span>
+              {scaledQty(i) && <span className={styles.ingChipQty}>{scaledQty(i)}</span>}
+              <span className={`${styles.ingChipMark} ${i.in_fridge ? styles.markHave : styles.markMissing}`}>
+                {i.in_fridge ? '✓' : '○'}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      {missingLinkedIds.length > 0 && (
         <button
           className={styles.addMissingBtn}
-          onClick={() => addMissing.mutate(missing.map((m) => m.ingredient_id))}
+          onClick={() => addMissing.mutate(missingLinkedIds)}
         >
-          + Add {missing.length} missing to shopping list
+          + Add {missingLinkedIds.length} missing to shopping list
         </button>
+      )}
+
+      {meal.nutrition.counted > 0 && (
+        <div className={styles.nutritionCard}>
+          <div className={styles.sectionHeadRow}>
+            <h2 className={styles.sectionTitle}>Nutrition</h2>
+            <span className={styles.nutriPer}>per serving</span>
+          </div>
+
+          {meal.nutrition.counted < meal.nutrition.total_ingredients && (
+            <p className={styles.nutriCoverage}>
+              Counted {meal.nutrition.counted} of {meal.nutrition.total_ingredients} ingredients —
+              the rest are measured by volume or count, which can't be converted to weight without
+              guessing, so they're left out rather than estimated.
+            </p>
+          )}
+
+          <div className={styles.nutriGrid}>
+            <div className={styles.nutriStat}>
+              <span className={styles.nutriValue}>{Math.round(meal.nutrition.per_serving.calories)}</span>
+              <span className={styles.nutriLabel}>Calories</span>
+            </div>
+            <div className={styles.nutriStat}>
+              <span className={styles.nutriValue}>{formatAmount(meal.nutrition.per_serving.protein)}g</span>
+              <span className={styles.nutriLabel}>Protein</span>
+            </div>
+            <div className={styles.nutriStat}>
+              <span className={styles.nutriValue}>{formatAmount(meal.nutrition.per_serving.carbs)}g</span>
+              <span className={styles.nutriLabel}>Carbs</span>
+            </div>
+            <div className={styles.nutriStat}>
+              <span className={styles.nutriValue}>{formatAmount(meal.nutrition.per_serving.fat)}g</span>
+              <span className={styles.nutriLabel}>Fat</span>
+            </div>
+            <div className={styles.nutriStat}>
+              <span className={styles.nutriValue}>{formatAmount(meal.nutrition.per_serving.fiber)}g</span>
+              <span className={styles.nutriLabel}>Fiber</span>
+            </div>
+            <div className={styles.nutriStat}>
+              <span className={styles.nutriValue}>{formatAmount(meal.nutrition.per_serving.sugar)}g</span>
+              <span className={styles.nutriLabel}>Sugar</span>
+            </div>
+          </div>
+
+          {effectiveServings !== recipeServings && (
+            <p className={styles.nutriCoverage} style={{ marginTop: 10, marginBottom: 0 }}>
+              Whole batch at {effectiveServings} {effectiveServings === 1 ? 'serving' : 'servings'}:{' '}
+              {Math.round(meal.nutrition.per_serving.calories * effectiveServings)} calories total.
+            </p>
+          )}
+        </div>
       )}
 
       <div className={styles.stepsHeadRow}>
@@ -353,6 +615,55 @@ export function MealDetail() {
                   </div>
                 </button>
               ))}
+          </div>
+        </>
+      )}
+
+      {reviews.length > 0 && (
+        <>
+          <div className={styles.sectionHeadRow}>
+            <h2 className={styles.sectionTitle}>Reviews</h2>
+            <span className={styles.reviewCount}>{reviews.length}</span>
+          </div>
+          <div className={styles.reviewList}>
+            {reviews.map((r) => (
+              <div key={r.id} className={styles.reviewRow}>
+                <button
+                  className={styles.reviewAuthorBtn}
+                  onClick={() => navigate(`/chefs/${r.user_id}`)}
+                  aria-label={`View ${r.author_name}'s profile`}
+                >
+                  <Avatar
+                    name={r.author_name}
+                    photoUrl={r.avatar_photo_url}
+                    theme={r.avatar_theme}
+                    size="sm"
+                    shape="rounded"
+                  />
+                </button>
+                <span className={styles.reviewBody}>
+                  <span className={styles.reviewHead}>
+                    <button className={styles.reviewAuthorName} onClick={() => navigate(`/chefs/${r.user_id}`)}>
+                      {r.author_name}
+                    </button>
+                    {r.score != null && <span className={styles.reviewStars}>★ {r.score}/10</span>}
+                    <span className={styles.reviewWhen}>{relativeTime(r.cooked_at)}</span>
+                  </span>
+                  <span className={styles.reviewNote}>{r.note}</span>
+                  {!r.is_current_version && (
+                    <span className={styles.reviewStale}>Written about an earlier version of this recipe</span>
+                  )}
+                  <button
+                    className={`${styles.helpfulBtn} ${r.your_helpful_vote ? styles.helpfulBtnOn : ''}`}
+                    onClick={() => voteHelpful.mutate(r.id)}
+                    aria-pressed={r.your_helpful_vote}
+                    aria-label={r.your_helpful_vote ? 'Remove helpful vote' : 'Mark this review as helpful'}
+                  >
+                    👍 Helpful{r.helpful_count > 0 ? ` (${r.helpful_count})` : ''}
+                  </button>
+                </span>
+              </div>
+            ))}
           </div>
         </>
       )}

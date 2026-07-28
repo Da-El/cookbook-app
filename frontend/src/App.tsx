@@ -7,10 +7,14 @@ import { InstallProvider } from './pwa/InstallContext';
 import { InstallPrompt } from './components/InstallPrompt/InstallPrompt';
 import { Shell } from './components/Shell/Shell';
 import { Auth } from './pages/Auth';
+import { ResetPassword } from './pages/ResetPassword';
+import { Onboarding } from './pages/Onboarding';
 import { Home } from './pages/Home';
 import { Browse } from './pages/Browse';
 import { Create } from './pages/Create';
 import { CreateMeal } from './pages/CreateMeal';
+import { EditMeal } from './pages/EditMeal';
+import { MealHistory } from './pages/MealHistory';
 import { CreateIngredient } from './pages/CreateIngredient';
 import { Cookbook } from './pages/Cookbook';
 import { Customize } from './pages/Customize';
@@ -49,7 +53,19 @@ function Routed() {
     return (
       <Routes>
         <Route path="/legal" element={<Bare><Legal /></Bare>} />
+        <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="*" element={<Auth />} />
+      </Routes>
+    );
+  }
+
+  // A brand-new account has nothing to see yet - an empty fridge, an empty
+  // feed, nobody followed. Onboarding is the one screen between signing up
+  // and the real app; everything else waits until it's done.
+  if (!user.has_onboarded) {
+    return (
+      <Routes>
+        <Route path="*" element={<Onboarding />} />
       </Routes>
     );
   }
@@ -68,9 +84,12 @@ function Routed() {
       <Route path="/cookbook/customize" element={<Bare><Customize /></Bare>} />
       <Route path="/ingredients/:id" element={<Bare><IngredientDetail /></Bare>} />
       <Route path="/meals/:id" element={<Bare><MealDetail /></Bare>} />
+      <Route path="/meals/:id/edit" element={<Bare><EditMeal /></Bare>} />
+      <Route path="/meals/:id/history" element={<Bare><MealHistory /></Bare>} />
       <Route path="/chefs/:id" element={<Bare><ChefPage /></Bare>} />
       <Route path="/settings" element={<Bare><Settings /></Bare>} />
       <Route path="/legal" element={<Bare><Legal /></Bare>} />
+      <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/import" element={<Bare><Import /></Bare>} />
       <Route path="/guides" element={<Bare><Guides /></Bare>} />
       <Route path="/guides/:slug" element={<Bare><GuidePage /></Bare>} />

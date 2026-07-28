@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../api/client';
 import { pickImage } from '../../lib/photo';
@@ -8,6 +9,8 @@ interface EditRow {
   id: number;
   value: unknown;
   author_name: string | null;
+  /// NULL for a former user whose account was deleted.
+  author_id: number | null;
   votes: number;
   voted_by_me: boolean;
   is_mine: boolean;
@@ -49,7 +52,12 @@ function useEdits(ingredientId: number, field: string) {
 
 function VoteButton({ row, onVote }: { row: EditRow; onVote: () => void }) {
   return (
-    <button className={`${styles.voteBtn} ${row.voted_by_me ? styles.voteBtnOn : ''}`} onClick={onVote}>
+    <button
+      className={`${styles.voteBtn} ${row.voted_by_me ? styles.voteBtnOn : ''}`}
+      onClick={onVote}
+      aria-pressed={row.voted_by_me}
+      aria-label={row.voted_by_me ? `Remove your vote (${row.votes} votes)` : `Vote for this (${row.votes} votes)`}
+    >
       {row.voted_by_me ? '✓' : '△'} {row.votes}
     </button>
   );
@@ -125,7 +133,19 @@ export function TextEditSection({
             <div key={row.id} className={`${styles.row} ${i === 0 ? styles.rowWinner : ''}`}>
               <span className={styles.rowValue}>
                 {String(row.value)}
-                {row.author_name && <span className={styles.rowMeta}> — {row.author_name}</span>}
+                {row.author_name && (
+                  <span className={styles.rowMeta}>
+                    {' '}
+                    —{' '}
+                    {row.author_id ? (
+                      <Link to={`/chefs/${row.author_id}`} className={styles.rowMetaLink}>
+                        {row.author_name}
+                      </Link>
+                    ) : (
+                      row.author_name
+                    )}
+                  </span>
+                )}
               </span>
               <VoteButton row={row} onVote={() => vote.mutate(row.id)} />
               {row.is_mine && <DeleteButton onDelete={() => del.mutate(row.id)} />}

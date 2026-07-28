@@ -17,7 +17,7 @@ import { PAGE_THEMES, heroTextColors } from '../lib/themes';
 import styles from './Cookbook.module.css';
 
 type Group = 'recipes' | 'kitchen' | 'contributions';
-type SubTab = 'cooked' | 'saved' | 'published' | 'fridge' | 'shopping' | 'reviews' | 'edits';
+type SubTab = 'cooked' | 'saved' | 'published' | 'fridge' | 'shopping' | 'reviews' | 'edits' | 'ratings' | 'votes';
 
 interface CookbookMeal {
   id: number;
@@ -59,6 +59,25 @@ interface MyEdit {
   created_at: string;
 }
 
+interface MyRating {
+  meal_id: number;
+  meal_name: string;
+  photo_url: string | null;
+  value: number;
+  created_at: string;
+  updated_at: string;
+}
+
+interface MyVote {
+  kind: 'revision' | 'alias';
+  target_id: number;
+  subject_id: number;
+  subject_name: string;
+  label: string;
+  value: number;
+  created_at: string;
+}
+
 function relativeTime(iso: string) {
   const days = Math.round((Date.now() - new Date(iso).getTime()) / 86400000);
   if (days < 1) return 'today';
@@ -95,9 +114,11 @@ const SECTION: Record<SubTab, { title: string; sub: string }> = {
   shopping: { title: 'Shopping list', sub: 'What you still need to pick up.' },
   reviews: { title: 'Reviews you’ve left', sub: 'Every note and score you’ve left after cooking.' },
   edits: { title: 'Edits you’ve suggested', sub: 'Your community contributions to the ingredient catalog.' },
+  ratings: { title: 'Meals you’ve rated', sub: 'Your 1–10 rating on every recipe, at a glance.' },
+  votes: { title: 'Edits and names you’ve voted on', sub: 'Every vote you’ve cast on a recipe edit or an ingredient’s other names.' },
 };
 
-const EMPTY: Record<'cooked' | 'saved' | 'published' | 'reviews' | 'edits', { title: string; text: string; to: string }> = {
+const EMPTY: Record<'cooked' | 'saved' | 'published' | 'reviews' | 'edits' | 'ratings' | 'votes', { title: string; text: string; to: string }> = {
   cooked: {
     title: 'Nothing cooked yet',
     text: 'Open a meal and mark it as cooked — it lands here with your notes.',
@@ -121,6 +142,16 @@ const EMPTY: Record<'cooked' | 'saved' | 'published' | 'reviews' | 'edits', { ti
   edits: {
     title: 'No edits yet',
     text: 'Suggest a description, category, photo, or nutrition change on any ingredient page.',
+    to: '/browse',
+  },
+  ratings: {
+    title: 'No ratings yet',
+    text: 'Rate a meal 1–10 from its recipe page — it shows up here.',
+    to: '/browse',
+  },
+  votes: {
+    title: 'No votes yet',
+    text: 'Vote on a recipe edit in its history, or on an ingredient’s other names.',
     to: '/browse',
   },
 };
@@ -152,7 +183,7 @@ export function Cookbook() {
 
   const isMealTab = tab === 'cooked' || tab === 'saved' || tab === 'published';
   const isKitchenTab = tab === 'fridge' || tab === 'shopping';
-  const isContributionTab = tab === 'reviews' || tab === 'edits';
+  const isContributionTab = tab === 'reviews' || tab === 'edits' || tab === 'ratings' || tab === 'votes';
 
   const { data: meals = [] } = useQuery({
     queryKey: ['cookbook', tab],
@@ -183,6 +214,18 @@ export function Cookbook() {
     queryKey: ['cookbook-edits'],
     queryFn: () => api.get<MyEdit[]>('/cookbook/edits'),
     enabled: tab === 'edits',
+  });
+
+  const { data: myRatings = [] } = useQuery({
+    queryKey: ['cookbook-ratings'],
+    queryFn: () => api.get<MyRating[]>('/cookbook/ratings'),
+    enabled: tab === 'ratings',
+  });
+
+  const { data: myVotes = [] } = useQuery({
+    queryKey: ['cookbook-votes'],
+    queryFn: () => api.get<MyVote[]>('/cookbook/votes'),
+    enabled: tab === 'votes',
   });
 
   const invalidateKitchen = () => {
@@ -253,16 +296,26 @@ export function Cookbook() {
       go: () => setTab('edits'),
     },
     edits: {
+      text: 'You’ve also cast votes on edits and names.',
+      label: `Votes ${counts?.votes ?? 0}`,
+      go: () => setTab('votes'),
+    },
+    ratings: {
       text: 'You’ve also left reviews on meals you’ve cooked.',
       label: `Reviews ${counts?.reviews ?? 0}`,
       go: () => setTab('reviews'),
+    },
+    votes: {
+      text: 'You’ve also rated meals you’ve cooked.',
+      label: `Ratings ${counts?.ratings ?? 0}`,
+      go: () => setTab('ratings'),
     },
   };
 
   const subTabs: SubTab[] =
     group === 'recipes' ? ['cooked', 'saved', 'published']
     : group === 'kitchen' ? ['fridge', 'shopping']
-    : ['reviews', 'edits'];
+    : ['reviews', 'edits', 'ratings', 'votes'];
 
   const hasHeroPhoto = Boolean(theme?.cb_hero_photo_url);
   const heroTheme = theme?.cb_hero_theme ?? 'cream';
@@ -404,7 +457,56 @@ export function Cookbook() {
           />
         )
       ) : isContributionTab ? (
-        tab === 'reviews' ? (
+        tab === 'ratings' ? (
+          myRatings.length > 0 ? (
+            <div className={styles.mealList}>
+              {myRatings.map((r) => (
+                <button key={r.meal_id} className={styles.mealRow} onClick={() => navigate(`/meals/${r.meal_id}`)}>
+                  <span className={styles.mealThumb} style={{ background: mealBackground(r.photo_url, null) }} />
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    <span className={styles.mealName} style={{ display: 'block' }}>{r.meal_name}</span>
+                    <span className={styles.reviewScore}>★ {r.value}/10</span>
+                    <span className={styles.reviewTime} style={{ display: 'block' }}>
+                      {r.updated_at !== r.created_at ? 'Updated ' : 'Rated '}{relativeTime(r.updated_at)}
+                    </span>
+                  </span>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <EmptyCard title={EMPTY.ratings.title} text={EMPTY.ratings.text} onClick={() => navigate(EMPTY.ratings.to)} />
+          )
+        ) : tab === 'votes' ? (
+          myVotes.length > 0 ? (
+            <div className={styles.mealList}>
+              {myVotes.map((v) => (
+                <button
+                  key={`${v.kind}-${v.target_id}`}
+                  className={styles.mealRow}
+                  onClick={() => navigate(v.kind === 'revision' ? `/meals/${v.subject_id}/history` : `/ingredients/${v.subject_id}`)}
+                >
+                  <span
+                    className={styles.mealThumb}
+                    style={{ background: v.kind === 'revision' ? mealBackground(null, null) : ingredientBackground(null, null) }}
+                  />
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    <span className={styles.mealName} style={{ display: 'block' }}>{v.subject_name}</span>
+                    <span className={styles.editFieldRow}>
+                      <span className={styles.editField}>{v.kind === 'revision' ? 'Edit' : 'Alternate name'}</span>
+                      <span className={v.value > 0 ? styles.editWinning : styles.reviewScore}>
+                        {v.value > 0 ? '▲ Helped' : '▼ Hurt'}
+                      </span>
+                    </span>
+                    <span className={styles.reviewNote} style={{ display: 'block' }}>{v.label}</span>
+                    <span className={styles.reviewTime} style={{ display: 'block' }}>{relativeTime(v.created_at)}</span>
+                  </span>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <EmptyCard title={EMPTY.votes.title} text={EMPTY.votes.text} onClick={() => navigate(EMPTY.votes.to)} />
+          )
+        ) : tab === 'reviews' ? (
           reviews.length > 0 ? (
             <div className={styles.mealList}>
               {reviews.map((r) => (

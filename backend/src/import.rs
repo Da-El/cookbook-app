@@ -651,7 +651,7 @@ async fn match_ingredient(db: &sqlx::PgPool, name: &str) -> Option<(i64, String)
     if cleaned.is_empty() {
         return None;
     }
-    sqlx::query_as::<_, (i64, String)>(
+    if let Some(hit) = sqlx::query_as::<_, (i64, String)>(
         "SELECT id, name FROM ingredients
          WHERE lower(name) = $1
             OR lower(split_part(name, ',', 1)) = $1
@@ -664,6 +664,30 @@ async fn match_ingredient(db: &sqlx::PgPool, name: &str) -> Option<(i64, String)
          LIMIT 1",
     )
     .bind(&cleaned)
+    .fetch_optional(db)
+    .await
+    .ok()
+    .flatten()
+    {
+        return Some(hit);
+    }
+
+    // The catalog's own name is formal USDA phrasing; a community alias is
+    // what the recipe actually wrote. "cilantro" only matches the second way.
+    // Gated to endorsed aliases (score >= SEARCH_THRESHOLD) for the same
+    // reason search is: a lone, unreviewed proposal shouldn't silently start
+    // rewriting other people's imports.
+    sqlx::query_as::<_, (i64, String)>(
+        "SELECT i.id, i.name FROM ingredients i
+         JOIN ingredient_aliases a ON a.ingredient_id = i.id
+         WHERE a.status = 'live' AND a.score >= $2
+           AND (lower(a.name) = $1
+                OR (length(a.name) >= 4 AND $1 LIKE '%' || lower(a.name) || '%'))
+         ORDER BY (lower(a.name) = $1) DESC, length(a.name) DESC
+         LIMIT 1",
+    )
+    .bind(&cleaned)
+    .bind(crate::aliases::SEARCH_THRESHOLD)
     .fetch_optional(db)
     .await
     .ok()

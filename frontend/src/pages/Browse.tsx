@@ -24,6 +24,19 @@ const SORTS: [string, string][] = [
 interface MealRow extends MealCardData {
   author_name: string;
   meal_type: string;
+  is_top_in_cuisine?: boolean;
+}
+
+interface IngredientHit extends IngredientSummary {
+  /// Present when this row only matched through a community alias, e.g.
+  /// searching "cilantro" surfacing "Coriander, leaves, raw" - the row needs
+  /// to say why it's here or it looks like a mismatch.
+  matched_alias?: string | null;
+}
+
+interface SearchResults {
+  meals: MealRow[];
+  ingredients: IngredientHit[];
 }
 
 export function Browse() {
@@ -45,28 +58,51 @@ export function Browse() {
     if (urlQuery !== null) setSearch(urlQuery);
   }, [urlQuery]);
 
-  const { data: meals = [], isLoading: mealsLoading } = useQuery({
-    queryKey: ['meals', search, mealType, sort],
+  // A typed query does double duty: it's the entry point for both tabs at
+  // once, so one request covers what used to be two. Below, each tab reads
+  // its half and ignores the other - most of a search's cost is the ranking
+  // work, not shipping a few extra rows the browser never renders.
+  const trimmedSearch = search.trim();
+  const { data: searchResults, isLoading: searchLoading } = useQuery({
+    queryKey: ['search', trimmedSearch],
+    queryFn: () => api.get<SearchResults>(`/search?q=${encodeURIComponent(trimmedSearch)}`),
+    enabled: trimmedSearch.length > 0 && (tab === 'meals' || tab === 'ingredients'),
+  });
+
+  const { data: browseMeals = [], isLoading: browseMealsLoading } = useQuery({
+    queryKey: ['meals', mealType, sort],
     queryFn: () => {
       const q = new URLSearchParams();
-      if (search) q.set('search', search);
       if (mealType !== 'All') q.set('meal_type', mealType);
       q.set('sort', sort);
       return api.get<MealRow[]>(`/meals?${q}`);
     },
-    enabled: tab === 'meals',
+    enabled: tab === 'meals' && trimmedSearch.length === 0,
   });
 
-  const { data: ingredients = [], isLoading: ingLoading } = useQuery({
-    queryKey: ['ingredients', search, category],
+  const { data: browseIngredients = [], isLoading: browseIngLoading } = useQuery({
+    queryKey: ['ingredients', category],
     queryFn: () => {
       const q = new URLSearchParams();
-      if (search) q.set('search', search);
       if (category !== 'All') q.set('category', category);
-      return api.get<IngredientSummary[]>(`/ingredients?${q}`);
+      // Same shape as a search hit minus matched_alias, which this endpoint
+      // never sets - keeping one element type for `ingredients` below.
+      return api.get<IngredientHit[]>(`/ingredients?${q}`);
     },
-    enabled: tab === 'ingredients',
+    enabled: tab === 'ingredients' && trimmedSearch.length === 0,
   });
+
+  // Ranked search doesn't take the meal_type/category chips server-side, so
+  // apply them client-side on the (already small, already-fetched) result
+  // set rather than losing the chip once someone starts typing.
+  const meals = trimmedSearch
+    ? (searchResults?.meals ?? []).filter((m) => mealType === 'All' || m.meal_type === mealType)
+    : browseMeals;
+  const ingredients = trimmedSearch
+    ? (searchResults?.ingredients ?? []).filter((i) => category === 'All' || i.category === category)
+    : browseIngredients;
+  const mealsLoading = trimmedSearch ? searchLoading : browseMealsLoading;
+  const ingLoading = trimmedSearch ? searchLoading : browseIngLoading;
 
   const { data: chefs = [], isLoading: chefsLoading } = useQuery({
     queryKey: ['chefs-search', search],
@@ -148,7 +184,7 @@ export function Browse() {
         </div>
       )}
 
-      {tab === 'meals' && (
+      {tab === 'meals' && !trimmedSearch && (
         <div className={styles.sortRow}>
           {SORTS.map(([value, label]) => (
             <button
@@ -161,6 +197,9 @@ export function Browse() {
           ))}
         </div>
       )}
+      {/* Once there's a query, relevance is the sort - "Top rated"/"Fastest"
+          would silently do nothing against ranked search results, which is
+          worse than not offering them. */}
 
       {tab === 'chefs' ? (
         chefs.length > 0 ? (
@@ -195,7 +234,7 @@ export function Browse() {
               <span style={{ flex: 1, minWidth: 0 }}>
                 <span className={styles.ingName} style={{ display: 'block' }}>{i.name}</span>
                 <span className={styles.ingSub} style={{ display: 'block' }}>
-                  {i.food_group ?? i.category}
+                  {i.matched_alias ? `Also called "${i.matched_alias}"` : i.food_group ?? i.category}
                 </span>
               </span>
               {i.rating > 0 && <span className={styles.ingRating}>★ {i.rating.toFixed(1)}</span>}

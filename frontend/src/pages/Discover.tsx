@@ -18,6 +18,7 @@ interface DiscoverMeal {
   photo_url: string | null;
   have_count: number;
   total_count: number;
+  is_top_in_cuisine?: boolean;
 }
 
 interface Section {

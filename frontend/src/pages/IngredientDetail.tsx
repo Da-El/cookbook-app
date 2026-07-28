@@ -1,6 +1,6 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { api } from '../api/client';
+import { api, ApiError } from '../api/client';
 import type { IngredientDetail as Detail, Micros } from '../api/types';
 import { ChevronLeft } from '../components/Icon/Icon';
 import {
@@ -9,6 +9,8 @@ import {
   PhotoEditSection,
   TextEditSection,
 } from '../components/EditVoting/EditVoting';
+import { AliasSection } from '../components/EditVoting/AliasSection';
+import { LoadingState, ErrorState } from '../components/PageState/PageState';
 import { ingredientBackground } from '../lib/imagery';
 import styles from './IngredientDetail.module.css';
 
@@ -33,10 +35,16 @@ export function IngredientDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['ingredient', id],
     queryFn: () => api.get<Detail>(`/ingredients/${id}`),
     enabled: Boolean(id),
+    // See MealDetail's identical policy: a 404 here is permanent, so retrying
+    // it only delays the "not found" state without any chance of succeeding.
+    retry: (failureCount, err) => {
+      if (err instanceof ApiError) return false;
+      return failureCount < 2;
+    },
   });
 
   const { data: usedIn = [] } = useQuery({
@@ -45,7 +53,25 @@ export function IngredientDetail() {
     enabled: Boolean(id),
   });
 
-  if (isLoading || !data) return null;
+  if (isLoading) return <LoadingState label="Loading ingredient…" />;
+  if (isError || !data) {
+    const notFound = error instanceof ApiError && error.status === 404;
+    return notFound ? (
+      <ErrorState
+        title="This ingredient isn't here"
+        text="It may have been removed, or the link is wrong."
+        actionLabel="Back to Browse"
+        onAction={() => navigate('/browse')}
+      />
+    ) : (
+      <ErrorState
+        title="Couldn't load this ingredient"
+        text="The connection may have dropped. Try again."
+        actionLabel="Try again"
+        onAction={() => refetch()}
+      />
+    );
+  }
 
   const n = data.nutrition;
 
@@ -87,6 +113,7 @@ export function IngredientDetail() {
         <CategoryEditSection ingredientId={data.id} />
         <PhotoEditSection ingredientId={data.id} />
         <NutritionEditSection ingredientId={data.id} />
+        <AliasSection ingredientId={data.id} />
       </div>
 
       {n && (

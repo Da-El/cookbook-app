@@ -1,12 +1,12 @@
 use argon2::password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString};
 use argon2::Argon2;
-use axum::extract::{FromRequestParts, State};
+use axum::extract::{FromRequestParts, Path, State};
 use axum::http::request::Parts;
-use axum::http::StatusCode;
+use axum::http::{HeaderMap, StatusCode};
 use axum::Json;
 use axum_extra::extract::cookie::{Cookie, CookieJar, SameSite};
 use base64::Engine;
-use chrono::{Duration, Utc};
+use chrono::{DateTime, Duration, Utc};
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -17,6 +17,9 @@ const SESSION_COOKIE: &str = "cb_session";
 const SESSION_DAYS: i64 = 30;
 const MAX_ATTEMPTS: i64 = 10;
 const ATTEMPT_WINDOW_MINS: i64 = 15;
+const RESET_TOKEN_HOURS: i64 = 1;
+const MAX_RESET_ATTEMPTS: i64 = 5;
+const RESET_ATTEMPT_WINDOW_MINS: i64 = 60;
 
 #[derive(Deserialize)]
 pub struct Credentials {
@@ -106,25 +109,76 @@ fn session_cookie(token: String, secure: bool) -> Cookie<'static> {
     c
 }
 
-async fn create_session(state: &AppState, user_id: i64) -> Result<String, StatusCode> {
+/// Truncated hard: this is a "which device is this" hint for a person
+/// reviewing their own session list, not a stored analytics field, so it
+/// doesn't need (and shouldn't keep) more than that.
+fn user_agent_of(headers: &HeaderMap) -> Option<String> {
+    headers
+        .get(axum::http::header::USER_AGENT)
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.chars().take(200).collect())
+}
+
+async fn create_session(state: &AppState, user_id: i64, user_agent: Option<&str>) -> Result<String, StatusCode> {
     let token = new_token();
     let expires = Utc::now() + Duration::days(SESSION_DAYS);
-    sqlx::query("INSERT INTO sessions (token_hash, user_id, expires_at) VALUES ($1, $2, $3)")
-        .bind(hash_token(&token))
-        .bind(user_id)
-        .bind(expires)
-        .execute(&state.db)
-        .await
-        .map_err(|e| {
-            tracing::error!("session insert failed: {e}");
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
+    sqlx::query(
+        "INSERT INTO sessions (token_hash, user_id, expires_at, user_agent) VALUES ($1, $2, $3, $4)",
+    )
+    .bind(hash_token(&token))
+    .bind(user_id)
+    .bind(expires)
+    .bind(user_agent)
+    .execute(&state.db)
+    .await
+    .map_err(|e| {
+        tracing::error!("session insert failed: {e}");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
     Ok(token)
+}
+
+/// Collapses a raw User-Agent string to something a person recognizes at a
+/// glance ("Chrome on Windows") instead of the full unreadable header. Best
+/// effort, not a real UA parser - covers the common cases and falls back to
+/// "a device" rather than guessing wrong.
+fn friendly_device(ua: Option<&str>) -> String {
+    let Some(ua) = ua else { return "Unknown device".into() };
+    let browser = if ua.contains("Edg/") {
+        "Edge"
+    } else if ua.contains("OPR/") || ua.contains("Opera") {
+        "Opera"
+    } else if ua.contains("Chrome/") {
+        "Chrome"
+    } else if ua.contains("CriOS") {
+        "Chrome"
+    } else if ua.contains("Firefox/") {
+        "Firefox"
+    } else if ua.contains("Safari/") {
+        "Safari"
+    } else {
+        "a browser"
+    };
+    let os = if ua.contains("iPhone") || ua.contains("iPad") {
+        "iOS"
+    } else if ua.contains("Android") {
+        "Android"
+    } else if ua.contains("Mac OS X") || ua.contains("Macintosh") {
+        "Mac"
+    } else if ua.contains("Windows") {
+        "Windows"
+    } else if ua.contains("Linux") {
+        "Linux"
+    } else {
+        "an unknown OS"
+    };
+    format!("{browser} on {os}")
 }
 
 pub async fn register(
     State(state): State<AppState>,
     jar: CookieJar,
+    headers: HeaderMap,
     Json(body): Json<Credentials>,
 ) -> Result<(CookieJar, Json<UserProfile>), (StatusCode, Json<serde_json::Value>)> {
     let email = body.email.trim().to_lowercase();
@@ -170,7 +224,7 @@ pub async fn register(
         err(StatusCode::INTERNAL_SERVER_ERROR, "Could not create account.")
     })?;
 
-    let token = create_session(&state, user_id)
+    let token = create_session(&state, user_id, user_agent_of(&headers).as_deref())
         .await
         .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, "Could not create session."))?;
 
@@ -183,6 +237,7 @@ pub async fn register(
 pub async fn login(
     State(state): State<AppState>,
     jar: CookieJar,
+    headers: HeaderMap,
     Json(body): Json<Credentials>,
 ) -> Result<(CookieJar, Json<UserProfile>), (StatusCode, Json<serde_json::Value>)> {
     let email = body.email.trim().to_lowercase();
@@ -233,7 +288,7 @@ pub async fn login(
         .await
         .ok();
 
-    let token = create_session(&state, id)
+    let token = create_session(&state, id, user_agent_of(&headers).as_deref())
         .await
         .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, "Could not create session."))?;
 
@@ -405,6 +460,253 @@ pub async fn delete_account(
     let mut removal = Cookie::from(SESSION_COOKIE);
     removal.set_path("/");
     Ok((jar.remove(removal), StatusCode::NO_CONTENT))
+}
+
+// ============ ACCOUNT RECOVERY ============
+
+#[derive(Deserialize)]
+pub struct ForgotPasswordBody {
+    pub email: String,
+}
+
+/// Always answers the same way regardless of whether the email is registered
+/// - the alternative (404 for unknown, 200 for known) turns this endpoint
+/// into an account-existence oracle, the same reasoning `login`'s generic
+/// "incorrect email or password" already applies.
+///
+/// There is no outbound email sending wired up yet (see backend README /
+/// deployment notes), so the generated link is written to the server log
+/// rather than delivered. That makes this endpoint's real behavior today
+/// "a site operator can look up the link and pass it along by hand," not
+/// self-service recovery - true self-service needs a mail provider added,
+/// which is a deliberate follow-up rather than something to guess at here.
+pub async fn forgot_password(
+    State(state): State<AppState>,
+    Json(body): Json<ForgotPasswordBody>,
+) -> Result<StatusCode, (StatusCode, Json<serde_json::Value>)> {
+    let email = body.email.trim().to_lowercase();
+    if email.is_empty() {
+        return Ok(StatusCode::NO_CONTENT);
+    }
+
+    let recent: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM password_reset_attempts
+         WHERE lower(email) = $1 AND attempted_at > now() - ($2 || ' minutes')::interval",
+    )
+    .bind(&email)
+    .bind(RESET_ATTEMPT_WINDOW_MINS.to_string())
+    .fetch_one(&state.db)
+    .await
+    .unwrap_or(0);
+
+    sqlx::query("INSERT INTO password_reset_attempts (email) VALUES ($1)")
+        .bind(&email)
+        .execute(&state.db)
+        .await
+        .ok();
+
+    if recent >= MAX_RESET_ATTEMPTS {
+        // Still 204: a 429 here would confirm "yes, someone keeps requesting
+        // resets for this address," which leaks the same thing enumeration
+        // does. The throttle just stops issuing new tokens silently.
+        return Ok(StatusCode::NO_CONTENT);
+    }
+
+    // password_hash IS NULL for unclaimed seed "chef" accounts that authored
+    // content but were never actually registered - there's no password to
+    // reset, so no token is issued, same as the unknown-email case.
+    let user_id: Option<i64> =
+        sqlx::query_scalar("SELECT id FROM users WHERE lower(email) = $1 AND password_hash IS NOT NULL")
+            .bind(&email)
+            .fetch_optional(&state.db)
+            .await
+            .unwrap_or(None);
+
+    if let Some(user_id) = user_id {
+        let token = new_token();
+        let expires = Utc::now() + Duration::hours(RESET_TOKEN_HOURS);
+        let inserted = sqlx::query(
+            "INSERT INTO password_resets (token_hash, user_id, expires_at) VALUES ($1, $2, $3)",
+        )
+        .bind(hash_token(&token))
+        .bind(user_id)
+        .bind(expires)
+        .execute(&state.db)
+        .await;
+
+        if inserted.is_ok() {
+            // Deliberately not behind `tracing::debug!` - this is the entire
+            // delivery mechanism right now, not a debug aid, so it needs to
+            // survive at whatever level production logging runs at.
+            tracing::info!(
+                "password reset requested for {email}: /reset-password?token={token} (expires in {RESET_TOKEN_HOURS}h)"
+            );
+        }
+    }
+
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[derive(Deserialize)]
+pub struct ResetPasswordBody {
+    pub token: String,
+    pub new_password: String,
+}
+
+pub async fn reset_password(
+    State(state): State<AppState>,
+    Json(body): Json<ResetPasswordBody>,
+) -> Result<StatusCode, (StatusCode, Json<serde_json::Value>)> {
+    if body.new_password.chars().count() < 8 {
+        return Err(err(StatusCode::BAD_REQUEST, "Password must be at least 8 characters."));
+    }
+
+    let hash = hash_token(&body.token);
+    let row: Option<(i64, DateTime<Utc>, Option<DateTime<Utc>>)> = sqlx::query_as(
+        "SELECT user_id, expires_at, used_at FROM password_resets WHERE token_hash = $1",
+    )
+    .bind(&hash)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|_| oops())?;
+
+    let Some((user_id, expires_at, used_at)) = row else {
+        return Err(err(StatusCode::BAD_REQUEST, "That reset link isn't valid. Request a new one."));
+    };
+    if used_at.is_some() {
+        return Err(err(StatusCode::BAD_REQUEST, "That reset link has already been used. Request a new one."));
+    }
+    if expires_at < Utc::now() {
+        return Err(err(StatusCode::BAD_REQUEST, "That reset link has expired. Request a new one."));
+    }
+
+    let mut salt_bytes = [0u8; 16];
+    rand::rng().fill_bytes(&mut salt_bytes);
+    let salt = SaltString::encode_b64(&salt_bytes).map_err(|_| oops())?;
+    let new_hash = Argon2::default()
+        .hash_password(body.new_password.as_bytes(), &salt)
+        .map_err(|_| oops())?
+        .to_string();
+
+    let mut tx = state.db.begin().await.map_err(|_| oops())?;
+    sqlx::query("UPDATE users SET password_hash = $1, updated_at = now() WHERE id = $2")
+        .bind(&new_hash)
+        .bind(user_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|_| oops())?;
+    sqlx::query("UPDATE password_resets SET used_at = now() WHERE token_hash = $1")
+        .bind(&hash)
+        .execute(&mut *tx)
+        .await
+        .map_err(|_| oops())?;
+    // A reset means "I might not be the only one with access to this
+    // account" - every existing session, not just the ones on this device,
+    // needs to stop working. Same rule `update_account`'s password branch
+    // already follows for a self-service change.
+    sqlx::query("DELETE FROM sessions WHERE user_id = $1")
+        .bind(user_id)
+        .execute(&mut *tx)
+        .await
+        .ok();
+    tx.commit().await.map_err(|_| oops())?;
+
+    Ok(StatusCode::NO_CONTENT)
+}
+
+// ============ SESSIONS ============
+
+#[derive(Serialize, sqlx::FromRow)]
+pub struct SessionRow {
+    pub id: i64,
+    pub device: String,
+    pub created_at: DateTime<Utc>,
+    pub last_seen_at: DateTime<Utc>,
+    pub is_current: bool,
+}
+
+pub async fn list_sessions(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    jar: CookieJar,
+) -> Result<Json<Vec<SessionRow>>, StatusCode> {
+    let current_hash = jar.get(SESSION_COOKIE).map(|c| hash_token(c.value()));
+
+    let rows: Vec<(i64, Option<String>, DateTime<Utc>, DateTime<Utc>, Vec<u8>)> = sqlx::query_as(
+        "SELECT id, user_agent, created_at, last_seen_at, token_hash
+         FROM sessions WHERE user_id = $1 AND expires_at > now()
+         ORDER BY last_seen_at DESC",
+    )
+    .bind(user.id)
+    .fetch_all(&state.db)
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    Ok(Json(
+        rows.into_iter()
+            .map(|(id, ua, created_at, last_seen_at, hash)| SessionRow {
+                id,
+                device: friendly_device(ua.as_deref()),
+                created_at,
+                last_seen_at,
+                is_current: current_hash.as_deref() == Some(hash.as_slice()),
+            })
+            .collect(),
+    ))
+}
+
+/// Revoking the session you're revoking *from* is just logout - handled the
+/// same way here so the client doesn't need special-case branching, but the
+/// cookie only gets cleared when that's actually what happened.
+pub async fn revoke_session(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    jar: CookieJar,
+    Path(session_id): Path<i64>,
+) -> Result<(CookieJar, StatusCode), StatusCode> {
+    let target_hash: Option<Vec<u8>> =
+        sqlx::query_scalar("SELECT token_hash FROM sessions WHERE id = $1 AND user_id = $2")
+            .bind(session_id)
+            .bind(user.id)
+            .fetch_optional(&state.db)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let Some(target_hash) = target_hash else { return Err(StatusCode::NOT_FOUND) };
+
+    sqlx::query("DELETE FROM sessions WHERE id = $1")
+        .bind(session_id)
+        .execute(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let current_hash = jar.get(SESSION_COOKIE).map(|c| hash_token(c.value()));
+    if current_hash.as_deref() == Some(target_hash.as_slice()) {
+        let mut removal = Cookie::from(SESSION_COOKIE);
+        removal.set_path("/");
+        return Ok((jar.remove(removal), StatusCode::NO_CONTENT));
+    }
+    Ok((jar, StatusCode::NO_CONTENT))
+}
+
+/// "Log out everywhere else" - keeps the caller's own session alive so
+/// they're not immediately locked out of the device they're using to manage
+/// sessions from.
+pub async fn revoke_other_sessions(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    jar: CookieJar,
+) -> Result<StatusCode, StatusCode> {
+    let current_hash = jar.get(SESSION_COOKIE).map(|c| hash_token(c.value()));
+
+    sqlx::query("DELETE FROM sessions WHERE user_id = $1 AND token_hash IS DISTINCT FROM $2")
+        .bind(user.id)
+        .bind(current_hash)
+        .execute(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    Ok(StatusCode::NO_CONTENT)
 }
 
 fn oops() -> (StatusCode, Json<serde_json::Value>) {
