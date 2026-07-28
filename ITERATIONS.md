@@ -713,3 +713,72 @@ all against an empty field; and bulk shopping clear's per-user scoping
 untouched) and the empty-list no-op confirmed via curl, then the arm-
 then-confirm card and the list actually emptying confirmed in the
 browser.
+
+## Batch 13 — Iterations 61–65
+
+**Commit:** local only — not pushed/deployed this batch, per standing
+instruction · **Migrations:** 0043–0044 (61, 63) / none (62, 64, 65) ·
+**Tests:** 61 backend, passing
+
+61. **Collection cover photo** — collections had no visual identity beyond
+    a name. A new `cover_photo_url` column plus an owner-only
+    `POST /collections/{id}/cover` (`photo_url: Option<String>`, omitted or
+    null clears it) surfaced on both `CollectionRow` and `CollectionDetail`
+    and on `FollowedCollectionRow` for followers too; the existing
+    `pickImage` helper backs a "+ Add cover photo"/"Change cover" affordance
+    on the detail page, and a `CollectionThumb` component (image or a
+    `FolderIcon` placeholder) renders it in both the owned- and
+    followed-collections list rows.
+62. **Guide share button** — guides had a bookmark toggle but no quick way
+    to hand one to someone else. A Share button next to the bookmark icon
+    copies the current page URL via `navigator.clipboard.writeText` and
+    confirms with the existing toast pattern - no backend change, purely a
+    frontend addition alongside iteration 52's bookmarking.
+63. **Meal plan templates** — a full week of planning had to be rebuilt
+    from scratch every time. New `plan_templates`/`plan_template_entries`
+    tables store a template's entries by `day_offset` (0-6) relative to its
+    own reference week rather than real dates, so one saved template can be
+    applied starting on any future week; `apply_template` joins
+    `meals WHERE status='live'` so a since-deleted meal is silently skipped
+    rather than failing the whole apply. Save/list/delete/apply endpoints
+    plus a template chip row on the Plan page's week view.
+64. **Substitute top-pick badge** — a substitute list already sorted by
+    community vote score with no visual signal for which one actually won.
+    Purely frontend: since `substitutes.rs`'s `list()` already orders by
+    `score DESC`, `SubstituteSection.tsx` marks the first row a "★ Top
+    pick" whenever there's more than one substitute and the leader has an
+    actual positive score - never crowning a winner off a single default
+    self-vote with nothing to beat.
+65. **Trending-this-week Discover shelf** — the existing Discover shelves
+    (best rated, fastest, just added) are all-time or static; nothing
+    surfaced what people are actually cooking *right now*. A new
+    "Trending this week" shelf queries `meal_log` (one row per cook event,
+    including repeats - unlike `cooked_meals`, which only records the
+    first) for cook counts in the trailing 7 days, ordered by that count
+    with `ranked_score` as tiebreaker, reusing the `discover()` handler's
+    existing `shelf_sql!` macro and `MealCard` projection. The shelf is
+    simply omitted when nothing's been cooked in the window, same as every
+    other shelf's empty-state handling.
+
+**Verified:** collection cover set/clear/cross-user-404 and its
+appearance on `list_followed` all confirmed via curl, then the list
+thumbnail and detail-page banner with "Change cover" confirmed in the
+browser; the guide share button's clipboard write and "Link copied"
+toast confirmed in the browser (via an explicit `Promise`/`setTimeout`
+wrapper - React's batched state update from a click handler isn't
+observable in the same synchronous script); meal plan templates' save,
+list, apply-with-correct-day-offset-math (checked against real dates),
+empty-week rejection, >7-day-range rejection, soft-deleted-meal skip on
+re-apply (count dropped 2→1 after soft-deleting one template meal), and
+cross-user 404 on both apply and delete all confirmed via curl, then
+save-as-template, the template chip applying to the right day/slot, and
+delete (with `window.confirm` monkey-patched to bypass the native
+dialog) confirmed in the browser; the top-pick badge's ordering
+confirmed via curl (a second account's upvote moved "Butter, stick,
+unsalted" to score 2, ahead of "Almond butter, creamy" at score 1) then
+the badge rendering on exactly the leading row confirmed in the browser;
+and the trending shelf confirmed via curl in both directions - logging a
+cook event surfaced the shelf with the correct `cook_count`, and
+backdating that same `meal_log` row past 7 days made the shelf
+disappear entirely - then "Trending this week" rendering as the first
+shelf on the Discover page confirmed in the browser.
