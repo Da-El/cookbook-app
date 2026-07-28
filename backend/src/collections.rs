@@ -496,3 +496,117 @@ fn bad(msg: &str) -> (StatusCode, Json<serde_json::Value>) {
 fn oops() -> (StatusCode, Json<serde_json::Value>) {
     (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "error": "Something went wrong." })))
 }
+
+#[derive(Serialize, sqlx::FromRow)]
+pub struct CollectionComment {
+    pub id: i64,
+    /// NULL for a former user whose account was deleted (FK `SET NULL`) -
+    /// same as guide_comments, still shown with their name at the time.
+    pub user_id: Option<i64>,
+    pub author_name: String,
+    pub body: String,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+}
+
+/// Gated on `is_public` like `detail()` - a private collection's comments
+/// are just as private as its meal list, not a side channel around it.
+pub async fn list_comments(
+    State(state): State<AppState>,
+    user: Option<CurrentUser>,
+    Path(id): Path<i64>,
+) -> Result<Json<Vec<CollectionComment>>, StatusCode> {
+    let row: Option<(i64, bool)> = sqlx::query_as("SELECT user_id, is_public FROM meal_collections WHERE id = $1")
+        .bind(id)
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let Some((owner_id, is_public)) = row else {
+        return Err(StatusCode::NOT_FOUND);
+    };
+    let is_mine = user.map(|u| u.0.id) == Some(owner_id);
+    if !is_public && !is_mine {
+        return Err(StatusCode::NOT_FOUND);
+    }
+
+    sqlx::query_as::<_, CollectionComment>(
+        "SELECT id, user_id, author_name, body, created_at
+         FROM collection_comments WHERE collection_id = $1
+         ORDER BY created_at",
+    )
+    .bind(id)
+    .fetch_all(&state.db)
+    .await
+    .map(Json)
+    .map_err(|e| {
+        tracing::error!("list collection comments failed: {e}");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })
+}
+
+#[derive(Deserialize)]
+pub struct NewComment {
+    pub body: String,
+}
+
+pub async fn create_comment(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Path(id): Path<i64>,
+    Json(body): Json<NewComment>,
+) -> Result<(StatusCode, Json<serde_json::Value>), (StatusCode, Json<serde_json::Value>)> {
+    crate::ratelimit::check(&state.db, user.id, "collection_comment", 20, 10).await?;
+
+    let text = body.body.trim();
+    if text.is_empty() || text.chars().count() > 1000 {
+        return Err(bad("Say something between 1 and 1000 characters."));
+    }
+
+    let row: Option<(i64, bool)> = sqlx::query_as("SELECT user_id, is_public FROM meal_collections WHERE id = $1")
+        .bind(id)
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|_| oops())?;
+    let Some((owner_id, is_public)) = row else {
+        return Err((StatusCode::NOT_FOUND, Json(serde_json::json!({ "error": "Collection not found." }))));
+    };
+    if !is_public && owner_id != user.id {
+        return Err((StatusCode::NOT_FOUND, Json(serde_json::json!({ "error": "Collection not found." }))));
+    }
+
+    let comment_id: i64 = sqlx::query_scalar(
+        "INSERT INTO collection_comments (collection_id, user_id, author_name, body) VALUES ($1,$2,$3,$4) RETURNING id",
+    )
+    .bind(id)
+    .bind(user.id)
+    .bind(&user.display_name)
+    .bind(text)
+    .fetch_one(&state.db)
+    .await
+    .map_err(|e| {
+        tracing::error!("create collection comment failed: {e}");
+        oops()
+    })?;
+
+    Ok((StatusCode::CREATED, Json(serde_json::json!({ "id": comment_id }))))
+}
+
+/// Author-only: withdraw your own comment. Plain hard delete - same "closer
+/// to a chat message than catalog content" reasoning guide_comments uses.
+pub async fn delete_comment(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Path((_id, comment_id)): Path<(i64, i64)>,
+) -> Result<StatusCode, StatusCode> {
+    let deleted = sqlx::query("DELETE FROM collection_comments WHERE id = $1 AND user_id = $2")
+        .bind(comment_id)
+        .bind(user.id)
+        .execute(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .rows_affected();
+
+    if deleted == 0 {
+        return Err(StatusCode::NOT_FOUND);
+    }
+    Ok(StatusCode::NO_CONTENT)
+}

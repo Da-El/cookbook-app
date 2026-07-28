@@ -1,6 +1,8 @@
+import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '../api/client';
+import { useAuth } from '../auth/AuthContext';
 import { useToast } from '../components/Toast/ToastContext';
 import { MealCard, MealGrid } from '../components/MealCard/MealCard';
 import { LoadingState, ErrorState } from '../components/PageState/PageState';
@@ -16,6 +18,22 @@ interface CollectionMeal {
   time_minutes: number;
   rating: number;
   photo_url: string | null;
+}
+
+interface CollectionComment {
+  id: number;
+  user_id: number | null;
+  author_name: string;
+  body: string;
+  created_at: string;
+}
+
+function relativeTime(iso: string) {
+  const days = Math.round((Date.now() - new Date(iso).getTime()) / 86400000);
+  if (days < 1) return 'today';
+  if (days === 1) return '1 day ago';
+  if (days < 30) return `${days} days ago`;
+  return new Date(iso).toLocaleDateString(undefined, { month: 'short', year: 'numeric' });
 }
 
 interface CollectionDetailData {
@@ -35,12 +53,34 @@ export function CollectionDetail() {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const toast = useToast();
+  const { user } = useAuth();
+  const [comment, setComment] = useState('');
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['collection', id],
     queryFn: () => api.get<CollectionDetailData>(`/collections/${id}`),
     enabled: Boolean(id),
     retry: (failureCount, err) => (err instanceof ApiError ? false : failureCount < 2),
+  });
+
+  const { data: comments = [] } = useQuery({
+    queryKey: ['collection-comments', id],
+    queryFn: () => api.get<CollectionComment[]>(`/collections/${id}/comments`),
+    enabled: Boolean(id) && Boolean(data),
+  });
+
+  const postComment = useMutation({
+    mutationFn: () => api.post(`/collections/${id}/comments`, { body: comment.trim() }),
+    onSuccess: () => {
+      setComment('');
+      qc.invalidateQueries({ queryKey: ['collection-comments', id] });
+    },
+    onError: (e) => toast(e instanceof ApiError ? e.message : 'Could not post that comment.'),
+  });
+
+  const deleteComment = useMutation({
+    mutationFn: (commentId: number) => api.del(`/collections/${id}/comments/${commentId}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['collection-comments', id] }),
   });
 
   const removeMeal = useMutation({
@@ -215,6 +255,52 @@ export function CollectionDetail() {
             </div>
           ))}
         </MealGrid>
+      )}
+
+      {data && (
+        <section className={styles.section}>
+          <h2 className={styles.sectionTopic}>Discussion</h2>
+          {user && (
+            <div className={styles.editForm}>
+              <textarea
+                className={styles.editTextarea}
+                value={comment}
+                onChange={(e) => setComment(e.target.value)}
+                placeholder="Say something about this collection…"
+                rows={3}
+                maxLength={1000}
+              />
+              <button
+                className={styles.editSubmit}
+                disabled={!comment.trim() || postComment.isPending}
+                onClick={() => postComment.mutate()}
+              >
+                Post
+              </button>
+            </div>
+          )}
+          {comments.length === 0 ? (
+            <p className={styles.cardSummary}>No comments yet — be the first to say something.</p>
+          ) : (
+            <div className={styles.editList}>
+              {comments.map((c) => (
+                <div key={c.id} className={styles.editRow}>
+                  <span className={styles.editRowMeta}>
+                    {c.author_name} · {relativeTime(c.created_at)}
+                  </span>
+                  <p className={styles.editRowBody}>{c.body}</p>
+                  {user && c.user_id === user.id && (
+                    <div className={styles.editRowActions}>
+                      <button className={styles.editDeleteBtn} onClick={() => deleteComment.mutate(c.id)}>
+                        Delete
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
       )}
     </div>
   );

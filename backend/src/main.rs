@@ -156,6 +156,8 @@ async fn main() -> anyhow::Result<()> {
         .route("/collections/{id}/meals", post(collections::add_meal))
         .route("/collections/{id}/meals/{meal_id}", delete(collections::remove_meal))
         .route("/collections/{id}/meals/{meal_id}/move", post(collections::move_meal))
+        .route("/collections/{id}/comments", get(collections::list_comments).post(collections::create_comment))
+        .route("/collections/{id}/comments/{comment_id}", delete(collections::delete_comment))
         // import
         .route("/import/url", post(import::import_url))
         .route("/import/text", post(import::import_text))
