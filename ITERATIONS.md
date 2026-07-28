@@ -87,3 +87,46 @@ and records who did it and why.
 removed (by its author, or now by a moderator), the guide body doesn't fall back
 to the original seed text — nothing currently preserves it. Filed as a follow-up;
 needs a small schema/seed change to fix properly.
+
+---
+
+## Batch 3 — Iterations 11–15
+
+**Commit:** `7ee37b8` (local only — not pushed/deployed this batch, per standing
+instruction) · **Migrations:** 0013–0016 · **Tests:** 53 backend, passing
+
+11. **Contributor recognition** — the reputation-weight tiers that have quietly
+    decided how much a vote counts since Batch 1 are now a visible
+    novice/trusted/veteran badge (never the raw weight or an activity count,
+    just the tier), shown on chef profiles and every byline — reviews,
+    revision history, ingredient edits. New "Top contributors" leaderboard
+    ranked by the same three activity signals the weight itself is computed
+    from.
+12. **Recipe forking** — any user can fork a public recipe into their own
+    fully-owned, independently editable copy, with "Adapted from X by Y"
+    attribution back to the source. Distinct from the propose-and-vote edit
+    system: a real fork, not a suggestion on someone else's recipe.
+13. **Notifications** — the notifications table, bell icon, unread badge, and
+    Activity tab all existed since the original build, but four of five
+    reserved types were never actually triggered. Wired up
+    meal_cooked/meal_saved/edit_won (the last deduped via a `notified_win`
+    flag so re-voting an already-won edit doesn't spam its author), plus two
+    new types for the moderation system: content_removed and flag_resolved.
+14. **Discovery + advanced filtering** — a heuristic difficulty label
+    (easy/medium/hard, derived from step count and time, nobody self-rates
+    anything), time and difficulty filters on Browse, a "rising" sort that
+    boosts recent meals for two weeks before they compete purely on
+    ranked_score, real Open Graph tags (server-spliced into the SPA shell for
+    meal/ingredient/guide pages, so a shared link actually previews that
+    recipe) and a print stylesheet for the recipe page.
+15. **Auth + settings hardening** — a pluggable email-sending abstraction
+    (logs to stdout with no provider configured — the same real fallback
+    password reset always had — but every caller starts actually delivering
+    the moment a provider key exists, no code change needed). Password reset
+    is the first caller. A new "Recent sign-in activity" section in Settings
+    shows every login attempt, success and failure, against the account —
+    separate from the live-sessions list.
+
+**Verified:** every new endpoint tested end-to-end against live data (curl +
+real browser UI, including a real OG-tag-injected page load and a genuine
+failed-then-successful login pair) before test-data cleanup.
