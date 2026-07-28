@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '../api/client';
-import type { IngredientDetail as Detail, Micros } from '../api/types';
+import type { IngredientDetail as Detail, Micros, Nutrition } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
 import { useToast } from '../components/Toast/ToastContext';
 import { ChevronLeft } from '../components/Icon/Icon';
@@ -54,6 +54,45 @@ const DV: Record<keyof Micros, { label: string; dv: number }> = {
   magnesium_mg: { label: 'Magnesium', dv: 420 },
   sodium_mg: { label: 'Sodium', dv: 2300 },
 };
+
+interface Highlight {
+  text: string;
+  tier: 'excellent' | 'good' | 'caution';
+}
+
+/**
+ * Plain-language callouts derived from the same %DV numbers the
+ * micronutrient bars already compute - not a separate claim, just the
+ * headline version of what's already on the page. Follows the FDA label
+ * convention (20%+ DV = "excellent source," 10-19% = "good source") rather
+ * than inventing new thresholds. Sodium is framed as a caution, not a
+ * highlight - a food shouldn't get credit for having a lot of something
+ * people are trying to limit.
+ */
+function nutritionHighlights(n: Nutrition): Highlight[] {
+  const pct = (value: number | null, dv: number) => (value == null ? 0 : (value / dv) * 100);
+  const out: Highlight[] = [];
+
+  const positives: [number | null, number, string][] = [
+    [n.fiber, 28, 'fiber'],
+    [n.micros.vit_c_mg, 90, 'vitamin C'],
+    [n.micros.calcium_mg, 1300, 'calcium'],
+    [n.micros.iron_mg, 18, 'iron'],
+    [n.micros.potassium_mg, 4700, 'potassium'],
+    [n.micros.magnesium_mg, 420, 'magnesium'],
+  ];
+  for (const [value, dv, label] of positives) {
+    const p = pct(value, dv);
+    if (p >= 20) out.push({ text: `Excellent source of ${label}`, tier: 'excellent' });
+    else if (p >= 10) out.push({ text: `Good source of ${label}`, tier: 'good' });
+  }
+
+  if (pct(n.micros.sodium_mg, 2300) >= 20) {
+    out.push({ text: 'High in sodium', tier: 'caution' });
+  }
+
+  return out;
+}
 
 interface UsedInMeal {
   id: number;
@@ -143,6 +182,7 @@ export function IngredientDetail() {
   }
 
   const n = data.nutrition;
+  const highlights = n ? nutritionHighlights(n) : [];
 
   return (
     <div className={styles.page}>
@@ -287,6 +327,16 @@ export function IngredientDetail() {
         <div className={styles.card}>
           <p className={styles.sectionTitle}>Nutrition facts</p>
           <p className={styles.serving}>Per {n.serving_size}</p>
+
+          {highlights.length > 0 && (
+            <div className={styles.highlightRow}>
+              {highlights.map((h) => (
+                <span key={h.text} className={`${styles.highlightChip} ${styles[`highlight_${h.tier}`]}`}>
+                  {h.text}
+                </span>
+              ))}
+            </div>
+          )}
 
           <div className={styles.macros}>
             <Macro value={n.calories} label="Cal" />

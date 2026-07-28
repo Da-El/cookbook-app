@@ -18,6 +18,10 @@ export interface MealCardData {
   is_top_in_cuisine?: boolean;
   /// Diets every catalog-matched ingredient supports (see backend/src/diet.rs).
   diet_tags?: string[];
+  /// Distinct users who've cooked this - a popularity signal independent of
+  /// rating_count, since cooking something and rating it are separate
+  /// actions. Optional for the same reason is_top_in_cuisine is.
+  cook_count?: number;
 }
 
 /// vegan implies vegetarian implies pescatarian in how diet.rs tags
@@ -79,6 +83,14 @@ export function MealCard({
           <>
             <span>·</span>
             <span className={styles.dietTag}>{diet}</span>
+          </>
+        )}
+        {Boolean(meal.cook_count) && (
+          <>
+            <span>·</span>
+            <span title={`Cooked by ${meal.cook_count} chef${meal.cook_count === 1 ? '' : 's'}`}>
+              🍳 {meal.cook_count}
+            </span>
           </>
         )}
       </div>

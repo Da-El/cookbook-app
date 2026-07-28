@@ -108,6 +108,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/meals/discover", get(meals::discover))
         .route("/meals/{id}", get(meals::detail).post(meals::update).delete(meals::delete))
         .route("/meals/{id}/fork", post(meals::fork))
+        .route("/meals/{id}/duplicate", post(meals::duplicate))
         .route("/meals/{id}/save", post(meals::toggle_save))
         .route("/meals/{id}/occasions", get(meals::list_occasions))
         .route("/meals/{id}/occasions/{tag}/vote", post(meals::vote_occasion))
@@ -128,6 +129,7 @@ async fn main() -> anyhow::Result<()> {
         // kitchen
         .route("/fridge", get(kitchen::fridge_list).post(kitchen::fridge_add))
         .route("/fridge/{id}", delete(kitchen::fridge_remove))
+        .route("/fridge/{id}/staple", post(kitchen::toggle_staple))
         .route("/shopping", get(kitchen::shopping_list).post(kitchen::shopping_add))
         .route("/shopping/many", post(kitchen::shopping_add_many))
         .route("/shopping/{id}", delete(kitchen::shopping_remove))

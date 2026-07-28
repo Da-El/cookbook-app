@@ -555,3 +555,22 @@
   cursor: pointer;
   padding: 0;
 }
+
+.stapleToggle {
+  width: 29px;
+  height: 29px;
+  flex: none;
+  border: none;
+  background: var(--chip-bg);
+  border-radius: 999px;
+  color: var(--muted-3);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+}
+
+.stapleOn {
+  background: var(--amber-tint);
+  color: var(--amber);
+}

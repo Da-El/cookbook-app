@@ -32,6 +32,10 @@ pub struct MealCard {
     pub diet_tags: Vec<String>,
     /// "easy" | "medium" | "hard" - heuristic, see `meal_difficulty_sql!`.
     pub difficulty: String,
+    /// Distinct users who've marked this cooked, not a rating - so a proven,
+    /// often-made recipe with few reviews still reads as trusted rather than
+    /// obscure. See `meal_cook_count_sql!`.
+    pub cook_count: i64,
 }
 
 /// Appended to a `MealCard`-shaped SELECT: true only for the single meal in
@@ -96,6 +100,18 @@ macro_rules! meal_difficulty_sql {
     };
 }
 
+/// Appended alongside the other MealCard fragments: how many distinct users
+/// have this meal in their cooked list. A plain count of `cooked_meals`
+/// rows, not `ratings` - cooking it and rating it are two separate actions
+/// (see meals.rs's `cook()`/`rate()`), and someone who's made a dish five
+/// times without ever rating it should still count toward "people actually
+/// cook this."
+macro_rules! meal_cook_count_sql {
+    () => {
+        "(SELECT count(*) FROM cooked_meals cm WHERE cm.meal_id = m.id) AS cook_count"
+    };
+}
+
 #[derive(Deserialize)]
 pub struct BrowseParams {
     pub search: Option<String>,
@@ -135,7 +151,8 @@ pub async fn browse(
         "SELECT m.id, m.name, m.author_id, u.display_name AS author_name, m.cuisine, m.meal_type,
                 m.time_minutes, m.rating::float8 AS rating, m.rating_count, m.photo_url,
                 COALESCE(m.have_count, 0) AS have_count, COALESCE(m.total_count, 0) AS total_count,
-                ", is_top_in_cuisine_sql!(), ", ", meal_diet_tags_sql!(), ", ", meal_difficulty_sql!(), "
+                ", is_top_in_cuisine_sql!(), ", ", meal_diet_tags_sql!(), ", ", meal_difficulty_sql!(), ",
+                ", meal_cook_count_sql!(), "
          FROM (
            SELECT m.*,
              (SELECT count(*) FROM meal_ingredients mi
@@ -318,7 +335,8 @@ pub async fn detail(
                      AND EXISTS (SELECT 1 FROM fridge_items f
                                  WHERE f.user_id = $2 AND f.ingredient_id = mi.ingredient_id)) AS have_count,
                 (SELECT count(*) FROM meal_ingredients mi WHERE mi.meal_id = m.id) AS total_count,
-                ", is_top_in_cuisine_sql!(), ", ", meal_diet_tags_sql!(), ", ", meal_difficulty_sql!(), "
+                ", is_top_in_cuisine_sql!(), ", ", meal_diet_tags_sql!(), ", ", meal_difficulty_sql!(), ",
+                ", meal_cook_count_sql!(), "
          FROM meals m JOIN users u ON u.id = m.author_id
          WHERE m.id = $1 AND m.status = 'live'"
     ))
@@ -463,7 +481,8 @@ pub async fn discover(
                         m.rating_count, m.photo_url, \
                         COALESCE(m.have_count, 0) AS have_count, \
                         COALESCE(m.total_count, 0) AS total_count, \
-                        ", is_top_in_cuisine_sql!(), ", ", meal_diet_tags_sql!(), ", ", meal_difficulty_sql!(), " \
+                        ", is_top_in_cuisine_sql!(), ", ", meal_diet_tags_sql!(), ", ", meal_difficulty_sql!(), ", \
+                        ", meal_cook_count_sql!(), " \
                  FROM ( \
                    SELECT m.*, \
                      (SELECT count(*) FROM meal_ingredients mi \
@@ -849,6 +868,89 @@ pub async fn fork(
     .await
     .map_err(|e| {
         tracing::error!("fork meal failed: {e}");
+        oops()
+    })?;
+
+    sqlx::query(
+        "INSERT INTO meal_ingredients (meal_id, ingredient_id, raw_name, amount, unit, note, position)
+         SELECT $1, ingredient_id, raw_name, amount, unit, note, position
+         FROM meal_ingredients WHERE meal_id = $2",
+    )
+    .bind(new_id)
+    .bind(id)
+    .execute(&mut *tx)
+    .await
+    .map_err(|_| oops())?;
+
+    sqlx::query(
+        "INSERT INTO meal_photos (meal_id, photo_url, position)
+         SELECT $1, photo_url, position FROM meal_photos WHERE meal_id = $2",
+    )
+    .bind(new_id)
+    .bind(id)
+    .execute(&mut *tx)
+    .await
+    .map_err(|_| oops())?;
+
+    tx.commit().await.map_err(|_| oops())?;
+
+    Ok((StatusCode::CREATED, Json(serde_json::json!({ "id": new_id }))))
+}
+
+/// The other direction from `fork`: copying your OWN recipe as a starting
+/// point for a variation ("Sunday roast" -> "Sunday roast, but slow-cooker"),
+/// rather than continuing someone else's. No `forked_from_*` attribution -
+/// it isn't a fork of anything, it's just a second draft of your own work -
+/// and the copy lands as `personal` regardless of the original's visibility,
+/// so an untouched duplicate never shows up in Browse looking like a
+/// redundant twin of the recipe it came from until its author actually
+/// changes and republishes it.
+pub async fn duplicate(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Path(id): Path<i64>,
+) -> Result<(StatusCode, Json<serde_json::Value>), (StatusCode, Json<serde_json::Value>)> {
+    let mut tx = state.db.begin().await.map_err(|_| oops())?;
+
+    let original = sqlx::query_as::<_, (String, String, String, i32, Option<String>, String, Vec<String>, Option<String>, i64)>(
+        "SELECT name, cuisine, meal_type, time_minutes, serves, description, steps, photo_url, author_id
+         FROM meals WHERE id = $1 AND status = 'live'",
+    )
+    .bind(id)
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(|_| oops())?;
+
+    let Some((name, cuisine, meal_type, time_minutes, serves, description, steps, photo_url, author_id)) = original
+    else {
+        return Err((StatusCode::NOT_FOUND, Json(serde_json::json!({ "error": "Recipe not found." }))));
+    };
+    if author_id != user.id {
+        return Err((
+            StatusCode::FORBIDDEN,
+            Json(serde_json::json!({ "error": "You can only duplicate your own recipes." })),
+        ));
+    }
+
+    let copy_name = format!("{name} (copy)");
+    let new_id: i64 = sqlx::query_scalar(
+        "INSERT INTO meals (name, author_id, cuisine, meal_type, time_minutes, serves,
+                            description, steps, photo_url, visibility)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'personal') RETURNING id",
+    )
+    .bind(&copy_name)
+    .bind(user.id)
+    .bind(&cuisine)
+    .bind(&meal_type)
+    .bind(time_minutes)
+    .bind(&serves)
+    .bind(&description)
+    .bind(&steps)
+    .bind(&photo_url)
+    .fetch_one(&mut *tx)
+    .await
+    .map_err(|e| {
+        tracing::error!("duplicate meal failed: {e}");
         oops()
     })?;
 
@@ -1818,6 +1920,9 @@ pub struct ReviewReply {
     pub author_name: Option<String>,
     pub body: String,
     pub created_at: chrono::DateTime<chrono::Utc>,
+    /// NULL for a top-level reply to the review itself; otherwise the reply
+    /// this one is threaded under. The frontend builds the tree from this.
+    pub parent_reply_id: Option<i64>,
 }
 
 #[derive(Deserialize)]
@@ -1895,7 +2000,7 @@ pub async fn meal_reviews(
 
     let review_ids: Vec<i64> = rows.iter().map(|r| r.id).collect();
     let replies = sqlx::query_as::<_, ReviewReply>(
-        "SELECT id, review_id, user_id, author_name, body, created_at
+        "SELECT id, review_id, user_id, author_name, body, created_at, parent_reply_id
          FROM review_replies WHERE review_id = ANY($1) ORDER BY created_at",
     )
     .bind(&review_ids)
@@ -1915,11 +2020,16 @@ pub async fn meal_reviews(
 #[derive(Deserialize)]
 pub struct NewReply {
     pub body: String,
+    /// Threads this reply under another reply on the same review, instead of
+    /// directly under the review. `None` (or omitted) is a top-level reply.
+    #[serde(default)]
+    pub parent_reply_id: Option<i64>,
 }
 
 /// Any signed-in user, not just the meal's author - the same "everyone who
-/// cooked this can speak" spirit as reviews themselves. One level deep:
-/// replies to reviews, never replies to replies.
+/// cooked this can speak" spirit as reviews themselves. Replies can thread
+/// under other replies (`parent_reply_id`), not just the review itself, so a
+/// back-and-forth has somewhere to go besides a flat list.
 pub async fn create_reply(
     State(state): State<AppState>,
     CurrentUser(user): CurrentUser,
@@ -1945,13 +2055,30 @@ pub async fn create_reply(
         return Err((StatusCode::NOT_FOUND, Json(serde_json::json!({ "error": "Review not found." }))));
     }
 
+    // A parent must be a real reply on this same review - otherwise a client
+    // could thread a reply under some other review's reply entirely.
+    if let Some(parent_id) = body.parent_reply_id {
+        let parent_ok: Option<i64> =
+            sqlx::query_scalar("SELECT id FROM review_replies WHERE id = $1 AND review_id = $2")
+                .bind(parent_id)
+                .bind(review_id)
+                .fetch_optional(&state.db)
+                .await
+                .map_err(|_| oops())?;
+        if parent_ok.is_none() {
+            return Err(bad("That reply no longer exists."));
+        }
+    }
+
     let reply_id: i64 = sqlx::query_scalar(
-        "INSERT INTO review_replies (review_id, user_id, author_name, body) VALUES ($1,$2,$3,$4) RETURNING id",
+        "INSERT INTO review_replies (review_id, user_id, author_name, body, parent_reply_id)
+         VALUES ($1,$2,$3,$4,$5) RETURNING id",
     )
     .bind(review_id)
     .bind(user.id)
     .bind(&user.display_name)
     .bind(text)
+    .bind(body.parent_reply_id)
     .fetch_one(&state.db)
     .await
     .map_err(|e| {
@@ -1959,25 +2086,38 @@ pub async fn create_reply(
         oops()
     })?;
 
-    sqlx::query(
-        "INSERT INTO notifications (recipient_id, actor_id, type, subject_type, subject_id)
-         SELECT user_id, $2, 'review_reply', 'meal', $3 FROM reviews WHERE id = $1 AND user_id <> $2",
-    )
-    .bind(review_id)
-    .bind(user.id)
-    .bind(meal_id)
-    .execute(&state.db)
-    .await
-    .ok();
+    // Whoever this reply is actually addressed to: the parent reply's author
+    // when threaded under a reply, otherwise the review's author.
+    let recipient_id: Option<i64> = if let Some(parent_id) = body.parent_reply_id {
+        sqlx::query_scalar("SELECT user_id FROM review_replies WHERE id = $1 AND user_id <> $2")
+            .bind(parent_id)
+            .bind(user.id)
+            .fetch_optional(&state.db)
+            .await
+            .ok()
+            .flatten()
+    } else {
+        sqlx::query_scalar("SELECT user_id FROM reviews WHERE id = $1 AND user_id <> $2")
+            .bind(review_id)
+            .bind(user.id)
+            .fetch_optional(&state.db)
+            .await
+            .ok()
+            .flatten()
+    };
 
-    let notified: Option<i64> = sqlx::query_scalar("SELECT user_id FROM reviews WHERE id = $1 AND user_id <> $2")
-        .bind(review_id)
+    if let Some(recipient_id) = recipient_id {
+        sqlx::query(
+            "INSERT INTO notifications (recipient_id, actor_id, type, subject_type, subject_id)
+             VALUES ($1, $2, 'review_reply', 'meal', $3)",
+        )
+        .bind(recipient_id)
         .bind(user.id)
-        .fetch_optional(&state.db)
+        .bind(meal_id)
+        .execute(&state.db)
         .await
-        .ok()
-        .flatten();
-    if let Some(recipient_id) = notified {
+        .ok();
+
         crate::notify::send_notification_email(
             &state.db, recipient_id, "review_reply",
             "Someone replied to your review on Cookbook",
@@ -2162,7 +2302,8 @@ pub async fn random(
         "SELECT m.id, m.name, m.author_id, u.display_name AS author_name, m.cuisine, m.meal_type,
                 m.time_minutes, m.rating::float8 AS rating, m.rating_count, m.photo_url,
                 COALESCE(m.have_count, 0) AS have_count, COALESCE(m.total_count, 0) AS total_count,
-                ", is_top_in_cuisine_sql!(), ", ", meal_diet_tags_sql!(), ", ", meal_difficulty_sql!(), "
+                ", is_top_in_cuisine_sql!(), ", ", meal_diet_tags_sql!(), ", ", meal_difficulty_sql!(), ",
+                ", meal_cook_count_sql!(), "
          FROM (
            SELECT m.*,
              (SELECT count(*) FROM meal_ingredients mi

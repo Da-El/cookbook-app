@@ -13,6 +13,9 @@ pub struct KitchenItem {
     pub ingredient_id: Option<i64>,
     pub name: String,
     pub category: String,
+    /// Always false for a shopping-list row - staples are a fridge-only
+    /// concept (see `toggle_staple`'s doc comment).
+    pub is_staple: bool,
 }
 
 #[derive(Deserialize)]
@@ -38,7 +41,7 @@ pub async fn fridge_list(
 ) -> Result<Json<Vec<KitchenItem>>, StatusCode> {
     let rows = sqlx::query_as::<_, KitchenItem>(
         "SELECT t.id, t.ingredient_id, COALESCE(i.name, t.custom_name) AS name,
-                COALESCE(i.category, 'Other') AS category
+                COALESCE(i.category, 'Other') AS category, t.is_staple
          FROM fridge_items t LEFT JOIN ingredients i ON i.id = t.ingredient_id
          WHERE t.user_id = $1 ORDER BY category, name",
     )
@@ -47,6 +50,29 @@ pub async fn fridge_list(
     .await
     .map_err(db_err)?;
     Ok(Json(rows))
+}
+
+/// A staple is always considered stocked - excluded from the grocery list
+/// outright (not just annotated "already have it" like a regular fridge
+/// item) since re-buying salt or oil every week isn't a real need. Toggling
+/// only makes sense on an actual fridge row, so this takes the row id, not
+/// an ingredient id.
+pub async fn toggle_staple(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Path(id): Path<i64>,
+) -> Result<StatusCode, StatusCode> {
+    let updated = sqlx::query("UPDATE fridge_items SET is_staple = NOT is_staple WHERE id = $1 AND user_id = $2")
+        .bind(id)
+        .bind(user.id)
+        .execute(&state.db)
+        .await
+        .map_err(db_err)?
+        .rows_affected();
+    if updated == 0 {
+        return Err(StatusCode::NOT_FOUND);
+    }
+    Ok(StatusCode::NO_CONTENT)
 }
 
 pub async fn fridge_add(
@@ -88,7 +114,7 @@ pub async fn shopping_list(
 ) -> Result<Json<Vec<KitchenItem>>, StatusCode> {
     let rows = sqlx::query_as::<_, KitchenItem>(
         "SELECT t.id, t.ingredient_id, COALESCE(i.name, t.custom_name) AS name,
-                COALESCE(i.category, 'Other') AS category
+                COALESCE(i.category, 'Other') AS category, FALSE AS is_staple
          FROM shopping_items t LEFT JOIN ingredients i ON i.id = t.ingredient_id
          WHERE t.user_id = $1 ORDER BY category, name",
     )

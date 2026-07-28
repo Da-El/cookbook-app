@@ -222,6 +222,10 @@ struct PlannedIngredient {
     meal_name: String,
     category: Option<String>,
     in_fridge: bool,
+    /// A staple never makes it onto the list at all - see kitchen.rs's
+    /// `toggle_staple` doc comment for why this is a hard skip rather than
+    /// the softer "already have it" `in_fridge` annotation.
+    is_staple: bool,
 }
 
 #[derive(Serialize)]
@@ -260,7 +264,9 @@ async fn planned_ingredients(
         "SELECT mi.ingredient_id, mi.raw_name, mi.amount::float8 AS amount, mi.unit, mi.note,
                 e.servings, m.name AS meal_name, i.category,
                 EXISTS (SELECT 1 FROM fridge_items f
-                        WHERE f.user_id = $1 AND f.ingredient_id = mi.ingredient_id) AS in_fridge
+                        WHERE f.user_id = $1 AND f.ingredient_id = mi.ingredient_id) AS in_fridge,
+                EXISTS (SELECT 1 FROM fridge_items f
+                        WHERE f.user_id = $1 AND f.ingredient_id = mi.ingredient_id AND f.is_staple) AS is_staple
          FROM meal_plan_entries e
          JOIN meals m ON m.id = e.meal_id AND m.status = 'live'
          JOIN meal_ingredients mi ON mi.meal_id = m.id
@@ -382,6 +388,9 @@ pub async fn grocery_list(
     let mut order: Vec<String> = Vec::new();
 
     for r in rows {
+        if r.is_staple {
+            continue;
+        }
         let key = match r.ingredient_id {
             Some(id) => format!("i:{id}"),
             None => format!("n:{}", r.raw_name.trim().to_lowercase()),

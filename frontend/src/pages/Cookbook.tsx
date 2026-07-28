@@ -36,6 +36,7 @@ interface KitchenItem {
   ingredient_id: number | null;
   name: string;
   category: string;
+  is_staple: boolean;
 }
 
 interface MyReview {
@@ -244,6 +245,11 @@ export function Cookbook() {
 
   const removeItem = useMutation({
     mutationFn: (id: number) => api.del(`/${kitchenKey}/${id}`),
+    onSuccess: invalidateKitchen,
+  });
+
+  const toggleStaple = useMutation({
+    mutationFn: (id: number) => api.post(`/fridge/${id}/staple`),
     onSuccess: invalidateKitchen,
   });
 
@@ -654,12 +660,28 @@ export function Cookbook() {
                             <span className={styles.itemName} style={{ display: 'block' }}>{it.name}</span>
                             <span className={styles.itemSub} style={{ display: 'block' }}>
                               {it.ingredient_id ? it.category : 'Quick add · no page'}
+                              {it.is_staple && ' · Staple'}
                             </span>
                           </span>
                         </button>
                         {tab === 'shopping' && (
                           <button className={styles.gotIt} onClick={() => gotIt.mutate(it.id)}>
                             Got it ✓
+                          </button>
+                        )}
+                        {tab === 'fridge' && (
+                          <button
+                            className={`${styles.stapleToggle} ${it.is_staple ? styles.stapleOn : ''}`}
+                            onClick={() => toggleStaple.mutate(it.id)}
+                            title={
+                              it.is_staple
+                                ? 'Pantry staple - never added to the grocery list'
+                                : 'Mark as a pantry staple you always have'
+                            }
+                            aria-label={it.is_staple ? `Unmark ${it.name} as a staple` : `Mark ${it.name} as a staple`}
+                            aria-pressed={it.is_staple}
+                          >
+                            ★
                           </button>
                         )}
                         <button

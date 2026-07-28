@@ -166,6 +166,35 @@
   margin: 0 0 16px;
 }
 
+.highlightRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: -6px 0 16px;
+}
+
+.highlightChip {
+  padding: 5px 11px;
+  border-radius: 999px;
+  font: 700 11.5px var(--font-ui);
+  white-space: nowrap;
+}
+
+.highlight_excellent {
+  background: var(--green-tint);
+  color: var(--green);
+}
+
+.highlight_good {
+  background: var(--amber-tint);
+  color: var(--amber);
+}
+
+.highlight_caution {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
 .usedTitle {
   font-family: var(--font-display);
   font-size: 22px;

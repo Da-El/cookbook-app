@@ -84,6 +84,16 @@ export const ForkIcon = (p: IconProps) =>
     p,
   );
 
+/** Two overlapping cards - duplicating your own recipe as a new draft. */
+export const CopyIcon = (p: IconProps) =>
+  svg(
+    <>
+      <rect x="8.5" y="8.5" width="11.5" height="11.5" rx="2" />
+      <path d="M15.5 8.5V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7.5a2 2 0 0 0 2 2h2.5" />
+    </>,
+    p,
+  );
+
 export const PrintIcon = (p: IconProps) =>
   svg(
     <>

@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 import { useToast } from '../components/Toast/ToastContext';
-import { ChevronLeft, CameraIcon, ShareIcon, PlayIcon, PencilIcon, ForkIcon, PrintIcon } from '../components/Icon/Icon';
+import { ChevronLeft, CameraIcon, ShareIcon, PlayIcon, PencilIcon, ForkIcon, CopyIcon, PrintIcon } from '../components/Icon/Icon';
 import { Avatar } from '../components/Avatar/Avatar';
 import { LoadingState, ErrorState } from '../components/PageState/PageState';
 import { FlagButton } from '../components/Flag/FlagButton';
@@ -66,6 +66,7 @@ interface MealDetailData {
   time_minutes: number;
   rating: number;
   rating_count: number;
+  cook_count: number;
   photo_url: string | null;
   photos: string[];
   description: string;
@@ -146,6 +147,7 @@ interface ReviewReply {
   author_name: string | null;
   body: string;
   created_at: string;
+  parent_reply_id: number | null;
 }
 
 function formatDate(iso: string) {
@@ -303,6 +305,17 @@ export function MealDetail() {
     onError: (e) => toast(e instanceof ApiError ? e.message : 'Could not fork that.'),
   });
 
+  const duplicate = useMutation({
+    mutationFn: () => api.post<{ id: number }>(`/meals/${id}/duplicate`),
+    onSuccess: (res) => {
+      toast('Duplicated - editing your copy');
+      qc.invalidateQueries({ queryKey: ['cookbook'] });
+      qc.invalidateQueries({ queryKey: ['cookbook-counts'] });
+      navigate(`/meals/${res.id}/edit`);
+    },
+    onError: (e) => toast(e instanceof ApiError ? e.message : 'Could not duplicate that.'),
+  });
+
   if (isLoading) return <LoadingState label="Loading recipe…" />;
   if (isError || !meal) {
     const notFound = error instanceof ApiError && error.status === 404;
@@ -393,6 +406,16 @@ export function MealDetail() {
               <CameraIcon size={18} strokeWidth={1.8} />
             </button>
           )}
+          {isAuthor && (
+            <button
+              className={styles.actionBtn}
+              title="Duplicate as a new recipe"
+              disabled={duplicate.isPending}
+              onClick={() => duplicate.mutate()}
+            >
+              <CopyIcon size={17} strokeWidth={1.8} />
+            </button>
+          )}
           {meal.can_fork && (
             <button
               className={styles.actionBtn}
@@ -447,6 +470,11 @@ export function MealDetail() {
           </span>
         )}
         {meal.rating_count > 0 && <span>{meal.rating_count} ratings</span>}
+        {meal.cook_count > 0 && (
+          <span title={`Cooked by ${meal.cook_count} chef${meal.cook_count === 1 ? '' : 's'}`}>
+            🍳 {meal.cook_count} cooked
+          </span>
+        )}
         <span>{meal.time_minutes} min</span>
         <span>Serves {meal.serves ?? '4'}</span>
       </div>
