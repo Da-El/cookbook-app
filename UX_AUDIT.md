@@ -153,3 +153,30 @@ sites were migrated first, not assumed.
 **Verified:** `npx tsc --noEmit` and `vite build` clean; confirmed in-browser
 on both `/create/meal` and `/create/ingredient` that the 10-segment
 `RatingInput` renders and is the only rating control present.
+
+## Pass 6 — Cuisine/meal-type chip walls replaced with native selects
+
+**Commit:** local only, not pushed
+
+**Problem:** The meal form's Cuisine field rendered all 14 options as
+wrapping chips - roughly 4-5 rows on a 375px screen for a single required
+choice - and Meal type another row for its 5 options. `MealForm` is shared
+by both Create and Edit (its own doc comment says so), so this cost showed
+up on every meal creation and every edit.
+
+**Fix:** Both fields are now native `<select>` elements - one row each,
+full option list available through the OS's own picker on tap, a small
+inline chevron so it still reads as tappable once `appearance: none`
+removes the browser's default arrow. This is the one place in this audit
+a native form control beats a custom sheet: unlike Browse's filters, this
+is a single bounded choice with no secondary context, exactly what
+`<select>` is for. Left `CreateIngredient.tsx`'s 8-option category chips
+untouched - smaller (1-2 rows) and shares Create.module.css's `.chip`
+classes with other still-active call sites, not worth the same treatment
+in this pass.
+
+**Verified:** `npx tsc --noEmit` and `vite build` clean; in-browser at 375px
+on `/create/meal` confirmed both selects render with the full option count
+(14, 5), zero leftover chip buttons, defaults correct ("Italian"/"Dinner"),
+and changing the select's value updates correctly. `EditMeal.tsx` imports
+the same `MealForm`, so it's fixed there too without separate testing.

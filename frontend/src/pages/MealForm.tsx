@@ -182,34 +182,37 @@ export function MealForm({
         </div>
       </div>
 
+      {/* A single-select field with 14 known options doesn't need to spend
+          four wrapped rows of chips showing every choice at once - the
+          native picker (the OS's own wheel/dropdown) shows the full list on
+          tap and collapses to one row otherwise, the same trade every
+          mobile form makes for a bounded, unambiguous choice. */}
       <div className={styles.field}>
-        <label className={styles.label}>Cuisine</label>
-        <div className={styles.chipRow}>
+        <label className={styles.label} htmlFor="meal-cuisine">Cuisine</label>
+        <select
+          id="meal-cuisine"
+          className={styles.select}
+          value={value.cuisine}
+          onChange={(e) => set('cuisine', e.target.value)}
+        >
           {CUISINES.map((c) => (
-            <button
-              key={c}
-              className={`${styles.chip} ${value.cuisine === c ? styles.chipActive : ''}`}
-              onClick={() => set('cuisine', c)}
-            >
-              {c}
-            </button>
+            <option key={c} value={c}>{c}</option>
           ))}
-        </div>
+        </select>
       </div>
 
       <div className={styles.field}>
-        <label className={styles.label}>Meal type</label>
-        <div className={styles.chipRow}>
+        <label className={styles.label} htmlFor="meal-type">Meal type</label>
+        <select
+          id="meal-type"
+          className={styles.select}
+          value={value.mealType}
+          onChange={(e) => set('mealType', e.target.value)}
+        >
           {MEAL_TYPES.map((t) => (
-            <button
-              key={t}
-              className={`${styles.chip} ${value.mealType === t ? styles.chipActive : ''}`}
-              onClick={() => set('mealType', t)}
-            >
-              {t}
-            </button>
+            <option key={t} value={t}>{t}</option>
           ))}
-        </div>
+        </select>
       </div>
 
       <div className={styles.field}>
