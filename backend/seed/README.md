@@ -26,10 +26,25 @@ Each row is one Foundation Foods entry, transformed as:
   1162 Vitamin C, 1087 Calcium, 1089 Iron, 1092 Potassium, 1090 Magnesium,
   1093 Sodium), all already per-100g. Left null when USDA doesn't report a
   value for that food rather than guessing.
+- `externalSources` (optional) - present only on rows where one or more
+  nutrient fields were backfilled from a source other than this food's own
+  Foundation Foods record (e.g. a matching SR Legacy entry or a reputable
+  USDA-citing nutrition site), because USDA left that field null. Maps
+  field name to the URL consulted, e.g. `{"fiber": "https://..."}`. Every
+  other field on the row is still straight from this food's own USDA
+  Foundation Foods record. A row with no `externalSources` key is 100% USDA
+  Foundation Foods data.
 
 USDA provides no prose description for any food, so every seeded ingredient
 starts with a blank `description` - same as the FooDB set's philosophy, this
 is meant to be filled in via the community-edit feature rather than faked.
+
+`completeness-index.html` is a static, self-contained browser page (open it
+directly, no server needed) listing every row with its nutrient values,
+highlighting what's still missing and what came from `externalSources`. It's
+a point-in-time snapshot generated from the seed file - regenerate it after
+adding/backfilling data if you want it to stay current, no build step wires
+it up automatically.
 
 To regenerate against a newer USDA release: download the new Foundation Foods
 JSON zip from the URL above, unzip it next to `transform.js`, update the
