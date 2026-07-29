@@ -99,11 +99,17 @@ export function TextEditSection({
   field,
   label,
   placeholder,
+  currentValue,
 }: {
   ingredientId: number;
   field: 'description';
   label: string;
   placeholder: string;
+  /** What's live right now - shown once above the proposals so a voter can
+   * judge "is this actually better?" without scrolling up to compare
+   * against the description already on the page. Every pending proposal
+   * competes against this same value, not against each other. */
+  currentValue?: string | null;
 }) {
   const { edits, submit, vote, del } = useEdits(ingredientId, field);
   const [open, setOpen] = useState(false);
@@ -142,6 +148,9 @@ export function TextEditSection({
 
       {edits.length > 0 && (
         <div className={styles.list}>
+          {currentValue && (
+            <p className={styles.currentValueHint}>Current: {currentValue}</p>
+          )}
           {edits.map((row, i) => (
             <div key={row.id} className={`${styles.row} ${i === 0 ? styles.rowWinner : ''}`}>
               <span className={styles.rowValue}>

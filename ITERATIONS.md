@@ -859,3 +859,25 @@ changes" collapses it back; cleaned up by restarting the dev server,
 which re-seeds guide bodies from their canonical source on every boot
 (confirmed the test guide's body was restored exactly, not left
 polluted by the test edit).
+
+## Iteration 70: show the current value on ingredient description edits
+
+**Commit:** local only, not pushed · **Migrations:** none
+
+A proposed ingredient description edit rendered as only the new text -
+nothing showing what the description currently reads, so judging "is this
+actually better" meant scrolling up to the description already on the
+page and holding it in memory while reading each competing proposal below.
+`TextEditSection` now takes an optional `currentValue` prop (wired from
+`IngredientDetail.tsx`'s already-loaded `data.description`) and renders
+"Current: …" once above the list of proposals - every pending edit is
+being judged against the same live value, so it only needs stating once,
+not per row. Skipped entirely when there's nothing live yet (a fresh
+ingredient with no description at all), matching the existing "No
+description yet" empty state rather than showing an empty "Current:" line.
+
+**Verified:** `npx tsc --noEmit` and `vite build` clean; curl-submitted a
+competing description proposal on an ingredient with a real live
+description, then confirmed in the browser that "Current: Small, sweet
+grape tomatoes great for salads and snacking." renders once above both
+the pre-existing proposal and the new one.

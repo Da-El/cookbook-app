@@ -84,6 +84,13 @@
   gap: 6px;
 }
 
+.currentValueHint {
+  font: 500 12px var(--font-ui);
+  color: var(--muted-2);
+  font-style: italic;
+  margin-bottom: 2px;
+}
+
 .row {
   display: flex;
   align-items: center;

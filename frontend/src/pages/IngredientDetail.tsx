@@ -325,6 +325,7 @@ export function IngredientDetail() {
           field="description"
           label="Description"
           placeholder="Rewrite the description…"
+          currentValue={data.description}
         />
         <CategoryEditSection ingredientId={data.id} />
         <DietFlagsEditSection ingredientId={data.id} />
