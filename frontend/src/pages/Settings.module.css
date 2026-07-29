@@ -32,14 +32,41 @@
 }
 
 .section {
-  margin-top: 28px;
+  border-bottom: 1px solid var(--border-hairline);
+}
+
+.section:last-of-type {
+  border-bottom: none;
+}
+
+.sectionToggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: none;
+  border: none;
+  padding: 16px 0;
+  cursor: pointer;
+  text-align: left;
+}
+
+.sectionChevron {
+  flex: none;
+  margin-left: 12px;
+  font: 400 22px var(--font-ui);
+  line-height: 1;
+  color: var(--muted-2);
+}
+
+.sectionBody {
+  padding-bottom: 20px;
 }
 
 .sectionTitle {
   font-family: var(--font-display);
   font-size: 19px;
   color: var(--ink);
-  margin-bottom: 12px;
 }
 
 .label {

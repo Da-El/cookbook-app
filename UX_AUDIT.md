@@ -180,3 +180,39 @@ on `/create/meal` confirmed both selects render with the full option count
 (14, 5), zero leftover chip buttons, defaults correct ("Italian"/"Dinner"),
 and changing the select's value updates correctly. `EditMeal.tsx` imports
 the same `MealForm`, so it's fixed there too without separate testing.
+
+## Pass 7 — Settings: 14 permanently-expanded sections collapsed to a list
+
+**Commit:** local only, not pushed
+
+**Problem:** The single biggest density problem in the app. Settings was
+715 lines rendering 14 sections - Appearance, Profile, Account, Sessions,
+2FA, sign-in history, 8 separate email-notification toggles, measurement
+units, 4 nutrition-goal inputs, diet chips, 5 visibility public/private
+toggles, data export, delete account - all permanently expanded on one
+flat page. Nobody visiting Settings wants all of that at once; they came
+to do one specific thing and had to scroll past everything else to find
+it.
+
+**Fix:** A `CollapsibleSection` wrapper (button header with a title and a
++/− indicator, body hidden until tapped) replacing every section's static
+`<div className={section}><div className={sectionTitle}>` opening -
+mechanical enough that all 14 conversions preserve their exact original
+inner content, mutations, and conditional-rendering guards untouched, only
+the outer wrapper changed. Sections default closed - collapsed-by-default
+is the same choice GitHub, Notion, and Instagram's own settings all make,
+because a settings page is scanned for one row, not read start to finish.
+Section CSS changed from spaced floating cards (`margin-top: 28px` between
+each) to a single hairline-divided list, reading as one coherent screen
+instead of 14 separate blocks.
+
+**Verified:** `npx tsc --noEmit` and `vite build` clean; in-browser at
+375px confirmed the whole page collapses to 12 header rows + "Delete
+account" (846px total, versus what would have been several thousand px
+fully expanded) with zero content visible until tapped; expanded "Account"
+and confirmed its Email/New password fields render correctly (chevron
+flips to −), collapsed it back down cleanly; expanded "Diet preferences,"
+clicked the Vegan chip, and confirmed via direct DB query
+(`SELECT diet_prefs FROM users`) that the underlying mutation still fires
+and persists correctly through the new wrapper - the refactor didn't just
+move markup, the app logic underneath is provably unchanged.

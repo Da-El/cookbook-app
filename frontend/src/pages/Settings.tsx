@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '../api/client';
@@ -88,6 +88,27 @@ const VIS_ROWS: [keyof Pick<SettingsProfile, 'vis_mine' | 'vis_made' | 'vis_want
   ['vis_fridge', 'My fridge', 'What’s on hand'],
   ['vis_plan', 'My meal plan', 'What you’re cooking this week — private by default'],
 ];
+
+/**
+ * Settings had 14 sections all permanently expanded - Appearance through
+ * Delete account, every toggle and field visible at once on a page nobody
+ * reads top to bottom (someone comes here to do ONE thing: change a
+ * password, turn off a notification). Collapsed by default like every top
+ * app's settings screen - GitHub, Notion, Instagram's own - so the page is
+ * 14 tappable headers to scan instead of a scroll through everything.
+ */
+function CollapsibleSection({ title, children }: { title: string; children: ReactNode }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className={styles.section}>
+      <button className={styles.sectionToggle} onClick={() => setOpen((o) => !o)} aria-expanded={open}>
+        <span className={styles.sectionTitle}>{title}</span>
+        <span className={styles.sectionChevron}>{open ? '−' : '+'}</span>
+      </button>
+      {open && <div className={styles.sectionBody}>{children}</div>}
+    </div>
+  );
+}
 
 export function Settings() {
   const navigate = useNavigate();
@@ -304,8 +325,7 @@ export function Settings() {
         <h1 className={styles.title}>Settings</h1>
       </div>
 
-      <div className={styles.section}>
-        <div className={styles.sectionTitle}>Appearance</div>
+      <CollapsibleSection title="Appearance">
         <div className={styles.visRow}>
           <div>
             <div className={styles.visLabel}>Theme</div>
@@ -325,19 +345,17 @@ export function Settings() {
             ))}
           </div>
         </div>
-      </div>
+      </CollapsibleSection>
 
       {user.is_admin && (
-        <div className={styles.section}>
-          <div className={styles.sectionTitle}>Moderation</div>
+        <CollapsibleSection title="Moderation">
           <button className={styles.saveBtn} onClick={() => navigate('/admin')}>
             Open moderation queue
           </button>
-        </div>
+        </CollapsibleSection>
       )}
 
-      <div className={styles.section}>
-        <div className={styles.sectionTitle}>Profile</div>
+      <CollapsibleSection title="Profile">
         <div className={styles.field}>
           <label className={styles.label}>Display name</label>
           <input className={styles.input} value={displayName} onChange={(e) => setDisplayName(e.target.value)} />
@@ -347,10 +365,9 @@ export function Settings() {
         <button className={styles.saveBtn} onClick={() => saveProfile.mutate()} disabled={saveProfile.isPending}>
           Save
         </button>
-      </div>
+      </CollapsibleSection>
 
-      <div className={styles.section}>
-        <div className={styles.sectionTitle}>Account</div>
+      <CollapsibleSection title="Account">
         <div className={styles.field}>
           <label className={styles.label}>Email</label>
           <input className={styles.input} type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
@@ -389,10 +406,9 @@ export function Settings() {
         >
           Save
         </button>
-      </div>
+      </CollapsibleSection>
 
-      <div className={styles.section}>
-        <div className={styles.sectionTitle}>Sessions</div>
+      <CollapsibleSection title="Sessions">
         <div className={styles.sessionList}>
           {sessions.map((s) => (
             <div key={s.id} className={styles.sessionRow}>
@@ -434,11 +450,10 @@ export function Settings() {
             </div>
           )
         )}
-      </div>
+      </CollapsibleSection>
 
       {blockedUsers.length > 0 && (
-        <div className={styles.section}>
-          <div className={styles.sectionTitle}>Blocked accounts</div>
+        <CollapsibleSection title="Blocked accounts">
           <div className={styles.sessionList}>
             {blockedUsers.map((b) => (
               <div key={b.id} className={styles.sessionRow}>
@@ -459,12 +474,11 @@ export function Settings() {
               </div>
             ))}
           </div>
-        </div>
+        </CollapsibleSection>
       )}
 
       {settings && (
-        <div className={styles.section}>
-          <div className={styles.sectionTitle}>Two-factor authentication</div>
+        <CollapsibleSection title="Two-factor authentication">
           <div className={styles.visRow}>
             <div>
               <div className={styles.visLabel}>Email code at sign-in</div>
@@ -500,7 +514,7 @@ export function Settings() {
               </button>
             </div>
           )}
-        </div>
+        </CollapsibleSection>
       )}
 
       {revealedCodes && (
@@ -508,8 +522,7 @@ export function Settings() {
       )}
 
       {loginHistory.length > 0 && (
-        <div className={styles.section}>
-          <div className={styles.sectionTitle}>Recent sign-in activity</div>
+        <CollapsibleSection title="Recent sign-in activity">
           <p className={styles.securityHint}>
             Every sign-in attempt on this account, successful or not - if something here doesn't
             look like you, change your password above and sign out of other sessions.
@@ -530,12 +543,11 @@ export function Settings() {
               </div>
             ))}
           </div>
-        </div>
+        </CollapsibleSection>
       )}
 
       {notificationPrefs.length > 0 && (
-        <div className={styles.section}>
-          <div className={styles.sectionTitle}>Email notifications</div>
+        <CollapsibleSection title="Email notifications">
           <p className={styles.securityHint}>
             Everything still shows up in your Activity tab either way - this just controls what
             also gets emailed to you.
@@ -555,12 +567,11 @@ export function Settings() {
               </button>
             </div>
           ))}
-        </div>
+        </CollapsibleSection>
       )}
 
       {settings && (
-        <div className={styles.section}>
-          <div className={styles.sectionTitle}>Measurement units</div>
+        <CollapsibleSection title="Measurement units">
           <div className={styles.visRow}>
             <div>
               <div className={styles.visLabel}>Grocery list totals</div>
@@ -582,11 +593,10 @@ export function Settings() {
               ))}
             </div>
           </div>
-        </div>
+        </CollapsibleSection>
       )}
 
-      <div className={styles.section}>
-        <div className={styles.sectionTitle}>Daily nutrition goals</div>
+      <CollapsibleSection title="Daily nutrition goals">
         <p className={styles.securityHint}>
           Optional — set any of these to see a "Today" progress view on your feed, based on
           what you've marked cooked. Leave a field blank to turn that goal off.
@@ -636,10 +646,9 @@ export function Settings() {
         <button className={styles.saveBtn} onClick={() => saveGoals.mutate()} disabled={saveGoals.isPending}>
           Save
         </button>
-      </div>
+      </CollapsibleSection>
 
-      <div className={styles.section}>
-        <div className={styles.sectionTitle}>Diet preferences</div>
+      <CollapsibleSection title="Diet preferences">
         <div className={styles.chipRow}>
           {DIET_PREFS.map((p) => (
             <button
@@ -651,10 +660,9 @@ export function Settings() {
             </button>
           ))}
         </div>
-      </div>
+      </CollapsibleSection>
 
-      <div className={styles.section}>
-        <div className={styles.sectionTitle}>Visibility</div>
+      <CollapsibleSection title="Visibility">
         {VIS_ROWS.map(([key, label, sub]) => (
           <div key={key} className={styles.visRow}>
             <div>
@@ -677,17 +685,16 @@ export function Settings() {
             </div>
           </div>
         ))}
-      </div>
+      </CollapsibleSection>
 
-      <div className={styles.section}>
-        <div className={styles.sectionTitle}>Your data</div>
+      <CollapsibleSection title="Your data">
         <p className={styles.securityHint}>
           Download everything you've published, reviewed, rated, and saved as a JSON file.
         </p>
         <button className={styles.saveBtn} onClick={() => exportData()} disabled={exporting}>
           {exporting ? 'Preparing…' : 'Export my data'}
         </button>
-      </div>
+      </CollapsibleSection>
 
       <div className={styles.dangerZone}>
         {!confirmDelete ? (
