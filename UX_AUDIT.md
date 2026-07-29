@@ -78,3 +78,38 @@ into, and tsc doesn't parse CSS); confirmed in-browser on the meal page
 "You: 7/10", Remove clears it) and the guide page (same bar renders and is
 interactive); ingredient and review-edit call sites are the identical
 component with identical wiring, not independently re-tested.
+
+## Pass 3 — Meal plan: one day at a time on mobile, not all seven at once
+
+**Commit:** local only, not pushed
+
+**Problem:** The week view rendered all 7 days stacked in a single column
+on mobile (the grid only becomes 7-across at 900px+), each with 4 meal
+slots - 28 "+ Add" targets and 7 day headers on screen simultaneously,
+requiring a long scroll to reach Thursday let alone act on it. Functionally
+fine on a desktop-width screen with room for 7 columns; on a phone it's the
+same "show every dimension at once" problem Browse had, just spatial
+instead of filter-shaped.
+
+**Fix:** A horizontal day-strip (Mon-Sun pills showing weekday + date, a
+small dot marking a day with something already planned) replaces the
+stacked cards on mobile - tapping a day shows only that day's 4 slots
+below, the same one-day-at-a-time-behind-a-strip pattern Google/Apple
+Calendar use on a phone. Implemented as a single `daysToRender` array that's
+either all 7 days (desktop) or just the active one (mobile), so the actual
+slot-rendering JSX - add/swap/reorder/remove, the picker sheet - is exactly
+the same code path for both, not a duplicated mobile branch. Falls back to
+today if it's in the visible week, otherwise the week's first day, so
+paging forward/back never strands the selection off-screen. Desktop is
+untouched - gated on `isDesktop`, same 7-column grid as before.
+
+**Result:** 28 "+ Add" buttons → 4; whole week view now fits one 812px
+viewport with zero scroll before you can act on the visible day.
+
+**Verified:** `npx tsc --noEmit` and `vite build` both clean; in-browser at
+375px confirmed 4 add-buttons (not 28) and zero scroll height beyond the
+viewport; clicked a different day-strip cell and confirmed the active state
+moved and the slots re-rendered for that day; opened the "+ Add" sheet and
+confirmed it still reads the correct day/slot ("Add to breakfast"); resized
+to 1280px and confirmed the day-strip disappears, all 28 add-buttons and
+all 7 day headers return - desktop path provably unchanged.

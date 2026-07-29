@@ -143,6 +143,75 @@
   cursor: default;
 }
 
+/* ---------- day strip (mobile only) ---------- */
+
+.dayStrip {
+  margin-top: 18px;
+  display: flex;
+  gap: 7px;
+  padding-bottom: 2px;
+}
+
+.dayStripCell {
+  flex: none;
+  width: 46px;
+  padding: 8px 0 9px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  border-radius: 14px;
+  border: 1.5px solid var(--border-hairline);
+  background: var(--surface-card);
+  cursor: pointer;
+  position: relative;
+}
+
+.dayStripCellToday {
+  border-color: var(--accent);
+}
+
+.dayStripCellActive {
+  background: var(--ink-solid);
+  border-color: var(--ink-solid);
+}
+
+.dayStripName {
+  font: 700 10px var(--font-ui);
+  color: var(--muted-3);
+  text-transform: uppercase;
+  letter-spacing: .05em;
+}
+
+.dayStripCellActive .dayStripName {
+  color: var(--on-ink-solid);
+  opacity: 0.75;
+}
+
+.dayStripNum {
+  font-family: var(--font-display);
+  font-size: 17px;
+  color: var(--ink);
+}
+
+.dayStripCellActive .dayStripNum {
+  color: var(--on-ink-solid);
+}
+
+.dayStripDot {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--accent);
+}
+
+.dayStripCellActive .dayStripDot {
+  background: var(--on-ink-solid);
+}
+
 /* ---------- week grid ---------- */
 
 .days {

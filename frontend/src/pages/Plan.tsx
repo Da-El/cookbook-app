@@ -8,6 +8,7 @@ import { Segmented } from '../components/Segmented/Segmented';
 import { EmptyLine } from '../components/Empty/Empty';
 import { useToast } from '../components/Toast/ToastContext';
 import { useEscapeKey } from '../hooks/useEscapeKey';
+import { useIsDesktop } from '../hooks/useMediaQuery';
 import { mealBackground, ingredientBackground } from '../lib/imagery';
 import styles from './Plan.module.css';
 
@@ -70,10 +71,18 @@ function startOfWeek(base: Date): Date {
 
 export function Plan() {
   const navigate = useNavigate();
+  const isDesktop = useIsDesktop();
   const qc = useQueryClient();
   const toast = useToast();
 
   const [weekOffset, setWeekOffset] = useState(0);
+  // Which single day the mobile view is showing - a full 7-day x 4-slot
+  // grid stacked in one column is 28 tap targets and a long scroll before
+  // you can act on anything, the same "too much at once" problem Browse's
+  // filter wall had. Desktop keeps the real 7-column grid; mobile shows one
+  // day at a time behind a day-strip, the same pattern Google/Apple
+  // Calendar use on a phone.
+  const [selectedDayIso, setSelectedDayIso] = useState<string | null>(null);
   const [view, setView] = useState<View>('week');
   // `swapId` set means this sheet is replacing an existing entry's meal
   // in place rather than adding a new one - same picker UI, different action
@@ -102,6 +111,16 @@ export function Plan() {
   const from = isoDate(days[0]);
   const to = isoDate(days[6]);
   const todayIso = isoDate(new Date());
+  // Falls back to today-if-in-week, else the week's first day - so paging a
+  // week forward/back doesn't strand the selection on a date that's no
+  // longer on screen.
+  const activeDayIso =
+    selectedDayIso && days.some((d) => isoDate(d) === selectedDayIso)
+      ? selectedDayIso
+      : days.some((d) => isoDate(d) === todayIso)
+        ? todayIso
+        : from;
+  const daysToRender = isDesktop ? days : days.filter((d) => isoDate(d) === activeDayIso);
 
   const { data: entries = [] } = useQuery({
     queryKey: ['plan', from, to],
@@ -330,18 +349,42 @@ export function Plan() {
 
       {view === 'week' ? (
         <>
+          {!isDesktop && (
+            <div className={`${styles.dayStrip} hscroll`}>
+              {days.map((d) => {
+                const iso = isoDate(d);
+                const count = entries.filter((e) => e.plan_date === iso).length;
+                return (
+                  <button
+                    key={iso}
+                    className={`${styles.dayStripCell} ${iso === activeDayIso ? styles.dayStripCellActive : ''} ${iso === todayIso ? styles.dayStripCellToday : ''}`}
+                    onClick={() => setSelectedDayIso(iso)}
+                  >
+                    <span className={styles.dayStripName}>
+                      {d.toLocaleDateString(undefined, { weekday: 'short' })}
+                    </span>
+                    <span className={styles.dayStripNum}>{d.getDate()}</span>
+                    {count > 0 && <span className={styles.dayStripDot} />}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
           <div className={styles.days}>
-            {days.map((d) => {
+            {daysToRender.map((d) => {
               const iso = isoDate(d);
               const forDay = entries.filter((e) => e.plan_date === iso);
               return (
                 <div key={iso} className={`${styles.day} ${iso === todayIso ? styles.dayToday : ''}`}>
-                  <div className={styles.dayHead}>
-                    <span className={styles.dayName}>
-                      {d.toLocaleDateString(undefined, { weekday: 'short' })}
-                    </span>
-                    <span className={styles.dayNum}>{d.getDate()}</span>
-                  </div>
+                  {isDesktop && (
+                    <div className={styles.dayHead}>
+                      <span className={styles.dayName}>
+                        {d.toLocaleDateString(undefined, { weekday: 'short' })}
+                      </span>
+                      <span className={styles.dayNum}>{d.getDate()}</span>
+                    </div>
+                  )}
 
                   {SLOTS.map((slot) => {
                     const inSlot = forDay.filter((e) => e.slot === slot);
