@@ -8,6 +8,7 @@ import { useToast } from '../components/Toast/ToastContext';
 import { ChevronLeft, BookmarkIcon, ShareIcon } from '../components/Icon/Icon';
 import { LoadingState, ErrorState } from '../components/PageState/PageState';
 import { FlagButton } from '../components/Flag/FlagButton';
+import { RatingInput } from '../components/RatingInput/RatingInput';
 import { mealBackground } from '../lib/imagery';
 import styles from './Guides.module.css';
 
@@ -342,18 +343,12 @@ export function GuidePage() {
               <span className={styles.rateAvg}> · {guide.rating.toFixed(1)} avg ({guide.rating_count})</span>
             )}
           </div>
-          <div className={styles.rateRow} role="group" aria-label="Rate this guide from 1 to 10">
-            {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
-              <button
-                key={n}
-                className={`${styles.rateBtn} ${guide.your_rating != null && n <= guide.your_rating ? styles.rateBtnOn : ''}`}
-                onClick={() => rate.mutate(n)}
-                aria-label={`Rate ${n} out of 10`}
-                aria-pressed={guide.your_rating === n}
-              >
-                {n}
-              </button>
-            ))}
+          <div className={styles.rateRow}>
+            <RatingInput
+              value={guide.your_rating}
+              onChange={(n) => rate.mutate(n)}
+              label="Rate this guide from 1 to 10"
+            />
           </div>
           {guide.your_rating != null && (
             <button className={styles.editDeleteBtn} style={{ marginTop: 8 }} onClick={() => unrate.mutate()}>

@@ -16,6 +16,7 @@ import {
 import { AliasSection } from '../components/EditVoting/AliasSection';
 import { SubstituteSection } from '../components/EditVoting/SubstituteSection';
 import { FlagButton } from '../components/Flag/FlagButton';
+import { RatingInput } from '../components/RatingInput/RatingInput';
 import { LoadingState, ErrorState } from '../components/PageState/PageState';
 import { Avatar } from '../components/Avatar/Avatar';
 import { ContributorBadge, type ContributorTier } from '../components/ContributorBadge/ContributorBadge';
@@ -241,17 +242,7 @@ export function IngredientDetail() {
         <div className={styles.card}>
           <p className={styles.sectionTitle}>Rate it</p>
           <div className={styles.rateRow}>
-            {Array.from({ length: 10 }, (_, i) => i + 1).map((n2) => (
-              <button
-                key={n2}
-                className={`${styles.rateBtn} ${score === n2 ? styles.rateBtnOn : ''}`}
-                onClick={() => setScore(n2)}
-                aria-pressed={score === n2}
-                aria-label={`Rate ${n2} out of 10`}
-              >
-                {n2}
-              </button>
-            ))}
+            <RatingInput value={score} onChange={setScore} label="Rate this ingredient from 1 to 10" />
           </div>
           <textarea
             className={styles.reviewInput}

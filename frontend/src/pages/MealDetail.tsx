@@ -11,6 +11,7 @@ import { FlagButton } from '../components/Flag/FlagButton';
 import { ContributorBadge, type ContributorTier } from '../components/ContributorBadge/ContributorBadge';
 import { ReviewReplies } from '../components/ReviewReplies/ReviewReplies';
 import { AddToCollection } from '../components/AddToCollection/AddToCollection';
+import { RatingInput } from '../components/RatingInput/RatingInput';
 import { mealBackground, ingredientBackground } from '../lib/imagery';
 import { pickImage } from '../lib/photo';
 import { addRecentlyViewed } from '../lib/recentlyViewed';
@@ -617,18 +618,12 @@ export function MealDetail() {
         <div className={styles.rateLabel}>
           {meal.your_rating != null ? 'Tap to update your rating' : 'Rate this meal (1–10)'}
         </div>
-        <div className={styles.rateRow} role="group" aria-label="Rate this meal from 1 to 10">
-          {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
-            <button
-              key={n}
-              className={`${styles.rateBtn} ${meal.your_rating != null && n <= meal.your_rating ? styles.rateBtnOn : ''}`}
-              onClick={() => rate.mutate(n)}
-              aria-label={`Rate ${n} out of 10`}
-              aria-pressed={meal.your_rating === n}
-            >
-              {n}
-            </button>
-          ))}
+        <div className={styles.rateRow}>
+          <RatingInput
+            value={meal.your_rating}
+            onChange={(n) => rate.mutate(n)}
+            label="Rate this meal from 1 to 10"
+          />
         </div>
       </div>
 
@@ -899,18 +894,7 @@ export function MealDetail() {
                         rows={3}
                       />
                       <span className={styles.reviewEditScoreRow}>
-                        {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
-                          <button
-                            key={n}
-                            type="button"
-                            className={`${styles.editScoreBtn} ${editScore === n ? styles.editScoreBtnOn : ''}`}
-                            onClick={() => setEditScore(n)}
-                            aria-pressed={editScore === n}
-                            aria-label={`Rate ${n} out of 10`}
-                          >
-                            {n}
-                          </button>
-                        ))}
+                        <RatingInput value={editScore} onChange={setEditScore} label="Edit your rating from 1 to 10" />
                       </span>
                       {editPhoto ? (
                         <span className={styles.notePhotoPreview}>

@@ -269,26 +269,7 @@
 }
 
 .rateRow {
-  display: flex;
-  gap: 5px;
-  flex-wrap: wrap;
   margin-top: 9px;
-}
-
-.rateBtn {
-  width: 29px;
-  height: 36px;
-  border-radius: 10px;
-  border: none;
-  background: var(--chip-bg);
-  color: var(--secondary);
-  font: 700 13px var(--font-ui);
-  cursor: pointer;
-}
-
-.rateBtnOn {
-  background: var(--amber);
-  color: #fff;
 }
 
 /* ---------- cook / save toggles ---------- */
@@ -668,26 +649,7 @@
 }
 
 .reviewEditScoreRow {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
-}
-
-.editScoreBtn {
-  width: 26px;
-  height: 26px;
-  border-radius: 8px;
-  border: 1.5px solid var(--border-card);
-  background: var(--surface-card);
-  color: var(--muted-2);
-  font: 700 11px var(--font-ui);
-  cursor: pointer;
-}
-
-.editScoreBtnOn {
-  background: var(--accent);
-  color: #fff;
-  border-color: var(--accent);
+  display: block;
 }
 
 .reviewEditActions {

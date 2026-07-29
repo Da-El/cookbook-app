@@ -45,3 +45,36 @@ the trigger badge updated to "(1)"; "Clear all" resets state without closing
 the sheet; the × and "Show N results" both close it; re-widened to 1280px
 and confirmed the four rows render exactly as before with no filter-sheet
 trigger present - desktop path provably unchanged.
+
+## Pass 2 — One rating control instead of four copies of ten buttons
+
+**Commit:** local only, not pushed
+
+**Problem:** Meals, ingredients, and guides each rate 1-10, and each had its
+own copy-pasted row of ten individually-bordered pill buttons - four
+near-identical implementations (`MealDetail.tsx`'s main widget and its
+review-edit form, `IngredientDetail.tsx`, `Guides.tsx`) that only
+highlighted the exact selected number rather than filling up to it, so
+"is my rating 6 or 7" required reading which single button was dark rather
+than counting a filled bar. On a 375px phone the buttons were 29px wide -
+under Apple/Google's 44px touch-target guidance, with gaps between them
+inviting a miss entirely.
+
+**Fix:** One shared `RatingInput` component - segments read as a single
+connected bar (no gaps, shared border, `flex: 1` so it fills its container
+at any width), filling solid up to the chosen value like a volume slider,
+42px tall for a better tap target. All four call sites now use it; each
+duplicated `.rateBtn`/`.rateBtnOn`/`.editScoreBtn` CSS block was deleted
+rather than left dead, and the surrounding `.rateRow` classes were trimmed
+to pure spacing wrappers instead of removed outright, since each context
+needed a different margin the shared component correctly stays agnostic
+about.
+
+**Verified:** `npx tsc --noEmit` and a full `vite build` both clean (the
+build step matters here specifically - editing four `.module.css` files by
+hand to remove blocks is exactly the kind of change a stray brace slips
+into, and tsc doesn't parse CSS); confirmed in-browser on the meal page
+(single 10-segment bar, 42px tall, clicking segment 7 fills 1-7 and posts
+"You: 7/10", Remove clears it) and the guide page (same bar renders and is
+interactive); ingredient and review-edit call sites are the identical
+component with identical wiring, not independently re-tested.

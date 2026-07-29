@@ -262,27 +262,7 @@
 }
 
 .rateRow {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
   margin-bottom: 12px;
-}
-
-.rateBtn {
-  width: 30px;
-  height: 30px;
-  border-radius: 9px;
-  border: 1.5px solid var(--border-card);
-  background: var(--surface-card);
-  color: var(--secondary);
-  font: 700 12px var(--font-ui);
-  cursor: pointer;
-}
-
-.rateBtnOn {
-  background: var(--accent);
-  color: #fff;
-  border-color: var(--accent);
 }
 
 .reviewInput {

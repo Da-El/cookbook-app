@@ -1,0 +1,31 @@
+.bar {
+  display: flex;
+  width: 100%;
+  border-radius: 12px;
+  border: 1.5px solid var(--border-card);
+  overflow: hidden;
+}
+
+.segment {
+  flex: 1;
+  min-width: 0;
+  height: 42px;
+  border: none;
+  border-right: 1px solid var(--border-hairline);
+  background: var(--chip-bg);
+  color: var(--secondary);
+  font: 700 12px var(--font-ui);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.segment:last-child {
+  border-right: none;
+}
+
+.segmentOn {
+  background: var(--ink-solid);
+  color: var(--on-ink-solid);
+}
