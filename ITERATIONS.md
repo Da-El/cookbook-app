@@ -782,3 +782,53 @@ cook event surfaced the shelf with the correct `cook_count`, and
 backdating that same `meal_log` row past 7 days made the shelf
 disappear entirely - then "Trending this week" rendering as the first
 shelf on the Discover page confirmed in the browser.
+
+## Batch 14 — Iterations 66–68
+
+**Commit:** local only, not pushed · **Migrations:** 0045 (66) / 0046 (67)
+/ none (68) · **Tests:** 61 backend, passing
+
+66. **Collection discussion comments** — a flat, one-level comment thread
+    on public meal collections, mirroring guide_comments' pattern exactly
+    (same hard-delete-for-author, `user_id` `SET NULL` on account
+    deletion). Gated on `is_public` the same way `detail()` already is,
+    so a private collection's comments stay just as private as its meal
+    list - the owner can always comment on their own, nobody else can
+    read or write until it's public.
+67. **Flaggable content-type gaps** — five content types had shipped
+    across earlier iterations with no flagging story at all: ingredient
+    reviews, review replies, guide comments, collections, and (as of
+    iteration 66, the same batch) collection comments. Extended
+    moderation.rs's `CONTENT_TYPES`/`describe()`/`remove_content()` to
+    cover all five, each removal action reusing an existing mechanism
+    rather than a moderation-only code path - hard delete for the
+    chat-like content types, the owner's own visibility toggle for a
+    flagged collection.
+68. **Un-rate ingredients** — the missing counterpart to iteration 56's
+    meal/guide un-rate; ingredients were the only rating surface left
+    without one. Score and note travel together on one `ingredient_reviews`
+    row here (unlike meals' separate rate/review endpoints), so
+    withdrawing means: clear just the score if a note is still standing
+    behind it - never leaving the row in a shape `submit_review` itself
+    wouldn't have accepted - otherwise delete the row outright. Always
+    retracts the number from the shared `ratings` table and recomputes
+    the ingredient's cached average either way.
+
+**Verified:** collection comments' visibility gating confirmed via curl
+(private collection 404s a non-owner's GET/POST, owner can always post,
+flipping to public opens both), then posting/deleting a comment and its
+Flag button confirmed in the browser; all five newly-flaggable content
+types confirmed via curl end to end - flag creation, `describe()`
+producing a correct preview for each, `resolve_flag` with "removed"
+actually performing the right cleanup (ingredient_review and
+collection_comment rows deleted, review_reply deleted with its
+notification correctly pointing at the parent meal, guide_comment
+deleted with no subject per the guide-routes-by-slug precedent,
+collection flipped to private) - then the Flag button's presence on a
+non-own guide comment confirmed in the browser; ingredient un-rate's
+three cases confirmed via curl (score+note → score cleared, note kept,
+rating cache reset to 0/0; score-only → row deleted outright, cache
+reset; second un-rate on nothing left → real 404) and the "Remove"
+button confirmed in the browser on a note-bearing review, including
+confirming the review card correctly stays visible sans star rating
+after removal - not just that a button click didn't error.

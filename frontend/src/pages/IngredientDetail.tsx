@@ -163,6 +163,15 @@ export function IngredientDetail() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['ingredient-reviews', id] }),
   });
 
+  const unrate = useMutation({
+    mutationFn: () => api.del(`/ingredients/${id}/reviews`),
+    onSuccess: () => {
+      setScore(null);
+      qc.invalidateQueries({ queryKey: ['ingredient-reviews', id] });
+      qc.invalidateQueries({ queryKey: ['ingredient', id] });
+    },
+  });
+
   if (isLoading) return <LoadingState label="Loading ingredient…" />;
   if (isError || !data) {
     const notFound = error instanceof ApiError && error.status === 404;
@@ -293,6 +302,11 @@ export function IngredientDetail() {
                     >
                       👍 Helpful{r.helpful_count > 0 ? ` (${r.helpful_count})` : ''}
                     </button>
+                    {user && r.user_id === user.id && (
+                      <button className={styles.reviewRemoveBtn} onClick={() => unrate.mutate()} disabled={unrate.isPending}>
+                        Remove
+                      </button>
+                    )}
                     {user && r.user_id !== user.id && (
                       <FlagButton contentType="ingredient_review" contentId={r.id} />
                     )}

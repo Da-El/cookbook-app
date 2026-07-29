@@ -847,6 +847,57 @@ pub async fn list_reviews(
     Ok(Json(rows))
 }
 
+/// Withdraws your review of this ingredient - the missing counterpart to
+/// meals' and guides' `unrate()` (iteration 56 never reached ingredients).
+/// Score and note travel together on one row here, unlike meals' separate
+/// rate/review endpoints, so "withdraw" means: clear just the score if a
+/// note is still standing behind it (matches `submit_review`'s own "a
+/// rating, a note, or both" rule - never leaving the row in a shape that
+/// wouldn't have been valid to submit), otherwise delete the row outright.
+/// Always retracts the number from the shared `ratings` table and
+/// recomputes the ingredient's cached average either way.
+pub async fn unrate(
+    State(state): State<AppState>,
+    crate::auth::CurrentUser(user): crate::auth::CurrentUser,
+    Path(id): Path<i64>,
+) -> Result<StatusCode, StatusCode> {
+    let mut tx = state.db.begin().await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let note: Option<Option<String>> = sqlx::query_scalar(
+        "SELECT note FROM ingredient_reviews WHERE user_id = $1 AND ingredient_id = $2",
+    )
+    .bind(user.id)
+    .bind(id)
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let Some(note) = note else {
+        return Err(StatusCode::NOT_FOUND);
+    };
+
+    if note.as_deref().is_some_and(|n| !n.trim().is_empty()) {
+        sqlx::query("UPDATE ingredient_reviews SET score = NULL, edited_at = now() WHERE user_id = $1 AND ingredient_id = $2")
+            .bind(user.id)
+            .bind(id)
+            .execute(&mut *tx)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    } else {
+        sqlx::query("DELETE FROM ingredient_reviews WHERE user_id = $1 AND ingredient_id = $2")
+            .bind(user.id)
+            .bind(id)
+            .execute(&mut *tx)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    }
+
+    crate::meals::remove_rating(&mut tx, user.id, "ingredient", id).await;
+
+    tx.commit().await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
 pub async fn vote_review_helpful(
     State(state): State<AppState>,
     crate::auth::CurrentUser(user): crate::auth::CurrentUser,
