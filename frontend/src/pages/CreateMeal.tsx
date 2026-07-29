@@ -5,6 +5,7 @@ import { api, ApiError } from '../api/client';
 import { useToast } from '../components/Toast/ToastContext';
 import { ChevronLeft } from '../components/Icon/Icon';
 import { emptyMealForm, mealFormError, toIngredientPayload, MealForm, type MealFormValue } from './MealForm';
+import { RatingInput } from '../components/RatingInput/RatingInput';
 import styles from './Create.module.css';
 
 const DRAFT_KEY = 'cb-meal-draft';
@@ -150,15 +151,7 @@ export function CreateMeal() {
         <span className={styles.ratingValue}>{rating} / 10</span>
       </div>
       <div className={styles.ratingRow}>
-        {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
-          <button
-            key={n}
-            className={`${styles.rateBtn} ${n <= rating ? styles.rateBtnOn : ''}`}
-            onClick={() => setRating(n)}
-          >
-            {n}
-          </button>
-        ))}
+        <RatingInput value={rating} onChange={setRating} label="Your rating from 1 to 10" />
       </div>
 
       {error && <p className={styles.error}>{error}</p>}

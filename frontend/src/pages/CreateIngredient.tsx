@@ -5,6 +5,7 @@ import { api, ApiError } from '../api/client';
 import { useToast } from '../components/Toast/ToastContext';
 import { ChevronLeft } from '../components/Icon/Icon';
 import { pickImage } from '../lib/photo';
+import { RatingInput } from '../components/RatingInput/RatingInput';
 import styles from './Create.module.css';
 
 const CATEGORIES = ['Vegetable', 'Fruit', 'Herb', 'Aromatic', 'Protein', 'Dairy', 'Grain', 'Pantry'];
@@ -202,15 +203,7 @@ export function CreateIngredient() {
         <span className={styles.ratingValue}>{rating} / 10</span>
       </div>
       <div className={styles.ratingRow}>
-        {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
-          <button
-            key={n}
-            className={`${styles.rateBtn} ${n <= rating ? styles.rateBtnOn : ''}`}
-            onClick={() => setRating(n)}
-          >
-            {n}
-          </button>
-        ))}
+        <RatingInput value={rating} onChange={setRating} label="Rating from 1 to 10" />
       </div>
 
       {closeMatch && (

@@ -133,3 +133,23 @@ this is purely which rows of the same `occasions` array render by default.
 **Verified:** `npx tsc --noEmit` and `vite build` clean; in-browser at 375px
 confirmed only "+ Tag an occasion" renders initially (none of the 8
 occasion labels present), and clicking it reveals all 8 as votable chips.
+
+## Pass 5 — Two more copies of the ten-button rating found in Create
+
+**Commit:** local only, not pushed
+
+**Problem:** Auditing the Create Meal form surfaced two more copies of the
+exact pattern Pass 2 replaced - `CreateMeal.tsx`'s "Your rating" field and
+`CreateIngredient.tsx`'s "Rating" field - missed the first time because
+that pass only grepped the four *detail-page* files, not the creation
+forms. Six total copies of the same ten-button picker existed across the
+app before this.
+
+**Fix:** Same `RatingInput` swap as Pass 2, for both forms. Both files
+shared one `Create.module.css`, so the dead `.rateBtn`/`.rateBtnOn` block
+only needed deleting once - confirmed safe to remove by checking both call
+sites were migrated first, not assumed.
+
+**Verified:** `npx tsc --noEmit` and `vite build` clean; confirmed in-browser
+on both `/create/meal` and `/create/ingredient` that the 10-segment
+`RatingInput` renders and is the only rating control present.
