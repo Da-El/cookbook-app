@@ -10,6 +10,7 @@ import { MealCard, MealGrid, type MealCardData } from '../components/MealCard/Me
 import { ChefList, ChefRow, type Chef } from '../components/ChefRow/ChefRow';
 import { EmptyLine } from '../components/Empty/Empty';
 import { SearchIcon } from '../components/Icon/Icon';
+import { FilterSheet, FilterSection } from '../components/FilterSheet/FilterSheet';
 import { ingredientBackground } from '../lib/imagery';
 import { addRecentSearch, clearRecentSearches, getRecentSearches } from '../lib/searchHistory';
 import { deleteFilterPreset, getFilterPresets, isNonDefaultFilter, saveFilterPreset, type FilterPreset } from '../lib/filterPresets';
@@ -95,6 +96,7 @@ export function Browse() {
   const [presets, setPresets] = useState<FilterPreset[]>(() => getFilterPresets());
   const [savingPreset, setSavingPreset] = useState(false);
   const [presetName, setPresetName] = useState('');
+  const [filterSheetOpen, setFilterSheetOpen] = useState(false);
 
   // The desktop topbar searches by pushing ?q=, so mirror it into local state.
   const urlQuery = params.get('q');
@@ -215,6 +217,19 @@ export function Browse() {
   const showChips = tab !== 'chefs';
 
   const currentFilter = { mealType, diet, sort, difficulty, maxTime, occasion };
+  // Sort has an always-on default ("top"), so it isn't counted as an active
+  // filter the way the other four are - the badge should read "how many
+  // constraints did I add," not "is every dimension at some value."
+  const activeFilterCount = [diet !== 'All', difficulty !== 'All', maxTime != null, occasion !== 'All'].filter(
+    Boolean,
+  ).length;
+  const sortLabel = SORTS.find(([value]) => value === sort)?.[1] ?? 'Sort';
+  function clearMealFilters() {
+    setDiet('All');
+    setDifficulty('All');
+    setMaxTime(null);
+    setOccasion('All');
+  }
 
   function applyPreset(p: FilterPreset) {
     setSearch('');
@@ -322,7 +337,7 @@ export function Browse() {
         </div>
       )}
 
-      {tab === 'meals' && (
+      {tab === 'meals' && isDesktop && (
         <div className={`${styles.chipRow} hscroll`}>
           {DIET_CHIPS.map((d) => (
             <button
@@ -336,7 +351,7 @@ export function Browse() {
         </div>
       )}
 
-      {tab === 'meals' && (
+      {tab === 'meals' && isDesktop && (
         <div className={`${styles.chipRow} hscroll`}>
           {TIME_CHIPS.map(([label, value]) => (
             <button
@@ -359,7 +374,7 @@ export function Browse() {
         </div>
       )}
 
-      {tab === 'meals' && !trimmedSearch && (
+      {tab === 'meals' && isDesktop && !trimmedSearch && (
         <div className={`${styles.chipRow} hscroll`}>
           {OCCASION_CHIPS.map(([tag, label]) => (
             <button
@@ -373,7 +388,10 @@ export function Browse() {
         </div>
       )}
 
-      {tab === 'meals' && !trimmedSearch && (
+      {/* Once there's a query, relevance is the sort - "Top rated"/"Fastest"
+          would silently do nothing against ranked search results, which is
+          worse than not offering them. */}
+      {tab === 'meals' && isDesktop && !trimmedSearch && (
         <div className={styles.sortRow}>
           {SORTS.map(([value, label]) => (
             <button
@@ -386,9 +404,92 @@ export function Browse() {
           ))}
         </div>
       )}
-      {/* Once there's a query, relevance is the sort - "Top rated"/"Fastest"
-          would silently do nothing against ranked search results, which is
-          worse than not offering them. */}
+
+      {/* Mobile: diet/time/difficulty/occasion/sort collapse into one sheet
+          behind two pills instead of five stacked chip rows a thumb has to
+          scroll past before seeing a single result - the same "Filters" +
+          "Sort" pair Airbnb, DoorDash, and Pinterest all use on a phone. */}
+      {tab === 'meals' && !isDesktop && (
+        <div className={styles.filterTriggerRow}>
+          <button className={styles.filterTriggerBtn} onClick={() => setFilterSheetOpen(true)}>
+            ⚙ Filters{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}
+          </button>
+          {!trimmedSearch && (
+            <button className={styles.filterTriggerBtn} onClick={() => setFilterSheetOpen(true)}>
+              ↕ {sortLabel}
+            </button>
+          )}
+        </div>
+      )}
+
+      {!isDesktop && (
+        <FilterSheet
+          open={filterSheetOpen}
+          onClose={() => setFilterSheetOpen(false)}
+          onClear={activeFilterCount > 0 ? clearMealFilters : undefined}
+          applyLabel={meals.length === 1 ? 'Show 1 result' : `Show ${meals.length} results`}
+        >
+          <FilterSection label="Diet">
+            {DIET_CHIPS.map((d) => (
+              <button
+                key={d}
+                className={`${styles.chip} ${diet === d ? styles.chipActive : ''}`}
+                onClick={() => setDiet(d)}
+              >
+                {d}
+              </button>
+            ))}
+          </FilterSection>
+          <FilterSection label="Time">
+            {TIME_CHIPS.map(([label, value]) => (
+              <button
+                key={label}
+                className={`${styles.chip} ${maxTime === value ? styles.chipActive : ''}`}
+                onClick={() => setMaxTime(value)}
+              >
+                {label}
+              </button>
+            ))}
+          </FilterSection>
+          <FilterSection label="Difficulty">
+            {DIFFICULTY_CHIPS.map((d) => (
+              <button
+                key={d}
+                className={`${styles.chip} ${difficulty === d ? styles.chipActive : ''}`}
+                onClick={() => setDifficulty(d)}
+              >
+                {d}
+              </button>
+            ))}
+          </FilterSection>
+          {!trimmedSearch && (
+            <FilterSection label="Occasion">
+              {OCCASION_CHIPS.map(([tag, label]) => (
+                <button
+                  key={tag}
+                  className={`${styles.chip} ${occasion === tag ? styles.chipActive : ''}`}
+                  onClick={() => setOccasion(tag)}
+                >
+                  {label}
+                </button>
+              ))}
+            </FilterSection>
+          )}
+          {!trimmedSearch && (
+            <FilterSection label="Sort by">
+              {SORTS.map(([value, label]) => (
+                <button
+                  key={value}
+                  className={`${styles.chip} ${sort === value ? styles.chipActive : ''}`}
+                  onClick={() => setSort(value)}
+                >
+                  {label}
+                </button>
+              ))}
+            </FilterSection>
+          )}
+        </FilterSheet>
+      )}
 
       {tab === 'meals' && (presets.length > 0 || isNonDefaultFilter(currentFilter)) && (
         <div className={`${styles.chipRow} hscroll`}>

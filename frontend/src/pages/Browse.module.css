@@ -222,6 +222,23 @@
   cursor: default;
 }
 
+.filterTriggerRow {
+  margin-top: 16px;
+  display: flex;
+  gap: 8px;
+}
+
+.filterTriggerBtn {
+  padding: 10px 16px;
+  border-radius: 999px;
+  border: 1.5px solid var(--border-card);
+  background: var(--surface-card);
+  color: var(--ink);
+  font: 700 13px var(--font-ui);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
 .sortChip {
   padding: 6px 10px;
   font-size: 11px;
