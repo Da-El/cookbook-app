@@ -216,3 +216,31 @@ clicked the Vegan chip, and confirmed via direct DB query
 (`SELECT diet_prefs FROM users`) that the underlying mutation still fires
 and persists correctly through the new wrapper - the refactor didn't just
 move markup, the app logic underneath is provably unchanged.
+
+## Pass 8 — Account menu: corner dropdown to bottom sheet on mobile
+
+**Commit:** local only, not pushed
+
+**Problem:** The account/hamburger menu (Discover, Import, Guides, Your
+cookbook, Customize, Settings, Legal, Log out) opened as a small dropdown
+anchored to the top-right corner on mobile too - the single hardest spot
+to reach one-handed on a phone (thumb-zone ergonomics research consistently
+flags the far top corners as the worst reach, the bottom as the best), and
+not how Instagram, TikTok, or X handle the equivalent menu on their own
+apps.
+
+**Fix:** `.menuMobile` (the existing mobile-only override class - the
+component already branched styling by device, just not this property)
+now repositions the whole menu to a full-width bottom sheet with a slide-up
+entrance, instead of nudging the corner dropdown's top/right offsets.
+Zero JSX changes - same `.menu`/`.menuItem` markup and the existing scrim
+click-to-close, just where the box sits. Desktop untouched, since
+`.menuMobile` only applies below the desktop breakpoint.
+
+**Verified:** `vite build` clean (CSS-only change); in-browser at 375px
+confirmed the menu now spans the full viewport width anchored to the
+bottom (rect: left 0, right 375, bottom past the viewport edge into the
+safe-area padding) with all 8 items present and clickable, and the scrim
+still closes it; resized to 1280px and confirmed the desktop menu's
+position (top 74, right 1254, width 250) is pixel-identical to before -
+provably unchanged.

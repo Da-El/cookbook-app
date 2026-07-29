@@ -404,10 +404,31 @@
   padding: 12px;
 }
 
+/* A corner dropdown puts every item in the hardest one-handed reach zone on
+   a phone - the far top corner - the exact spot mobile ergonomics research
+   (Steven Hoober's thumb-zone studies, among others) flags as worst, and
+   the opposite of what Instagram/TikTok/X do for their own account menus.
+   Reworked as a bottom sheet instead of a repositioned dropdown: same
+   .menu/.menuItem visual language, just anchored where a thumb already is. */
 .menuMobile {
-  top: 98px;
-  right: 20px;
-  width: 230px;
+  position: fixed;
+  top: auto;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100%;
+  border-radius: 20px 20px 0 0;
+  padding: 12px 12px calc(12px + env(safe-area-inset-bottom, 0));
+  animation: menuRise .2s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .menuMobile { animation: none; }
+}
+
+@keyframes menuRise {
+  from { transform: translateY(20px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
 }
 
 .menuHead {
