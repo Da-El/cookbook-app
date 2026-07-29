@@ -185,7 +185,7 @@ export function TextEditSection({
 }
 
 /** Suggest-and-vote for category, as a chip picker instead of free text. */
-export function CategoryEditSection({ ingredientId }: { ingredientId: number }) {
+export function CategoryEditSection({ ingredientId, currentValue }: { ingredientId: number; currentValue?: string | null }) {
   const { edits, submit, vote, del } = useEdits(ingredientId, 'category');
   const [open, setOpen] = useState(false);
 
@@ -217,6 +217,7 @@ export function CategoryEditSection({ ingredientId }: { ingredientId: number }) 
 
       {edits.length > 0 && (
         <div className={styles.list}>
+          {currentValue && <p className={styles.currentValueHint}>Current: {currentValue}</p>}
           {edits.map((row, i) => (
             <div key={row.id} className={`${styles.row} ${i === 0 ? styles.rowWinner : ''}`}>
               <span className={styles.rowValue}>{String(row.value)}</span>

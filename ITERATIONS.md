@@ -881,3 +881,21 @@ competing description proposal on an ingredient with a real live
 description, then confirmed in the browser that "Current: Small, sweet
 grape tomatoes great for salads and snacking." renders once above both
 the pre-existing proposal and the new one.
+
+## Iteration 71: same current-value hint on ingredient category edits
+
+**Commit:** local only, not pushed · **Migrations:** none
+
+Same gap as iteration 70, one component over: `CategoryEditSection`'s
+proposal list showed only the candidate category chip, not what the
+ingredient's category currently is. Added the identical optional
+`currentValue` prop (now shared with `TextEditSection` via the same
+`.currentValueHint` styling), wired from `IngredientDetail.tsx`'s
+`data.category`.
+
+**Verified:** `npx tsc --noEmit` and `vite build` clean; curl-submitted a
+category proposal ("Herb") and confirmed "Current: Herb" rendered in the
+browser once the single-vote proposal had already won and become the
+ingredient's live category - the same immediate-apply threshold behavior
+already observed for guide edits, not a bug in this change. Restored the
+ingredient's category afterward as part of cleanup.
