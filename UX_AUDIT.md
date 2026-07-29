@@ -113,3 +113,23 @@ moved and the slots re-rendered for that day; opened the "+ Add" sheet and
 confirmed it still reads the correct day/slot ("Add to breakfast"); resized
 to 1280px and confirmed the day-strip disappears, all 28 add-buttons and
 all 7 day headers return - desktop path provably unchanged.
+
+## Pass 4 — Meal detail: occasion voting collapsed to an expand button
+
+**Commit:** local only, not pushed
+
+**Problem:** A signed-in viewer saw all 8 occasion-tag voting options as
+chips by default, on top of up to 5 diet badges - up to 13 small chips
+above the description, before the recipe itself. A logged-out viewer
+already only saw whichever tags the community had actually confirmed
+("applied"); the signed-in default was strictly noisier for no real reason
+other than "you're allowed to vote, so here's every option."
+
+**Fix:** Signed-in viewers now see the same compact default a logged-out
+viewer does - only applied tags - plus a single "+ Tag an occasion" chip
+that reveals the full votable set in place when tapped. No backend change;
+this is purely which rows of the same `occasions` array render by default.
+
+**Verified:** `npx tsc --noEmit` and `vite build` clean; in-browser at 375px
+confirmed only "+ Tag an occasion" renders initially (none of the 8
+occasion labels present), and clicking it reveals all 8 as votable chips.

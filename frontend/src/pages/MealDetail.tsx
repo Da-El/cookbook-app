@@ -183,6 +183,11 @@ export function MealDetail() {
   // null until the recipe's own serving count is known, so the stepper opens
   // on "however many this recipe actually makes" rather than an arbitrary 4.
   const [cookingFor, setCookingFor] = useState<number | null>(null);
+  // A signed-in viewer used to see all 8 occasion options as votable chips
+  // by default, on top of up to 5 diet badges - up to 13 chips above the
+  // description. Collapsed to "already-applied tags + one expand button"
+  // until asked for, matching what a logged-out viewer already sees.
+  const [showAllOccasions, setShowAllOccasions] = useState(false);
 
   const { data: meal, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['meal', id],
@@ -511,10 +516,10 @@ export function MealDetail() {
         </div>
       )}
 
-      {occasions.length > 0 && (user ? true : occasions.some((o) => o.applied)) && (
+      {occasions.length > 0 && (user || occasions.some((o) => o.applied)) && (
         <div className={styles.dietRow}>
           {occasions
-            .filter((o) => user || o.applied)
+            .filter((o) => showAllOccasions || o.applied)
             .map((o) => (
               <button
                 key={o.tag}
@@ -527,6 +532,11 @@ export function MealDetail() {
                 {o.votes > 0 ? ` (${o.votes})` : ''}
               </button>
             ))}
+          {user && !showAllOccasions && (
+            <button className={styles.occasionChip} onClick={() => setShowAllOccasions(true)}>
+              + Tag an occasion
+            </button>
+          )}
         </div>
       )}
 
