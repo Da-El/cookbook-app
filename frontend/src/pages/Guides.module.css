@@ -380,6 +380,22 @@
   line-height: 1.5;
 }
 
+.diffAdded {
+  background: var(--green-tint);
+  color: var(--green);
+  text-decoration: none;
+  border-radius: 3px;
+  padding: 0 1px;
+}
+
+.diffRemoved {
+  background: var(--accent-tint);
+  color: var(--accent-dark);
+  opacity: 0.75;
+  border-radius: 3px;
+  padding: 0 1px;
+}
+
 .editRowActions {
   margin-top: 8px;
   display: flex;

@@ -10,6 +10,7 @@ import { LoadingState, ErrorState } from '../components/PageState/PageState';
 import { FlagButton } from '../components/Flag/FlagButton';
 import { RatingInput } from '../components/RatingInput/RatingInput';
 import { mealBackground } from '../lib/imagery';
+import { wordDiff } from '../lib/textDiff';
 import styles from './Guides.module.css';
 
 interface GuideComment {
@@ -164,6 +165,19 @@ export function GuidePage() {
   const [editOpen, setEditOpen] = useState(false);
   const [draft, setDraft] = useState('');
   const [comment, setComment] = useState('');
+  // A proposed edit used to render as its full raw body with nothing marking
+  // what actually changed - a voter had to re-read a whole guide paragraph
+  // by paragraph to spot the difference from what's live now. Collapsed by
+  // default, same "don't show it until asked" as everything else in this
+  // audit; a Set (not one shared boolean) so multiple competing proposals
+  // can each be expanded independently.
+  const [expandedDiffs, setExpandedDiffs] = useState<Set<number>>(new Set());
+  const toggleDiff = (id: number) =>
+    setExpandedDiffs((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
 
   const { data: guide, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['guide', slug],
@@ -465,7 +479,21 @@ export function GuidePage() {
                   {e.author_name ?? 'a former user'} · {e.votes} vote{e.votes === 1 ? '' : 's'}
                   {i === 0 ? ' · live now' : ''}
                 </span>
-                <p className={styles.editRowBody}>{e.body}</p>
+                {expandedDiffs.has(e.id) ? (
+                  <p className={styles.editRowBody}>
+                    {wordDiff(guide.body, e.body).map((t, k) =>
+                      t.type === 'same' ? (
+                        t.text
+                      ) : t.type === 'added' ? (
+                        <mark key={k} className={styles.diffAdded}>{t.text}</mark>
+                      ) : (
+                        <del key={k} className={styles.diffRemoved}>{t.text}</del>
+                      ),
+                    )}
+                  </p>
+                ) : (
+                  <p className={styles.editRowBody}>{e.body}</p>
+                )}
                 <div className={styles.editRowActions}>
                   <button
                     className={`${styles.editVoteBtn} ${e.voted_by_me ? styles.editVoteBtnOn : ''}`}
@@ -474,6 +502,11 @@ export function GuidePage() {
                   >
                     {e.voted_by_me ? '✓' : '△'} {e.votes}
                   </button>
+                  {e.body !== guide.body && (
+                    <button className={styles.editDeleteBtn} onClick={() => toggleDiff(e.id)}>
+                      {expandedDiffs.has(e.id) ? 'Hide changes' : 'View changes'}
+                    </button>
+                  )}
                   {e.is_mine ? (
                     <button className={styles.editDeleteBtn} onClick={() => deleteEdit.mutate(e.id)}>
                       Withdraw

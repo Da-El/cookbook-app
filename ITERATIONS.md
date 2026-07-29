@@ -832,3 +832,30 @@ reset; second un-rate on nothing left → real 404) and the "Remove"
 button confirmed in the browser on a note-bearing review, including
 confirming the review card correctly stays visible sans star rating
 after removal - not just that a button click didn't error.
+
+## Iteration 69: guide edit diff view
+
+**Commit:** local only, not pushed · **Migrations:** none
+
+Meal revisions got a real diff view in iteration 32 - what changed between
+this version and the last, not just the two full snapshots side by side.
+Guide edits never got the equivalent: a proposed edit rendered as its
+entire raw body text with nothing marking what was actually different from
+the guide as it reads right now, so voting on a multi-paragraph proposal
+meant re-reading the whole thing and mentally spotting the difference
+yourself. New `wordDiff()` (`frontend/src/lib/textDiff.ts`, a hand-rolled
+LCS word-level diff - guides are free-form paragraphs, not the structured
+fields meal revisions diff, so there's no named-field comparison to lean
+on) powers a "View changes" toggle per proposed edit, collapsed by
+default, comparing the proposal's body against the guide's current live
+body with additions marked and removals struck through.
+
+**Verified:** `npx tsc --noEmit` and `vite build` clean; confirmed the
+toggle is correctly absent for an edit whose body already matches the
+live guide (nothing to diff) and present for a genuinely different
+proposal; clicked "View changes" and confirmed both `<mark>` (added) and
+`<del>` (removed) spans render with the right word counts, then "Hide
+changes" collapses it back; cleaned up by restarting the dev server,
+which re-seeds guide bodies from their canonical source on every boot
+(confirmed the test guide's body was restored exactly, not left
+polluted by the test edit).
